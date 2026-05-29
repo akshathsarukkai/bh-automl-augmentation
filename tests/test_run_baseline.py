@@ -1,0 +1,66 @@
+"""Tests for the baseline experiment runner."""
+
+from pathlib import Path
+
+import pandas as pd
+
+from bh_augmentation.run_baseline import run_baseline
+
+
+def test_run_baseline_creates_metrics_csv(tmp_path: Path) -> None:
+    """The baseline runner should work on a tiny local fixture dataset."""
+    data_path = tmp_path / "clean_bh.csv"
+    config_path = tmp_path / "baseline.yaml"
+    metrics_path = tmp_path / "results" / "baseline_metrics.csv"
+
+    pd.DataFrame(
+        {
+            "reaction_id": [f"rxn_{index:03d}" for index in range(10)],
+            "aryl_halide_smiles": ["UNKNOWN"] * 10,
+            "amine_smiles": ["UNKNOWN"] * 10,
+            "ligand_smiles": ["UNKNOWN"] * 10,
+            "base_smiles": ["UNKNOWN"] * 10,
+            "additive_smiles": ["UNKNOWN"] * 10,
+            "solvent": ["DMF", "DMF", "THF", "THF", "toluene"] * 2,
+            "temperature": [80, 85, 90, 95, 100] * 2,
+            "reaction_smiles": ["UNKNOWN"] * 10,
+            "yield": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100],
+        }
+    ).to_csv(data_path, index=False)
+
+    config_path.write_text(
+        f"""
+seed: 7
+dataset:
+  name: synthetic_bh
+  path: {data_path}
+splits:
+  method: random
+  train_size: 0.6
+  valid_size: 0.2
+  test_size: 0.2
+features:
+  categorical_columns:
+    - solvent
+  smiles_columns: []
+models:
+  - ridge
+metrics:
+  - rmse
+  - mae
+output:
+  metrics_path: {metrics_path}
+""",
+        encoding="utf-8",
+    )
+
+    output_path = run_baseline(config_path)
+
+    assert output_path == metrics_path
+    assert metrics_path.exists()
+    metrics = pd.read_csv(metrics_path)
+    assert list(metrics.columns) == ["model", "split", "metric", "value"]
+    assert set(metrics["split"]) == {"valid", "test"}
+    assert set(metrics["metric"]) == {"rmse", "mae"}
+    assert set(metrics["model"]) == {"ridge"}
+    assert len(metrics) == 4

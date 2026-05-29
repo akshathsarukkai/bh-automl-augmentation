@@ -90,6 +90,17 @@ work.
 pytest
 ```
 
+## Running A Baseline
+
+After creating a cleaned CSV at the configured dataset path, run:
+
+```bash
+python -m bh_augmentation.run_baseline --config configs/baseline.yaml
+```
+
+By default, metrics are written to
+`results/baseline/baseline_metrics.csv`.
+
 ## Notes
 
 - The real dataset is not assumed to be downloaded.
