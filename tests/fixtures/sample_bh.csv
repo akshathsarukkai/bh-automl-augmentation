@@ -1,0 +1,8 @@
+Reaction ID,Aryl Halide SMILES,Amine SMILES,Ligand SMILES,Base SMILES,Additive SMILES,Solvent,Temperature,Reaction SMILES,Yield (%)
+rxn_001,Brc1ccccc1,NCC,PPh3,K3PO4,,toluene,90,Brc1ccccc1.NCC>>c1ccccc1NCC,81.5
+rxn_002,Clc1ccccc1,N(C)C,,NaOtBu,,dioxane,100,Clc1ccccc1.N(C)C>>c1ccccc1N(C)C,not_a_number
+rxn_003,Ic1ccccc1,NH2C,CyJohnPhos,KOH,,DMF,80,Ic1ccccc1.NH2C>>c1ccccc1NH2C,105
+rxn_004,Brc1ccc(F)cc1,NH3,,Cs2CO3,,DMSO,75,Brc1ccc(F)cc1.NH3>>Fc1ccc(N)cc1,
+rxn_005,Clc1ccc(OC)cc1,NCCO,XPhos,K3PO4,,toluene,95,Clc1ccc(OC)cc1.NCCO>>COc1ccc(NCCO)cc1,45
+rxn_006,Brc1ccncc1,NHMe,,NaOH,,ethanol,60,Brc1ccncc1.NHMe>>c1cncc(NHMe)c1,-1
+rxn_007,Ic1ccccc1,NH2Et,SPhos,,,THF,70,Ic1ccccc1.NH2Et>>c1ccccc1NH2Et,0
