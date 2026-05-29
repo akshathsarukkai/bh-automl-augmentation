@@ -101,6 +101,20 @@ python -m bh_augmentation.run_baseline --config configs/baseline.yaml
 By default, metrics are written to
 `results/baseline/baseline_metrics.csv`.
 
+## Comparing Safe Augmentation
+
+To compare the no-augmentation baseline against configured safe augmentation
+strategies, run:
+
+```bash
+python -m bh_augmentation.run_augmentation --config configs/augmentation.yaml
+```
+
+The runner creates train/validation/test splits from real rows first, applies
+augmentation only to the training split, and evaluates on untouched validation
+and test rows. By default, metrics are written to
+`results/augmentation/safe_aug_metrics.csv`.
+
 ## Notes
 
 - The real dataset is not assumed to be downloaded.

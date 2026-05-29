@@ -2,14 +2,46 @@ seed: 42
 dataset:
   name: buchwald_hartwig
   path: data/processed/bh_clean.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+features:
+  kind: fp_plus_conditions
+  smiles_columns:
+    - aryl_halide_smiles
+    - amine_smiles
+    - ligand_smiles
+    - base_smiles
+    - additive_smiles
+  categorical_columns:
+    - solvent
+models:
+  - ridge
+  - random_forest
+metrics:
+  - rmse
+  - mae
+  - r2
 augmentation:
   smiles_randomization:
     enabled: false
+    ratio: 1.0
     n_variants: 3
     random_state: 42
+    smiles_columns:
+      - aryl_halide_smiles
+      - amine_smiles
   order_permutation:
     enabled: false
+    ratio: 1.0
     max_permutations: 2
     random_state: 42
+    component_columns:
+      - aryl_halide_smiles
+      - amine_smiles
+  combined:
+    enabled: false
 output:
-  path: data/processed/bh_augmented.csv
+  metrics_path: results/augmentation/safe_aug_metrics.csv
