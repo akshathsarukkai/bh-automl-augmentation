@@ -1,0 +1,8 @@
+seed: 42
+augmentation:
+  smiles_randomization:
+    enabled: false
+    n_variants: 1
+  order_permutation:
+    enabled: false
+    max_permutations: 1

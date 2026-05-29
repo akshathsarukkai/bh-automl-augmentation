@@ -1,3 +1,16 @@
+Metadata-Version: 2.4
+Name: bh-automl-augmentation
+Version: 0.1.0
+Summary: MVP research code for safe augmentation in low-data Buchwald-Hartwig yield prediction.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pandas
+Requires-Dist: numpy
+Requires-Dist: scikit-learn
+Requires-Dist: matplotlib
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+
 # AutoML-Guided Data Augmentation for Low-Data Buchwald-Hartwig Yield Prediction
 
 This repository contains an MVP research-code package for studying safe data

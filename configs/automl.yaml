@@ -1,0 +1,5 @@
+seed: 42
+automl:
+  enabled: false
+  search_budget_trials: 10
+  primary_metric: rmse
