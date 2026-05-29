@@ -48,6 +48,42 @@ python -m pip install -e .
 python -m pip install -r requirements.txt
 ```
 
+## Data Loading
+
+The repository supports two data-loading paths.
+
+### Local CSV
+
+Use a local CSV when you already have data downloaded or exported:
+
+```python
+from bh_augmentation.data.load_data import load_reaction_csv
+
+df = load_reaction_csv("data/raw/buchwald_hartwig.csv")
+```
+
+### Optional TDC Loader
+
+The TDC loader is optional and is not installed as a hard dependency. Install it
+only when you want to fetch the Buchwald-Hartwig yield dataset through TDC:
+
+```bash
+python -m pip install PyTDC
+```
+
+```python
+from bh_augmentation.data.load_data import (
+    load_tdc_buchwald_hartwig,
+    save_tdc_buchwald_hartwig,
+)
+
+df = load_tdc_buchwald_hartwig()
+save_tdc_buchwald_hartwig("data/raw/tdc_buchwald_hartwig.csv")
+```
+
+If TDC is not installed, local CSV loading and the rest of the package still
+work.
+
 ## Running Tests
 
 ```bash

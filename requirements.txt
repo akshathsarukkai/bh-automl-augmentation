@@ -4,3 +4,6 @@ scikit-learn
 pytest
 matplotlib
 PyYAML
+
+# Optional dataset source, install manually when needed:
+# PyTDC
