@@ -13,6 +13,7 @@ dependencies = [
   "numpy",
   "scikit-learn",
   "matplotlib",
+  "PyYAML",
 ]
 
 [project.optional-dependencies]

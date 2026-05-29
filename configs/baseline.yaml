@@ -1,8 +1,19 @@
 seed: 42
-data:
-  raw_path: data/raw
-  processed_path: data/processed
-  splits_path: data/splits
-model:
-  name: random_forest
-  target_column: yield
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+features:
+  kind: fp_plus_conditions
+models:
+  - ridge
+  - random_forest
+metrics:
+  - rmse
+  - mae
+  - r2
+  - spearman

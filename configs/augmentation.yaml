@@ -1,8 +1,15 @@
 seed: 42
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean.csv
 augmentation:
   smiles_randomization:
     enabled: false
-    n_variants: 1
+    n_variants: 3
+    random_state: 42
   order_permutation:
     enabled: false
-    max_permutations: 1
+    max_permutations: 2
+    random_state: 42
+output:
+  path: data/processed/bh_augmented.csv

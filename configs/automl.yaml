@@ -1,5 +1,13 @@
 seed: 42
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean.csv
+features:
+  kind: fp_plus_conditions
 automl:
   enabled: false
-  search_budget_trials: 10
+  search_budget_trials: 25
   primary_metric: rmse
+  candidate_models:
+    - ridge
+    - random_forest
