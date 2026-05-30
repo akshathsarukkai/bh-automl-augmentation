@@ -59,8 +59,17 @@ output:
     assert output_path == metrics_path
     assert metrics_path.exists()
     metrics = pd.read_csv(metrics_path)
-    assert list(metrics.columns) == ["train_fraction", "model", "split", "metric", "value"]
+    assert list(metrics.columns) == [
+        "train_fraction",
+        "split_method",
+        "group_column",
+        "model",
+        "split",
+        "metric",
+        "value",
+    ]
     assert metrics["train_fraction"].tolist() == [1.0, 1.0, 1.0, 1.0]
+    assert set(metrics["split_method"]) == {"random"}
     assert set(metrics["split"]) == {"valid", "test"}
     assert set(metrics["metric"]) == {"rmse", "mae"}
     assert set(metrics["model"]) == {"ridge"}

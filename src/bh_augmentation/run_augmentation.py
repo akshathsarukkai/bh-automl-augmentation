@@ -22,8 +22,10 @@ from bh_augmentation.run_baseline import (
     _compute_metric,
     _create_split_variants,
     _get_dataset_path,
+    _get_group_column,
     _parse_model_config,
     _resolve_feature_config,
+    _save_split_metadata,
 )
 from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.seed import set_global_seed
@@ -46,7 +48,11 @@ def run_augmentation(config_path: str | Path) -> Path:
 
     model_configs = config.get("models", ["ridge"])
     metric_names = config.get("metrics", ["rmse", "mae", "r2"])
+    split_method = str(config.get("splits", {}).get("method", "random"))
+    group_column = _get_group_column(config.get("splits", {}))
     records: list[dict[str, object]] = []
+
+    _save_split_metadata(split_variants, config)
 
     for train_fraction, splits in split_variants:
         train_variants = _build_training_variants(
@@ -86,6 +92,8 @@ def run_augmentation(config_path: str | Path) -> Path:
                         records.append(
                             {
                                 "train_fraction": train_fraction,
+                                "split_method": split_method,
+                                "group_column": group_column,
                                 "augmentation": variant_name,
                                 "model": model_name,
                                 "split": split_name,

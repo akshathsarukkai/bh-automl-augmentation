@@ -66,6 +66,7 @@ def test_baseline_runner_writes_metrics_for_each_low_data_fraction(tmp_path: Pat
 
     metrics = pd.read_csv(metrics_path)
     assert set(metrics["train_fraction"]) == {0.5, 1.0}
+    assert set(metrics["split_method"]) == {"random"}
     assert set(metrics["model"]) == {"ridge"}
     assert set(metrics["split"]) == {"valid", "test"}
     assert len(metrics) == 4
@@ -99,6 +100,7 @@ augmentation:
 
     metrics = pd.read_csv(metrics_path)
     assert set(metrics["train_fraction"]) == {0.5, 1.0}
+    assert set(metrics["split_method"]) == {"random"}
     assert set(metrics["augmentation"]) == {"none", "order_permutation"}
     assert set(metrics["split"]) == {"valid", "test"}
     assert (metrics["eval_augmented_rows"] == 0).all()

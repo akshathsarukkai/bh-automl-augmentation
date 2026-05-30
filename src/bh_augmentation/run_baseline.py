@@ -50,6 +50,13 @@ DEFAULT_SMILES_COLUMNS = [
     "additive_smiles",
 ]
 DEFAULT_CATEGORICAL_COLUMNS = ["solvent"]
+SUPPORTED_HELDOUT_GROUP_COLUMNS = {
+    "ligand_smiles",
+    "base_smiles",
+    "additive_smiles",
+    "aryl_halide_smiles",
+    "amine_smiles",
+}
 
 
 def run_baseline(config_path: str | Path) -> Path:
@@ -70,7 +77,11 @@ def run_baseline(config_path: str | Path) -> Path:
 
     model_configs = config.get("models", ["ridge"])
     metric_names = config.get("metrics", ["rmse", "mae", "r2"])
+    split_method = str(config.get("splits", {}).get("method", "random"))
+    group_column = _get_group_column(config.get("splits", {}))
     records: list[dict[str, object]] = []
+
+    _save_split_metadata(split_variants, config)
 
     for train_fraction, splits in split_variants:
         for model_config in model_configs:
@@ -88,6 +99,8 @@ def run_baseline(config_path: str | Path) -> Path:
                     records.append(
                         {
                             "train_fraction": train_fraction,
+                            "split_method": split_method,
+                            "group_column": group_column,
                             "model": model_name,
                             "split": split_name,
                             "metric": metric_name,
@@ -136,9 +149,11 @@ def _create_splits(df: pd.DataFrame, split_config: dict[str, Any], seed: int) ->
             seed=seed,
         )
     if method == "heldout_group":
+        group_column = str(split_config["group_column"])
+        _validate_supported_group_column(group_column)
         return heldout_group_split(
             df,
-            group_column=str(split_config["group_column"]),
+            group_column=group_column,
             heldout_fraction=float(split_config.get("heldout_fraction", 0.2)),
             valid_fraction=float(split_config.get("valid_fraction", 0.1)),
             seed=seed,
@@ -226,6 +241,57 @@ def _split_positions(split: pd.DataFrame) -> np.ndarray:
 def _get_metrics_output_path(config: dict[str, Any]) -> Path:
     output_config = config.get("output", {})
     return Path(output_config.get("metrics_path", "results/baseline/baseline_metrics.csv"))
+
+
+def _get_split_metadata_output_path(config: dict[str, Any]) -> Path:
+    output_config = config.get("output", {})
+    default_path = _get_metrics_output_path(config).with_name("split_metadata.csv")
+    return Path(output_config.get("split_metadata_path", default_path))
+
+
+def _save_split_metadata(
+    split_variants: list[tuple[float, dict[str, pd.DataFrame]]],
+    config: dict[str, Any],
+) -> Path:
+    split_config = config.get("splits", {})
+    split_method = str(split_config.get("method", "random"))
+    group_column = _get_group_column(split_config)
+    records: list[dict[str, object]] = []
+    for train_fraction, splits in split_variants:
+        for split_name, split_df in splits.items():
+            for _, row in split_df.iterrows():
+                records.append(
+                    {
+                        "train_fraction": train_fraction,
+                        "split_method": split_method,
+                        "group_column": group_column,
+                        "split": split_name,
+                        "reaction_id": row.get("reaction_id", ""),
+                        "group_value": row.get(group_column, "") if group_column else "",
+                    }
+                )
+
+    output_path = _get_split_metadata_output_path(config)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(records).to_csv(output_path, index=False)
+    return output_path
+
+
+def _get_group_column(split_config: dict[str, Any]) -> str:
+    if split_config.get("method", "random") != "heldout_group":
+        return ""
+    group_column = str(split_config.get("group_column", ""))
+    _validate_supported_group_column(group_column)
+    return group_column
+
+
+def _validate_supported_group_column(group_column: str) -> None:
+    if group_column not in SUPPORTED_HELDOUT_GROUP_COLUMNS:
+        supported = ", ".join(sorted(SUPPORTED_HELDOUT_GROUP_COLUMNS))
+        raise ValueError(
+            f"Unsupported held-out group column: {group_column}. "
+            f"Supported group columns: {supported}."
+        )
 
 
 if __name__ == "__main__":

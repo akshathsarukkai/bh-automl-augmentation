@@ -85,6 +85,7 @@ output:
         "combined_safe",
     }
     assert set(metrics["train_fraction"]) == {1.0}
+    assert set(metrics["split_method"]) == {"random"}
     assert set(metrics["split"]) == {"valid", "test"}
     assert (metrics["eval_augmented_rows"] == 0).all()
 
