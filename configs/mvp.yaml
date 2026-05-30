@@ -1,0 +1,24 @@
+seed: 42
+dataset:
+  name: fixture_buchwald_hartwig
+  use_fixture: true
+  fixture_path: tests/fixtures/sample_bh.csv
+  fixture_min_rows: 12
+splits:
+  method: random
+  train_size: 0.6
+  valid_size: 0.2
+  test_size: 0.2
+features:
+  smiles_columns: []
+  categorical_columns:
+    - solvent
+models:
+  - ridge
+metrics:
+  - rmse
+  - mae
+automl:
+  enabled: false
+output:
+  results_dir: results/mvp

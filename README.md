@@ -254,6 +254,33 @@ are written under:
 results/plots/
 ```
 
+## Complete MVP Workflow
+
+To run the fixture-data MVP workflow end to end:
+
+```bash
+python -m bh_augmentation.run_mvp --config configs/mvp.yaml
+```
+
+The default MVP config uses `tests/fixtures/sample_bh.csv`, expands the cleaned
+fixture rows in memory, and writes all outputs under:
+
+```text
+results/mvp/
+```
+
+The workflow runs:
+
+- baseline experiment
+- low-data experiment
+- safe augmentation experiment
+- top-k recommendation simulation
+- final Markdown report generation
+
+It does not run Optuna by default. To use a provided cleaned Buchwald-Hartwig
+CSV instead of fixture data, set `dataset.use_fixture: false` and
+`dataset.path` in `configs/mvp.yaml`.
+
 ## Evaluation Metrics
 
 Regression metrics:
