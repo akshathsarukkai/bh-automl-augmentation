@@ -76,6 +76,34 @@ def low_data_split(
     }
 
 
+def subset_train_split(
+    splits: SplitDict,
+    train_fraction: float,
+    seed: int = 42,
+) -> SplitDict:
+    """Return a copy of splits with a deterministic subset of training rows.
+
+    Validation and test splits are copied unchanged. This is useful for
+    low-data experiments where validation/test should remain fixed across
+    different training fractions.
+    """
+    if not 0 < train_fraction <= 1:
+        raise ValueError("train_fraction must be greater than 0 and at most 1.")
+    for key in SPLIT_KEYS:
+        if key not in splits:
+            raise ValueError(f"Missing split key: {key}")
+
+    train = splits["train"]
+    _validate_non_empty(train)
+    n_train = max(1, int(math.floor(len(train) * train_fraction)))
+    train_indices = _shuffled_index_array(train.index, seed)[:n_train]
+    return {
+        "train": train.loc[train_indices].copy(),
+        "valid": splits["valid"].copy(),
+        "test": splits["test"].copy(),
+    }
+
+
 def heldout_group_split(
     df: pd.DataFrame,
     group_column: str,

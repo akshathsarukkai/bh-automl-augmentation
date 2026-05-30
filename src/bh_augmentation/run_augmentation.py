@@ -20,7 +20,7 @@ from bh_augmentation.models.train import train_model
 from bh_augmentation.reporting.make_report import save_metrics_csv
 from bh_augmentation.run_baseline import (
     _compute_metric,
-    _create_splits,
+    _create_split_variants,
     _get_dataset_path,
     _parse_model_config,
     _resolve_feature_config,
@@ -40,60 +40,63 @@ def run_augmentation(config_path: str | Path) -> Path:
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run augmentation experiment.")
 
-    splits = _create_splits(df, config.get("splits", {}), seed)
+    split_variants = _create_split_variants(df, config, seed)
     feature_config = _resolve_feature_config(config.get("features", {}), df)
     augmentation_config = config.get("augmentation", {})
-    train_variants = _build_training_variants(
-        splits["train"],
-        augmentation_config,
-        feature_config,
-        seed,
-    )
 
     model_configs = config.get("models", ["ridge"])
     metric_names = config.get("metrics", ["rmse", "mae", "r2"])
     records: list[dict[str, object]] = []
 
-    for variant_name, train_df in train_variants.items():
-        train_df = _with_augmentation_metadata(train_df, is_augmented_default=False)
-        valid_df = _with_augmentation_metadata(splits["valid"], is_augmented_default=False)
-        test_df = _with_augmentation_metadata(splits["test"], is_augmented_default=False)
-
-        combined_df = pd.concat(
-            [
-                train_df.assign(__split="train"),
-                valid_df.assign(__split="valid"),
-                test_df.assign(__split="test"),
-            ],
-            ignore_index=True,
+    for train_fraction, splits in split_variants:
+        train_variants = _build_training_variants(
+            splits["train"],
+            augmentation_config,
+            feature_config,
+            seed,
         )
-        X, y, _ = build_feature_matrix(combined_df, feature_config)
-        train_mask = combined_df["__split"].to_numpy() == "train"
 
-        for model_config in model_configs:
-            model_name, model_kwargs = _parse_model_config(model_config)
-            model = get_model(model_name, seed=seed, **model_kwargs)
-            fitted_model = train_model(model, X[train_mask], y[train_mask])
+        for variant_name, train_df in train_variants.items():
+            train_df = _with_augmentation_metadata(train_df, is_augmented_default=False)
+            valid_df = _with_augmentation_metadata(splits["valid"], is_augmented_default=False)
+            test_df = _with_augmentation_metadata(splits["test"], is_augmented_default=False)
 
-            for split_name in ["valid", "test"]:
-                eval_mask = combined_df["__split"].to_numpy() == split_name
-                predictions = predict_model(fitted_model, X[eval_mask])
-                y_true = y[eval_mask]
-                eval_augmented_rows = int(combined_df.loc[eval_mask, "is_augmented"].sum())
-                for metric_name in metric_names:
-                    records.append(
-                        {
-                            "augmentation": variant_name,
-                            "model": model_name,
-                            "split": split_name,
-                            "metric": metric_name,
-                            "value": _compute_metric(metric_name, y_true, predictions),
-                            "train_rows": int(train_mask.sum()),
-                            "augmented_train_rows": int(train_df["is_augmented"].sum()),
-                            "eval_rows": int(eval_mask.sum()),
-                            "eval_augmented_rows": eval_augmented_rows,
-                        }
-                    )
+            combined_df = pd.concat(
+                [
+                    train_df.assign(__split="train"),
+                    valid_df.assign(__split="valid"),
+                    test_df.assign(__split="test"),
+                ],
+                ignore_index=True,
+            )
+            X, y, _ = build_feature_matrix(combined_df, feature_config)
+            train_mask = combined_df["__split"].to_numpy() == "train"
+
+            for model_config in model_configs:
+                model_name, model_kwargs = _parse_model_config(model_config)
+                model = get_model(model_name, seed=seed, **model_kwargs)
+                fitted_model = train_model(model, X[train_mask], y[train_mask])
+
+                for split_name in ["valid", "test"]:
+                    eval_mask = combined_df["__split"].to_numpy() == split_name
+                    predictions = predict_model(fitted_model, X[eval_mask])
+                    y_true = y[eval_mask]
+                    eval_augmented_rows = int(combined_df.loc[eval_mask, "is_augmented"].sum())
+                    for metric_name in metric_names:
+                        records.append(
+                            {
+                                "train_fraction": train_fraction,
+                                "augmentation": variant_name,
+                                "model": model_name,
+                                "split": split_name,
+                                "metric": metric_name,
+                                "value": _compute_metric(metric_name, y_true, predictions),
+                                "train_rows": int(train_mask.sum()),
+                                "augmented_train_rows": int(train_df["is_augmented"].sum()),
+                                "eval_rows": int(eval_mask.sum()),
+                                "eval_augmented_rows": eval_augmented_rows,
+                            }
+                        )
 
     return save_metrics_csv(records, _get_metrics_output_path(config))
 

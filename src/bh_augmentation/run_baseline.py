@@ -15,6 +15,7 @@ from bh_augmentation.data.split_data import (
     heldout_group_split,
     low_data_split,
     random_split,
+    subset_train_split,
 )
 from bh_augmentation.evaluation.metrics import (
     mae,
@@ -63,8 +64,7 @@ def run_baseline(config_path: str | Path) -> Path:
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run baseline.")
 
-    split_config = config.get("splits", {})
-    splits = _create_splits(df, split_config, seed)
+    split_variants = _create_split_variants(df, config, seed)
     feature_config = _resolve_feature_config(config.get("features", {}), df)
     X, y, _ = build_feature_matrix(df, feature_config)
 
@@ -72,26 +72,28 @@ def run_baseline(config_path: str | Path) -> Path:
     metric_names = config.get("metrics", ["rmse", "mae", "r2"])
     records: list[dict[str, object]] = []
 
-    for model_config in model_configs:
-        model_name, model_kwargs = _parse_model_config(model_config)
-        model = get_model(model_name, seed=seed, **model_kwargs)
-        train_indices = _split_positions(splits["train"])
-        fitted_model = train_model(model, X[train_indices], y[train_indices])
+    for train_fraction, splits in split_variants:
+        for model_config in model_configs:
+            model_name, model_kwargs = _parse_model_config(model_config)
+            model = get_model(model_name, seed=seed, **model_kwargs)
+            train_indices = _split_positions(splits["train"])
+            fitted_model = train_model(model, X[train_indices], y[train_indices])
 
-        for split_name in ["valid", "test"]:
-            split_indices = _split_positions(splits[split_name])
-            predictions = predict_model(fitted_model, X[split_indices])
-            y_true = y[split_indices]
-            for metric_name in metric_names:
-                metric_value = _compute_metric(metric_name, y_true, predictions)
-                records.append(
-                    {
-                        "model": model_name,
-                        "split": split_name,
-                        "metric": metric_name,
-                        "value": metric_value,
-                    }
-                )
+            for split_name in ["valid", "test"]:
+                split_indices = _split_positions(splits[split_name])
+                predictions = predict_model(fitted_model, X[split_indices])
+                y_true = y[split_indices]
+                for metric_name in metric_names:
+                    metric_value = _compute_metric(metric_name, y_true, predictions)
+                    records.append(
+                        {
+                            "train_fraction": train_fraction,
+                            "model": model_name,
+                            "split": split_name,
+                            "metric": metric_name,
+                            "value": metric_value,
+                        }
+                    )
 
     output_path = _get_metrics_output_path(config)
     return save_metrics_csv(records, output_path)
@@ -142,6 +144,41 @@ def _create_splits(df: pd.DataFrame, split_config: dict[str, Any], seed: int) ->
             seed=seed,
         )
     raise ValueError(f"Unknown split method: {method}")
+
+
+def _create_split_variants(
+    df: pd.DataFrame,
+    config: dict[str, Any],
+    seed: int,
+) -> list[tuple[float, dict[str, pd.DataFrame]]]:
+    low_data_config = config.get("low_data", {})
+    split_config = config.get("splits", {})
+    if not low_data_config.get("enabled", False):
+        return [(1.0, _create_splits(df, split_config, seed))]
+
+    train_fractions = low_data_config.get("train_fractions")
+    if not train_fractions:
+        raise ValueError("low_data.train_fractions must contain at least one fraction.")
+
+    base_split_config = dict(split_config)
+    if base_split_config.get("method") == "low_data":
+        base_split_config["method"] = "random"
+        base_split_config["train_size"] = 1.0 - float(base_split_config.get("valid_size", 0.1)) - float(
+            base_split_config.get("test_size", 0.1)
+        )
+        base_split_config.pop("train_fraction", None)
+
+    base_splits = _create_splits(df, base_split_config, seed)
+    variants = []
+    for offset, fraction in enumerate(train_fractions):
+        train_fraction = float(fraction)
+        variants.append(
+            (
+                train_fraction,
+                subset_train_split(base_splits, train_fraction=train_fraction, seed=seed + offset + 1),
+            )
+        )
+    return variants
 
 
 def _resolve_feature_config(
