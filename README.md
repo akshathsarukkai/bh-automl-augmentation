@@ -90,6 +90,12 @@ work.
 pytest
 ```
 
+The test suite includes a tiny end-to-end guardrail pipeline using
+`tests/fixtures/sample_bh.csv`. It loads and cleans fixture data, creates a
+split, featurizes categorical conditions, trains a Ridge model, applies one
+train-only safe augmentation, evaluates metrics, and writes a temporary metrics
+CSV. It requires no internet, real dataset, or optional heavy dependencies.
+
 ## Running A Baseline
 
 After creating a cleaned CSV at the configured dataset path, run:
