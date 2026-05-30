@@ -1,153 +1,291 @@
 # AutoML-Guided Data Augmentation for Low-Data Buchwald-Hartwig Yield Prediction
 
-This repository contains an MVP research-code package for studying safe data
-augmentation strategies for low-data Buchwald-Hartwig reaction yield prediction.
+This repository is an MVP research-code package for evaluating whether simple,
+label-preserving data augmentation can improve low-data Buchwald-Hartwig
+reaction yield prediction.
 
-The first MVP intentionally avoids generative models, deep learning, web apps,
-dashboards, and pseudo-labeling. It focuses on simple, auditable augmentation
-methods that preserve the original chemistry labels, such as SMILES
-randomization and reaction component order permutation.
+The v0 scope is deliberately conservative. It focuses on reproducible data
+loading, cleaning, splitting, featurization, classical regression baselines,
+safe augmentation, decision-oriented evaluation, and lightweight reporting.
+Generative synthetic reaction data is out of scope for v0.
 
-## MVP Phases
+## Project Overview
 
-1. **Repository scaffold**
-   - Clean Python package layout under `src/bh_augmentation`.
-   - Minimal configuration files for baseline, augmentation, and AutoML phases.
-   - Placeholder modules for data loading, cleaning, splitting, featurization,
-     augmentation, model training, evaluation, and reporting.
-   - Pytest smoke test to verify package imports.
+The core question is:
 
-2. **Data preparation**
-   - Load raw Buchwald-Hartwig yield data when available.
-   - Clean and standardize columns.
-   - Create deterministic train/validation/test splits.
-   - Include synthetic fixture data for tests so the real dataset is not
-     required.
+Can safe augmentation of measured reaction records improve yield prediction or
+reaction recommendation when only a small number of Buchwald-Hartwig reactions
+are available for training?
 
-3. **Baseline modeling**
-   - Implement simple scikit-learn baselines.
-   - Track deterministic metrics on held-out splits.
-   - Keep optional libraries such as XGBoost or CatBoost behind graceful
-     fallbacks.
+The MVP compares:
 
-4. **Safe augmentation**
-   - Add label-preserving augmentation methods:
-     - SMILES randomization when RDKit is available.
-     - Reaction component order permutation where chemically appropriate.
-   - Compare augmented and non-augmented baselines.
+- no augmentation
+- randomized SMILES augmentation, when RDKit is available
+- explicit reaction component order permutation, only for caller-approved
+  exchangeable columns
+- low-data training fractions
+- random splits and held-out group splits
+- simulated single-round reaction recommendation
 
-5. **Evaluation and reporting**
-   - Report regression metrics, top-k selection quality, and regret-style
-     analysis.
-   - Generate lightweight matplotlib plots and tabular summaries.
+## What The MVP Tests
+
+- Loading local CSV reaction-yield data.
+- Optional loading from TDC if `PyTDC` is installed by the user.
+- Cleaning to a normalized Buchwald-Hartwig schema.
+- Deterministic train/validation/test splits.
+- Held-out group splits for ligand/base/additive/aryl-halide/amine columns.
+- Morgan fingerprints with RDKit, plus categorical condition one-hot features.
+- Ridge, Random Forest, ExtraTrees, and optional XGBoost/CatBoost regressors.
+- Safe train-only augmentation.
+- Regression metrics and decision metrics.
+- Markdown report generation and simple matplotlib plots.
+- A fixture-based end-to-end guardrail test requiring no real dataset.
+
+## What The MVP Deliberately Does Not Test
+
+- It does not test generative chemistry models.
+- It does not create generative synthetic reaction data.
+- It does not use pseudo-labeling.
+- It does not train deep learning models.
+- It does not provide a web app or dashboard.
+- It does not claim random split performance is real chemistry
+  generalization.
+- It does not replace external chemical validation or domain review.
+
+Random split results should be treated as a software and modeling sanity check,
+not as evidence of chemistry generalization. For a more realistic stress test,
+prefer held-out group splits such as held-out ligands or aryl halides.
 
 ## Installation
+
+From the repository root:
 
 ```bash
 python -m pip install -e .
 python -m pip install -r requirements.txt
 ```
 
-## Data Loading
+Run the fixture-data test suite first:
 
-The repository supports two data-loading paths.
+```bash
+pytest
+```
 
-### Local CSV
+The tests use small synthetic fixtures and do not require internet access, the
+real Buchwald-Hartwig dataset, TDC, XGBoost, CatBoost, or Optuna.
 
-Use a local CSV when you already have data downloaded or exported:
+RDKit is optional for most of the repository, but required for Morgan
+fingerprints and real randomized SMILES behavior:
+
+```bash
+python -m pip install rdkit
+```
+
+If RDKit is unavailable, non-RDKit tests and categorical-only workflows still
+run.
+
+## Dataset Setup Options
+
+The expected cleaned schema is:
+
+```text
+reaction_id
+aryl_halide_smiles
+amine_smiles
+ligand_smiles
+base_smiles
+additive_smiles
+solvent
+temperature
+reaction_smiles
+yield
+```
+
+### Option 1: Local CSV
+
+Place a CSV locally and point the config at it:
+
+```yaml
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean.csv
+```
+
+The loader and cleaner can be used directly:
 
 ```python
 from bh_augmentation.data.load_data import load_reaction_csv
+from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 
-df = load_reaction_csv("data/raw/buchwald_hartwig.csv")
+raw = load_reaction_csv("data/raw/buchwald_hartwig.csv")
+clean = clean_buchwald_hartwig(raw)
 ```
 
-### Optional TDC Loader
+### Option 2: Optional TDC Loader
 
-The TDC loader is optional and is not installed as a hard dependency. Install it
-only when you want to fetch the Buchwald-Hartwig yield dataset through TDC:
+TDC is not a hard dependency. Install it only if you want to fetch the
+Buchwald-Hartwig yield dataset through TDC:
 
 ```bash
 python -m pip install PyTDC
 ```
 
 ```python
-from bh_augmentation.data.load_data import (
-    load_tdc_buchwald_hartwig,
-    save_tdc_buchwald_hartwig,
-)
+from bh_augmentation.data.load_data import save_tdc_buchwald_hartwig
 
-df = load_tdc_buchwald_hartwig()
 save_tdc_buchwald_hartwig("data/raw/tdc_buchwald_hartwig.csv")
 ```
 
-If TDC is not installed, local CSV loading and the rest of the package still
-work.
+## Baseline Run
 
-## Running Tests
-
-```bash
-pytest
-```
-
-The test suite includes a tiny end-to-end guardrail pipeline using
-`tests/fixtures/sample_bh.csv`. It loads and cleans fixture data, creates a
-split, featurizes categorical conditions, trains a Ridge model, applies one
-train-only safe augmentation, evaluates metrics, and writes a temporary metrics
-CSV. It requires no internet, real dataset, or optional heavy dependencies.
-
-## Running A Baseline
-
-After creating a cleaned CSV at the configured dataset path, run:
+After `configs/baseline.yaml` points to a real cleaned CSV:
 
 ```bash
 python -m bh_augmentation.run_baseline --config configs/baseline.yaml
 ```
 
-By default, metrics are written to
-`results/baseline/baseline_metrics.csv`.
+Default output:
 
-## Comparing Safe Augmentation
+```text
+results/baseline/baseline_metrics.csv
+results/baseline/split_metadata.csv
+```
 
-To compare the no-augmentation baseline against configured safe augmentation
-strategies, run:
+## Augmentation Run
+
+To compare no augmentation against configured safe augmentation:
 
 ```bash
 python -m bh_augmentation.run_augmentation --config configs/augmentation.yaml
 ```
 
-The runner creates train/validation/test splits from real rows first, applies
-augmentation only to the training split, and evaluates on untouched validation
-and test rows. By default, metrics are written to
-`results/augmentation/safe_aug_metrics.csv`.
+Default output:
 
-## Simulated Reaction Recommendation
+```text
+results/augmentation/safe_aug_metrics.csv
+results/augmentation/split_metadata.csv
+```
+
+Validation and test sets are split from real data before augmentation. Only the
+training split may be augmented.
+
+## AutoML Run
+
+The repository includes `configs/automl.yaml` as a starter configuration, but a
+full AutoML runner is not implemented in this MVP yet. For now, use the
+baseline and augmentation runners with explicit model lists.
+
+Optional libraries such as XGBoost and CatBoost are supported only when
+installed and requested. Optuna is intentionally not used unless a future task
+adds it explicitly.
+
+## Recommendation Simulation
 
 To simulate a single round of reaction optimization from a small measured seed
-set, run:
+set:
 
 ```bash
 python -m bh_augmentation.run_recommendation --config configs/augmentation.yaml
 ```
 
-The simulator compares random selection, a non-augmented model, and configured
-safe augmentation variants. By default, top-k recommendation metrics are
-written to `results/recommendation/topk_metrics.csv`.
+Default output:
 
-## Generating A Report
+```text
+results/recommendation/topk_metrics.csv
+```
 
-To summarize available result CSVs into Markdown and simple matplotlib plots,
-run:
+The simulator trains on a small seed set, ranks remaining candidate reactions,
+reveals the true yields of the top-k selected reactions from the dataset, and
+compares random selection, a non-augmented model, and configured augmented
+models.
+
+## Report Generation
+
+To summarize available results:
 
 ```bash
 python -m bh_augmentation.run_report --results-dir results --output results/final_report.md
 ```
 
-The report skips missing result files and writes any generated plots under
-`results/plots/`.
+The report skips missing result files. When relevant data is available, plots
+are written under:
 
-## Notes
+```text
+results/plots/
+```
 
-- The real dataset is not assumed to be downloaded.
-- The code is intended to run on a laptop.
-- Heavy ML implementations are out of scope for the initial scaffold.
+## Evaluation Metrics
+
+Regression metrics:
+
+- `rmse`: root mean squared error. Lower is better.
+- `mae`: mean absolute error. Lower is better.
+- `r2`: coefficient of determination. Higher is better.
+- `pearson`: linear correlation between true and predicted yields.
+- `spearman`: rank correlation between true and predicted yields.
+
+Decision metrics:
+
+- `top_k_hit_rate`: fraction of top-k predicted reactions whose true yield is
+  above a threshold.
+- `top_k_average_true_yield`: average true yield among top-k predicted
+  reactions.
+- `simple_regret`: true best candidate yield minus best true yield among the
+  selected top-k candidates. Lower is better.
+- `experiments_to_first_hit`: number of ranked experiments needed before the
+  first reaction above the high-yield threshold is found.
+
+## Why Validation And Test Data Must Stay Real
+
+Augmentation is label-preserving only under specific assumptions. If augmented
+rows appear in validation or test sets, the evaluation can become inflated or
+misleading because the model may be tested on transformed versions of training
+chemistry rather than independent measured reactions.
+
+This repository therefore follows the rule:
+
+1. Split real measured rows into train, validation, and test.
+2. Apply augmentation only to the training split.
+3. Evaluate only on untouched real validation and test rows.
+
+This rule is especially important for low-data and recommendation-style
+experiments, where a small amount of leakage can dominate the apparent benefit.
+
+## Suggested Experiment Order
+
+1. Run `pytest` to verify the fixture-data guardrail.
+2. Prepare or load a local Buchwald-Hartwig CSV.
+3. Run the baseline with categorical-only features if RDKit is unavailable.
+4. Install RDKit and enable molecular fingerprint features.
+5. Run random-split baselines as a software sanity check only.
+6. Run held-out group splits for chemistry generalization stress tests.
+7. Run low-data fractions.
+8. Run safe augmentation comparisons.
+9. Run the recommendation simulation.
+10. Generate the final Markdown report.
+
+## Current Limitations
+
+- The real dataset is not bundled.
+- Random split performance should not be interpreted as real chemistry
+  generalization.
+- Morgan fingerprints and randomized SMILES require RDKit.
+- XGBoost and CatBoost are optional and not required by tests.
+- The AutoML config exists, but a full AutoML runner is not implemented yet.
+- Recommendation simulation is single-round only.
+- Reporting is intentionally lightweight and uses CSV summaries plus simple
+  matplotlib plots.
+- Safe augmentation depends on caller-provided assumptions about which reaction
+  components are exchangeable.
+
+## Future Extensions
+
+- Add a full AutoML runner with explicit search spaces.
+- Add repeated split evaluation with confidence intervals.
+- Add richer chemical descriptors and ablation studies.
+- Add more realistic hard splits, such as scaffold-like aryl halide groups.
+- Add multi-round active-learning style recommendation simulation.
+- Add model persistence and experiment manifests.
+- Add richer report tables for comparing augmentation helped/hurt/neutral
+  across split types and low-data fractions.
+- Add optional Optuna integration only when explicitly requested.
