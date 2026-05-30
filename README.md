@@ -115,6 +115,19 @@ augmentation only to the training split, and evaluates on untouched validation
 and test rows. By default, metrics are written to
 `results/augmentation/safe_aug_metrics.csv`.
 
+## Simulated Reaction Recommendation
+
+To simulate a single round of reaction optimization from a small measured seed
+set, run:
+
+```bash
+python -m bh_augmentation.run_recommendation --config configs/augmentation.yaml
+```
+
+The simulator compares random selection, a non-augmented model, and configured
+safe augmentation variants. By default, top-k recommendation metrics are
+written to `results/recommendation/topk_metrics.csv`.
+
 ## Notes
 
 - The real dataset is not assumed to be downloaded.
