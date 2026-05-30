@@ -128,6 +128,18 @@ The simulator compares random selection, a non-augmented model, and configured
 safe augmentation variants. By default, top-k recommendation metrics are
 written to `results/recommendation/topk_metrics.csv`.
 
+## Generating A Report
+
+To summarize available result CSVs into Markdown and simple matplotlib plots,
+run:
+
+```bash
+python -m bh_augmentation.run_report --results-dir results --output results/final_report.md
+```
+
+The report skips missing result files and writes any generated plots under
+`results/plots/`.
+
 ## Notes
 
 - The real dataset is not assumed to be downloaded.
