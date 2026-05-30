@@ -84,6 +84,26 @@ python -m pip install rdkit
 If RDKit is unavailable, non-RDKit tests and categorical-only workflows still
 run.
 
+## Code Quality And CI
+
+Pytest and Ruff are configured in `pyproject.toml`.
+
+Run tests locally:
+
+```bash
+pytest
+```
+
+Run Ruff locally after installing the dev extra:
+
+```bash
+python -m pip install -e ".[dev]"
+ruff check src tests
+```
+
+GitHub Actions runs the fixture-based test suite on push and pull requests. The
+base CI install does not require RDKit, TDC, XGBoost, CatBoost, or Optuna.
+
 ## Dataset Setup Options
 
 The expected cleaned schema is:
@@ -171,13 +191,33 @@ training split may be augmented.
 
 ## AutoML Run
 
-The repository includes `configs/automl.yaml` as a starter configuration, but a
-full AutoML runner is not implemented in this MVP yet. For now, use the
-baseline and augmentation runners with explicit model lists.
+The repository includes a compact Optuna-based AutoML runner:
+
+```bash
+python -m bh_augmentation.run_automl --config configs/automl.yaml
+```
+
+Install Optuna explicitly before using it:
+
+```bash
+python -m pip install optuna
+```
+
+Default outputs:
+
+```text
+results/automl/trials.csv
+results/automl/best_config.json
+results/automl/final_test_metrics.csv
+```
+
+The search space is intentionally small: Ridge, Random Forest, ExtraTrees,
+categorical condition features by default, and safe augmentation choices. The
+default objective is validation top-k hit rate, with validation RMSE available
+as a fallback objective.
 
 Optional libraries such as XGBoost and CatBoost are supported only when
-installed and requested. Optuna is intentionally not used unless a future task
-adds it explicitly.
+installed and requested.
 
 ## Recommendation Simulation
 
@@ -271,7 +311,7 @@ experiments, where a small amount of leakage can dominate the apparent benefit.
   generalization.
 - Morgan fingerprints and randomized SMILES require RDKit.
 - XGBoost and CatBoost are optional and not required by tests.
-- The AutoML config exists, but a full AutoML runner is not implemented yet.
+- Optuna is optional and required only for `run_automl`.
 - Recommendation simulation is single-round only.
 - Reporting is intentionally lightweight and uses CSV summaries plus simple
   matplotlib plots.
@@ -280,7 +320,7 @@ experiments, where a small amount of leakage can dominate the apparent benefit.
 
 ## Future Extensions
 
-- Add a full AutoML runner with explicit search spaces.
+- Add broader AutoML search spaces and pruning once the MVP behavior is stable.
 - Add repeated split evaluation with confidence intervals.
 - Add richer chemical descriptors and ablation studies.
 - Add more realistic hard splits, such as scaffold-like aryl halide groups.
@@ -288,4 +328,4 @@ experiments, where a small amount of leakage can dominate the apparent benefit.
 - Add model persistence and experiment manifests.
 - Add richer report tables for comparing augmentation helped/hurt/neutral
   across split types and low-data fractions.
-- Add optional Optuna integration only when explicitly requested.
+- Add optional Optuna pruning and repeated-study summaries.

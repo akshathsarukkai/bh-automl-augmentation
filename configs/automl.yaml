@@ -2,12 +2,44 @@ seed: 42
 dataset:
   name: buchwald_hartwig
   path: data/processed/bh_clean.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
 features:
-  kind: fp_plus_conditions
+  kind: categorical_conditions
+  smiles_columns: []
+  categorical_columns:
+    - solvent
 automl:
-  enabled: false
-  search_budget_trials: 25
-  primary_metric: rmse
+  enabled: true
+  n_trials: 10
+  primary_metric: validation_top_k_hit_rate
+  top_k: 3
+  high_yield_threshold: 70
   candidate_models:
     - ridge
+    - random_forest
+    - extratrees
+  feature_sets:
+    - categorical_conditions
+  augmentation_types:
+    - none
+    - randomized_smiles
+    - order_permutation
+  augmentation_ratios:
+    - 1
+    - 2
+    - 5
+  smiles_columns:
+    - aryl_halide_smiles
+    - amine_smiles
+  component_columns:
+    - aryl_halide_smiles
+    - amine_smiles
+output:
+  trial_table_path: results/automl/trials.csv
+  best_config_path: results/automl/best_config.json
+  final_test_metrics_path: results/automl/final_test_metrics.csv
     - random_forest
