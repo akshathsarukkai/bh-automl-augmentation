@@ -1,0 +1,26 @@
+seed: 42
+dataset:
+  name: fixture_buchwald_hartwig
+  path: results/mvp/data/mvp_clean.csv
+splits:
+  method: random
+  train_size: 0.6
+  valid_size: 0.2
+  test_size: 0.2
+features:
+  smiles_columns: []
+  categorical_columns:
+  - solvent
+models:
+- ridge
+metrics:
+- rmse
+- mae
+low_data:
+  enabled: true
+  train_fractions:
+  - 0.5
+  - 1.0
+output:
+  metrics_path: results/mvp/low_data/baseline_metrics.csv
+  split_metadata_path: results/mvp/low_data/split_metadata.csv

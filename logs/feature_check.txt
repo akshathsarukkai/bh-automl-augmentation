@@ -1,0 +1,5 @@
+X shape: (1000, 8192)
+feature sum: 45606.0
+nonzero entries: 247024
+rows with any nonzero: 1000
+fraction rows nonzero: 1.0

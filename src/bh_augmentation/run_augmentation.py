@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import argparse
+import warnings
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.condition_recombine import (
+    assign_synthetic_sample_weights,
+    condition_recombine_pseudolabel,
+)
 from bh_augmentation.augmentation.order_permutation import permute_reaction_components
+from bh_augmentation.augmentation.search import (
+    apply_augmentation_policy,
+    build_augmentation_policy_grid,
+    evaluate_augmentation_policy,
+    policy_metadata,
+    select_best_policy,
+)
 from bh_augmentation.augmentation.smiles_randomization import augment_randomized_smiles
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
@@ -20,11 +32,15 @@ from bh_augmentation.models.train import train_model
 from bh_augmentation.reporting.make_report import save_metrics_csv
 from bh_augmentation.run_baseline import (
     _compute_metric,
+    _create_baseline_folds,
     _create_split_variants,
     _get_dataset_path,
     _get_group_column,
     _parse_model_config,
     _resolve_feature_config,
+    _resolve_feature_configs,
+    _resolve_model_configs,
+    _save_baseline_split_metadata,
     _save_split_metadata,
 )
 from bh_augmentation.utils.config import load_config
@@ -41,6 +57,9 @@ def run_augmentation(config_path: str | Path) -> Path:
     df = clean_buchwald_hartwig(raw_df).reset_index(drop=True)
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run augmentation experiment.")
+
+    if config.get("augmentation_search", {}).get("enabled", False):
+        return _run_augmentation_search(config, df, seed)
 
     split_variants = _create_split_variants(df, config, seed)
     feature_config = _resolve_feature_config(config.get("features", {}), df)
@@ -76,12 +95,28 @@ def run_augmentation(config_path: str | Path) -> Path:
                 ignore_index=True,
             )
             X, y, _ = build_feature_matrix(combined_df, feature_config)
+            feature_kind = str(feature_config.get("kind", "custom"))
+            n_features = int(X.shape[1])
             train_mask = combined_df["__split"].to_numpy() == "train"
+            variant_metadata = _variant_metrics(
+                variant_name,
+                train_df,
+                len(splits["train"]),
+                augmentation_config,
+            )
 
             for model_config in model_configs:
                 model_name, model_kwargs = _parse_model_config(model_config)
                 model = get_model(model_name, seed=seed, **model_kwargs)
-                fitted_model = train_model(model, X[train_mask], y[train_mask])
+                if bool(variant_metadata["synthetic_weighting_enabled"]):
+                    fitted_model = train_model(
+                        model,
+                        X[train_mask],
+                        y[train_mask],
+                        sample_weight=train_df["sample_weight"].to_numpy(dtype=float),
+                    )
+                else:
+                    fitted_model = train_model(model, X[train_mask], y[train_mask])
 
                 for split_name in ["valid", "test"]:
                     eval_mask = combined_df["__split"].to_numpy() == split_name
@@ -94,7 +129,10 @@ def run_augmentation(config_path: str | Path) -> Path:
                                 "train_fraction": train_fraction,
                                 "split_method": split_method,
                                 "group_column": group_column,
+                                "feature_kind": feature_kind,
+                                "n_features": n_features,
                                 "augmentation": variant_name,
+                                **variant_metadata,
                                 "model": model_name,
                                 "split": split_name,
                                 "metric": metric_name,
@@ -107,6 +145,209 @@ def run_augmentation(config_path: str | Path) -> Path:
                         )
 
     return save_metrics_csv(records, _get_metrics_output_path(config))
+
+
+def _run_augmentation_search(
+    config: dict[str, Any],
+    df: pd.DataFrame,
+    seed: int,
+) -> Path:
+    search_config = _search_config_with_defaults(config)
+    if str(search_config.get("selection_split", "valid")) != "valid":
+        raise ValueError("augmentation_search.selection_split must be 'valid'.")
+
+    policies = build_augmentation_policy_grid(search_config)
+    folds = _create_baseline_folds(df, config, seed)
+    feature_configs = _resolve_feature_configs(config.get("features", {}), df)
+    model_configs = _resolve_model_configs(config.get("models", ["ridge"]))
+    metrics = list(config.get("metrics", ["rmse", "mae", "r2"]))
+    selection_metric = str(search_config.get("selection_metric", "rmse"))
+    lower_is_better = bool(search_config.get("lower_is_better", True))
+    split_method = str(config.get("splits", {}).get("method", "random"))
+    group_column = _get_group_column(config.get("splits", {}))
+
+    search_frames: list[pd.DataFrame] = []
+    selected_policy_rows: list[dict[str, object]] = []
+    selected_metric_rows: list[dict[str, object]] = []
+    _save_baseline_split_metadata(folds, config)
+
+    for feature_config in feature_configs:
+        for fold_index, (train_fraction, heldout_group, splits) in enumerate(folds):
+            context = {
+                "fold_index": fold_index,
+                "train_fraction": train_fraction,
+                "split_method": split_method,
+                "group_column": group_column,
+                "heldout_group_value": heldout_group,
+            }
+            for model_config in model_configs:
+                model_name, model_kwargs = _parse_model_config(model_config)
+                policy_frames: list[pd.DataFrame] = []
+                for policy in policies:
+                    frame, _ = evaluate_augmentation_policy(
+                        splits["train"],
+                        splits["valid"],
+                        policy,
+                        feature_config,
+                        model_name,
+                        metrics,
+                        seed,
+                        model_kwargs=model_kwargs,
+                    )
+                    for key, value in context.items():
+                        frame[key] = value
+                    policy_frames.append(frame)
+
+                policy_metrics = pd.concat(policy_frames, ignore_index=True)
+                selected = select_best_policy(
+                    policy_metrics,
+                    selection_metric=selection_metric,
+                    lower_is_better=lower_is_better,
+                )
+                policy_metrics.loc[
+                    policy_metrics["policy_id"] == selected["policy_id"],
+                    "selected_policy",
+                ] = True
+                search_frames.append(policy_metrics)
+                selected_policy = next(
+                    policy for policy in policies if policy["policy_id"] == selected["policy_id"]
+                )
+                selected_policy_rows.append(
+                    {
+                        **context,
+                        "feature_kind": selected["feature_kind"],
+                        "n_features": selected["n_features"],
+                        "model": model_name,
+                        "selection_metric": selection_metric,
+                        "selection_value": selected["value"],
+                        "lower_is_better": lower_is_better,
+                        **{
+                            key: selected[key]
+                            for key in [
+                                "policy_id",
+                                "augmentation_method",
+                                "synthetic_multiplier",
+                                "min_neighbor_similarity",
+                                "teacher_model",
+                                "augmentation_random_state",
+                                "n_real_train",
+                                "n_synthetic_train",
+                                "augmentation_factor",
+                                "synthetic_weighting_enabled",
+                                "mean_synthetic_weight",
+                                "min_synthetic_weight",
+                                "max_synthetic_weight",
+                            ]
+                        },
+                    }
+                )
+                selected_metric_rows.extend(
+                    _evaluate_selected_policy(
+                        splits,
+                        selected_policy,
+                        feature_config,
+                        model_name,
+                        model_kwargs,
+                        metrics,
+                        seed,
+                        context,
+                    )
+                )
+
+    output = config.get("output", {})
+    search_path = Path(
+        output.get(
+            "search_metrics_path",
+            "results/augmentation/policy_search_metrics.csv",
+        )
+    )
+    selected_path = Path(
+        output.get(
+            "selected_policies_path",
+            "results/augmentation/selected_policies.csv",
+        )
+    )
+    metrics_path = _get_metrics_output_path(config)
+    search_records = pd.concat(search_frames, ignore_index=True).to_dict("records")
+    save_metrics_csv(search_records, search_path)
+    save_metrics_csv(selected_policy_rows, selected_path)
+    return save_metrics_csv(selected_metric_rows, metrics_path)
+
+
+def _evaluate_selected_policy(
+    splits: dict[str, pd.DataFrame],
+    policy: dict[str, Any],
+    feature_config: dict[str, Any],
+    model_name: str,
+    model_kwargs: dict[str, Any],
+    metrics: list[str],
+    seed: int,
+    context: dict[str, object],
+) -> list[dict[str, object]]:
+    augmented_train = apply_augmentation_policy(splits["train"], policy, feature_config)
+    combined = pd.concat(
+        [
+            augmented_train.assign(__split="train"),
+            splits["valid"].assign(__split="valid"),
+            splits["test"].assign(__split="test"),
+        ],
+        ignore_index=True,
+    )
+    X, y, _ = build_feature_matrix(combined, feature_config)
+    train_mask = combined["__split"].to_numpy() == "train"
+    fitted = train_model(
+        get_model(model_name, seed=seed, **model_kwargs),
+        X[train_mask],
+        y[train_mask],
+        sample_weight=(
+            augmented_train["sample_weight"].to_numpy(dtype=float)
+            if bool(policy.get("synthetic_weighting", {}).get("enabled", False))
+            else None
+        ),
+    )
+    metadata = policy_metadata(policy, augmented_train, len(splits["train"]))
+    metadata.update(
+        {
+            "feature_kind": str(feature_config.get("kind", "custom")),
+            "n_features": int(X.shape[1]),
+            "model": model_name,
+        }
+    )
+    records: list[dict[str, object]] = []
+    for split_name in ["valid", "test"]:
+        eval_mask = combined["__split"].to_numpy() == split_name
+        predictions = predict_model(fitted, X[eval_mask])
+        for metric in metrics:
+            records.append(
+                {
+                    **context,
+                    **metadata,
+                    "selected_policy": True,
+                    "split": split_name,
+                    "metric": metric,
+                    "value": _compute_metric(metric, y[eval_mask], predictions),
+                }
+            )
+    return records
+
+
+def _search_config_with_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    search = dict(config.get("augmentation_search", {}))
+    fixed = config.get("augmentation", {}).get(
+        "condition_recombine_pseudolabel", {}
+    )
+    defaults = {
+        "method": "condition_recombine_pseudolabel",
+        "synthetic_multipliers": [fixed.get("synthetic_multiplier", 1.0)],
+        "min_neighbor_similarities": [
+            fixed.get("min_neighbor_similarity", 0.3)
+        ],
+        "teacher_models": [fixed.get("teacher_model", "random_forest")],
+        "random_states": [fixed.get("random_state", config.get("seed", 42))],
+        "max_synthetic_rows": fixed.get("max_synthetic_rows", 3000),
+        "synthetic_weighting": fixed.get("synthetic_weighting", {}),
+    }
+    return {**defaults, **search}
 
 
 def main() -> None:
@@ -130,8 +371,32 @@ def _build_training_variants(
     smiles_config = augmentation_config.get("smiles_randomization", {})
     order_config = augmentation_config.get("order_permutation", {})
     combined_config = augmentation_config.get("combined", {})
+    recombine_config = augmentation_config.get(
+        "condition_recombine_pseudolabel", {}
+    )
+
+    if recombine_config.get("enabled", False):
+        max_rows = recombine_config.get("max_synthetic_rows", 3000)
+        augmented = condition_recombine_pseudolabel(
+            train_df,
+            feature_config,
+            synthetic_multiplier=float(
+                recombine_config.get("synthetic_multiplier", 1.0)
+            ),
+            max_synthetic_rows=None if max_rows is None else int(max_rows),
+            teacher_model=str(recombine_config.get("teacher_model", "random_forest")),
+            min_neighbor_similarity=float(
+                recombine_config.get("min_neighbor_similarity", 0.3)
+            ),
+            random_state=int(recombine_config.get("random_state", seed)),
+        )
+        variants["condition_recombine_pseudolabel"] = assign_synthetic_sample_weights(
+            augmented,
+            recombine_config.get("synthetic_weighting"),
+        )
 
     if smiles_config.get("enabled", False):
+        _warn_legacy_augmentation("smiles_randomization")
         variants["randomized_smiles"] = _apply_smiles_randomization(
             train_df,
             smiles_config,
@@ -139,12 +404,14 @@ def _build_training_variants(
             seed,
         )
     if order_config.get("enabled", False):
+        _warn_legacy_augmentation("order_permutation")
         variants["order_permutation"] = _apply_order_permutation(
             train_df,
             order_config,
             seed,
         )
     if combined_config.get("enabled", False):
+        _warn_legacy_augmentation("combined_safe")
         combined = train_df
         if smiles_config.get("enabled", False):
             combined = _apply_smiles_randomization(combined, smiles_config, feature_config, seed)
@@ -216,6 +483,15 @@ def _select_augmentation_rows(df: pd.DataFrame, ratio: float, seed: int) -> pd.D
     return df.loc[sampled_indices].copy()
 
 
+def _warn_legacy_augmentation(name: str) -> None:
+    warnings.warn(
+        f"Augmentation '{name}' is legacy and is not used by active configs. "
+        "Use condition_recombine_pseudolabel for reaction_smiles data.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+
+
 def _with_augmentation_metadata(
     df: pd.DataFrame,
     is_augmented_default: bool,
@@ -237,6 +513,64 @@ def _with_augmentation_metadata(
 def _get_metrics_output_path(config: dict[str, Any]) -> Path:
     output_config = config.get("output", {})
     return Path(output_config.get("metrics_path", "results/augmentation/safe_aug_metrics.csv"))
+
+
+def _variant_metrics(
+    variant_name: str,
+    train_df: pd.DataFrame,
+    n_real_train: int,
+    augmentation_config: dict[str, Any],
+) -> dict[str, object]:
+    synthetic_mask = (
+        train_df.get("is_synthetic", pd.Series(False, index=train_df.index))
+        .fillna(False)
+        .astype(bool)
+    )
+    metadata: dict[str, object] = {
+        "augmentation_method": variant_name,
+        "n_real_train": n_real_train,
+        "n_synthetic_train": int(synthetic_mask.sum()),
+        "synthetic_multiplier": 0.0,
+        "teacher_model": "",
+        "min_neighbor_similarity": np.nan,
+        "augmentation_random_state": np.nan,
+        "synthetic_weighting_enabled": False,
+        "mean_synthetic_weight": np.nan,
+        "min_synthetic_weight": np.nan,
+        "max_synthetic_weight": np.nan,
+    }
+    if variant_name == "condition_recombine_pseudolabel":
+        settings = augmentation_config.get(variant_name, {})
+        metadata.update(
+            {
+                "synthetic_multiplier": float(
+                    settings.get("synthetic_multiplier", 1.0)
+                ),
+                "teacher_model": str(
+                    settings.get("teacher_model", "random_forest")
+                ),
+                "min_neighbor_similarity": float(
+                    settings.get("min_neighbor_similarity", 0.3)
+                ),
+                "augmentation_random_state": int(settings.get("random_state", 42)),
+            }
+        )
+        weighting_enabled = bool(
+            settings.get("synthetic_weighting", {}).get("enabled", False)
+        )
+        metadata["synthetic_weighting_enabled"] = weighting_enabled
+        synthetic_weights = pd.to_numeric(
+            train_df.loc[synthetic_mask, "sample_weight"], errors="coerce"
+        ).dropna()
+        if not synthetic_weights.empty:
+            metadata.update(
+                {
+                    "mean_synthetic_weight": float(synthetic_weights.mean()),
+                    "min_synthetic_weight": float(synthetic_weights.min()),
+                    "max_synthetic_weight": float(synthetic_weights.max()),
+                }
+            )
+    return metadata
 
 
 if __name__ == "__main__":

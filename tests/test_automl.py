@@ -64,14 +64,12 @@ def _fixture_df(n_rows: int = 18) -> pd.DataFrame:
     return pd.DataFrame(
         {
             "reaction_id": [f"rxn_{index:03d}" for index in range(n_rows)],
-            "aryl_halide_smiles": (["CCO", "CCN", "CCC"] * (n_rows // 3 + 1))[:n_rows],
-            "amine_smiles": (["N", "CN", "CCN"] * (n_rows // 3 + 1))[:n_rows],
-            "ligand_smiles": ["ligand_a"] * n_rows,
-            "base_smiles": ["base_a"] * n_rows,
-            "additive_smiles": ["additive_a"] * n_rows,
-            "solvent": (["DMF", "THF", "toluene"] * (n_rows // 3 + 1))[:n_rows],
-            "temperature": ([80, 90, 100] * (n_rows // 3 + 1))[:n_rows],
-            "reaction_smiles": ["CCO.N>>CCN"] * n_rows,
+            "reaction_smiles": [
+                f"CC{'C' * (index % 3)}Br.N.O.C>>CC{'C' * (index % 3)}N"
+                for index in range(n_rows)
+            ],
+            "product_key": [f"product_{index % 3}" for index in range(n_rows)],
+            "reactant_key": [f"reactant_{index % 4}" for index in range(n_rows)],
             "yield": [float((index * 9) % 100) for index in range(n_rows)],
         }
     )
@@ -93,17 +91,16 @@ def test_run_automl_search_saves_outputs_and_keeps_test_unaugmented(
 
     paths = run_automl_search(
         splits=splits,
-        base_feature_config={"smiles_columns": [], "categorical_columns": ["solvent"]},
+        base_feature_config={"kind": "reaction_role_concat_delta", "n_bits": 8},
         automl_config={
             "n_trials": 3,
             "primary_metric": "validation_top_k_hit_rate",
             "top_k": 2,
             "high_yield_threshold": 70,
             "candidate_models": ["ridge"],
-            "feature_sets": ["categorical_conditions"],
-            "augmentation_types": ["none", "order_permutation"],
+            "feature_sets": ["reaction_role_concat_delta"],
+            "augmentation_types": ["none"],
             "augmentation_ratios": [1, 2],
-            "component_columns": ["aryl_halide_smiles", "amine_smiles"],
         },
         output_config=output_config,
         seed=7,
@@ -114,7 +111,7 @@ def test_run_automl_search_saves_outputs_and_keeps_test_unaugmented(
     assert paths["final_test_metrics"] == output_config["final_test_metrics_path"]
     trials = pd.read_csv(output_config["trial_table_path"])
     assert len(trials) == 3
-    assert {"none", "order_permutation"}.issubset(set(trials["augmentation_type"]))
+    assert set(trials["augmentation_type"]) == {"none"}
 
     best_config = json.loads(output_config["best_config_path"].read_text(encoding="utf-8"))
     assert "model_type" in best_config
@@ -149,9 +146,8 @@ splits:
   valid_size: 0.2
   test_size: 0.2
 features:
-  smiles_columns: []
-  categorical_columns:
-    - solvent
+  kind: reaction_role_concat_delta
+  n_bits: 8
 automl:
   n_trials: 2
   primary_metric: validation_top_k_hit_rate
@@ -160,15 +156,11 @@ automl:
   candidate_models:
     - ridge
   feature_sets:
-    - categorical_conditions
+    - reaction_role_concat_delta
   augmentation_types:
     - none
-    - order_permutation
   augmentation_ratios:
     - 1
-  component_columns:
-    - aryl_halide_smiles
-    - amine_smiles
 output:
   trial_table_path: {trial_path}
   best_config_path: {best_path}
@@ -193,7 +185,7 @@ def test_run_automl_search_requires_optuna(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(ImportError, match="python -m pip install optuna"):
         run_automl_search(
             splits=splits,
-            base_feature_config={"smiles_columns": [], "categorical_columns": ["solvent"]},
+            base_feature_config={"kind": "reaction_role_concat_delta", "n_bits": 8},
             automl_config={"n_trials": 1},
             output_config={},
             seed=7,

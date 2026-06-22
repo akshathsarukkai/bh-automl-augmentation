@@ -1,4 +1,4 @@
-"""Tests for order-permutation augmentation."""
+"""Legacy tests for explicit component-column order permutation."""
 
 import pandas as pd
 import pytest

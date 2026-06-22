@@ -1,0 +1,200 @@
+{
+  "audits": [
+    {
+      "all_synthetic_features_identical_to_source_rows": false,
+      "augmentation_factor": 1.5806451612903225,
+      "augmented_feature_matrix_shape": [
+        49,
+        6144
+      ],
+      "augmented_train_rows": 49,
+      "columns_changed_by_augmentation": [
+        "reaction_smiles",
+        "yield"
+      ],
+      "eval_ids_in_augmented_training": [],
+      "fold_index": 0,
+      "heldout_group_in_augmented_training": false,
+      "heldout_group_value": "",
+      "nearest_train_similarity": {
+        "count": 18,
+        "max": 0.9337748289108276,
+        "mean": 0.8700891070895724,
+        "median": 0.8601584434509277,
+        "min": 0.8013244867324829,
+        "std": 0.047622723708190276
+      },
+      "original_feature_matrix_shape": [
+        31,
+        6144
+      ],
+      "original_train_rows": 31,
+      "percent_synthetic_changed_reaction_smiles": 100.0,
+      "percent_synthetic_features_duplicate_original": 0.0,
+      "percent_synthetic_features_new": 100.0,
+      "split_method": "random",
+      "status": "PASS",
+      "synthetic_feature_rows_duplicate_original": 0,
+      "synthetic_feature_rows_new": 18,
+      "synthetic_labels_copied_exactly": 0,
+      "synthetic_labels_perturbed": 18,
+      "synthetic_labels_pseudo_labeled": 18,
+      "synthetic_rows_added": 18,
+      "train_fraction": 0.01,
+      "unique_feature_vectors_after": 49,
+      "unique_feature_vectors_before": 31,
+      "validation_test_rows_modified": false,
+      "variant": "condition_recombine_pseudolabel",
+      "warnings": [],
+      "yield_distribution_after": {
+        "count": 49,
+        "max": 89.48065113,
+        "mean": 31.85216704538442,
+        "median": 30.5912617,
+        "min": 0.0,
+        "std": 23.21435132724417
+      },
+      "yield_distribution_before": {
+        "count": 31,
+        "max": 89.48065113,
+        "mean": 30.423448959774195,
+        "median": 30.16614104,
+        "min": 0.0,
+        "std": 25.342248844778183
+      }
+    },
+    {
+      "all_synthetic_features_identical_to_source_rows": false,
+      "augmentation_factor": 1.8101265822784811,
+      "augmented_feature_matrix_shape": [
+        286,
+        6144
+      ],
+      "augmented_train_rows": 286,
+      "columns_changed_by_augmentation": [
+        "reaction_smiles",
+        "yield"
+      ],
+      "eval_ids_in_augmented_training": [],
+      "fold_index": 1,
+      "heldout_group_in_augmented_training": false,
+      "heldout_group_value": "",
+      "nearest_train_similarity": {
+        "count": 128,
+        "max": 0.9391891956329346,
+        "mean": 0.8694622293114662,
+        "median": 0.860927164554596,
+        "min": 0.8024691343307495,
+        "std": 0.04363740005074858
+      },
+      "original_feature_matrix_shape": [
+        158,
+        6144
+      ],
+      "original_train_rows": 158,
+      "percent_synthetic_changed_reaction_smiles": 100.0,
+      "percent_synthetic_features_duplicate_original": 0.0,
+      "percent_synthetic_features_new": 100.0,
+      "split_method": "random",
+      "status": "PASS",
+      "synthetic_feature_rows_duplicate_original": 0,
+      "synthetic_feature_rows_new": 128,
+      "synthetic_labels_copied_exactly": 0,
+      "synthetic_labels_perturbed": 128,
+      "synthetic_labels_pseudo_labeled": 128,
+      "synthetic_rows_added": 128,
+      "train_fraction": 0.05,
+      "unique_feature_vectors_after": 286,
+      "unique_feature_vectors_before": 158,
+      "validation_test_rows_modified": false,
+      "variant": "condition_recombine_pseudolabel",
+      "warnings": [],
+      "yield_distribution_after": {
+        "count": 286,
+        "max": 92.12702212,
+        "mean": 30.94774938014313,
+        "median": 28.42622897,
+        "min": 0.0,
+        "std": 23.650916153357517
+      },
+      "yield_distribution_before": {
+        "count": 158,
+        "max": 92.12702212,
+        "mean": 31.613256979462033,
+        "median": 27.960195725,
+        "min": 0.0,
+        "std": 25.969025595442314
+      }
+    },
+    {
+      "all_synthetic_features_identical_to_source_rows": false,
+      "augmentation_factor": 1.9620253164556962,
+      "augmented_feature_matrix_shape": [
+        620,
+        6144
+      ],
+      "augmented_train_rows": 620,
+      "columns_changed_by_augmentation": [
+        "reaction_smiles",
+        "yield"
+      ],
+      "eval_ids_in_augmented_training": [],
+      "fold_index": 2,
+      "heldout_group_in_augmented_training": false,
+      "heldout_group_value": "",
+      "nearest_train_similarity": {
+        "count": 304,
+        "max": 0.9487179517745972,
+        "mean": 0.88105264345282,
+        "median": 0.8801408410072327,
+        "min": 0.800000011920929,
+        "std": 0.03944223348425136
+      },
+      "original_feature_matrix_shape": [
+        316,
+        6144
+      ],
+      "original_train_rows": 316,
+      "percent_synthetic_changed_reaction_smiles": 100.0,
+      "percent_synthetic_features_duplicate_original": 0.0,
+      "percent_synthetic_features_new": 100.0,
+      "split_method": "random",
+      "status": "PASS",
+      "synthetic_feature_rows_duplicate_original": 0,
+      "synthetic_feature_rows_new": 304,
+      "synthetic_labels_copied_exactly": 0,
+      "synthetic_labels_perturbed": 304,
+      "synthetic_labels_pseudo_labeled": 304,
+      "synthetic_rows_added": 304,
+      "train_fraction": 0.1,
+      "unique_feature_vectors_after": 620,
+      "unique_feature_vectors_before": 316,
+      "validation_test_rows_modified": false,
+      "variant": "condition_recombine_pseudolabel",
+      "warnings": [],
+      "yield_distribution_after": {
+        "count": 620,
+        "max": 98.28722602,
+        "mean": 33.437616508564936,
+        "median": 32.29575341236343,
+        "min": 0.0,
+        "std": 25.47870773001575
+      },
+      "yield_distribution_before": {
+        "count": 316,
+        "max": 98.28722602,
+        "mean": 33.86269346489241,
+        "median": 30.17946706,
+        "min": 0.0,
+        "std": 28.281747307576865
+      }
+    }
+  ],
+  "feature_kind": "reaction_role_concat",
+  "leakage_detected": false,
+  "message": "PASS: augmentation changes model features",
+  "no_active_meaningful_augmentation": false,
+  "status": "PASS",
+  "total_new_synthetic_feature_rows": 450,
+  "total_synthetic_rows": 450
+}

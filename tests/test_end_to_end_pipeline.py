@@ -5,7 +5,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from bh_augmentation.augmentation.order_permutation import permute_reaction_components
+from bh_augmentation.augmentation.condition_recombine import (
+    condition_recombine_pseudolabel,
+)
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.data.split_data import random_split
@@ -33,8 +35,8 @@ def test_end_to_end_fixture_pipeline_guardrail(tmp_path: Path) -> None:
         seed=123,
     )
     feature_config = {
-        "smiles_columns": [],
-        "categorical_columns": ["solvent"],
+        "kind": "reaction_morgan_sum",
+        "n_bits": 32,
     }
 
     baseline_metrics = _train_and_evaluate(
@@ -45,12 +47,14 @@ def test_end_to_end_fixture_pipeline_guardrail(tmp_path: Path) -> None:
         strategy="baseline",
     )
 
-    augmented_train = permute_reaction_components(
+    augmented_train = condition_recombine_pseudolabel(
         splits["train"],
-        component_columns=["aryl_halide_smiles", "amine_smiles"],
-        n_permutations=1,
-        seed=123,
-        include_original=True,
+        feature_config,
+        synthetic_multiplier=0.5,
+        max_synthetic_rows=20,
+        teacher_model="ridge",
+        min_neighbor_similarity=0.0,
+        random_state=123,
     )
     assert augmented_train["is_augmented"].sum() > 0
     assert "is_augmented" not in splits["valid"].columns
@@ -61,7 +65,7 @@ def test_end_to_end_fixture_pipeline_guardrail(tmp_path: Path) -> None:
         valid_df=splits["valid"],
         test_df=splits["test"],
         feature_config=feature_config,
-        strategy="order_permutation",
+        strategy="condition_recombine_pseudolabel",
     )
 
     metrics_path = tmp_path / "metrics" / "end_to_end_metrics.csv"
@@ -69,7 +73,10 @@ def test_end_to_end_fixture_pipeline_guardrail(tmp_path: Path) -> None:
 
     metrics = pd.read_csv(metrics_path)
     assert metrics_path.exists()
-    assert set(metrics["strategy"]) == {"baseline", "order_permutation"}
+    assert set(metrics["strategy"]) == {
+        "baseline",
+        "condition_recombine_pseudolabel",
+    }
     assert set(metrics["split"]) == {"valid", "test"}
     assert set(metrics["metric"]) == {"rmse", "mae"}
     assert np.isfinite(metrics["value"]).all()
@@ -79,8 +86,15 @@ def _expand_cleaned_fixture(df: pd.DataFrame, repeats: int) -> pd.DataFrame:
     """Create enough deterministic fixture rows for train/valid/test splitting."""
     frames = []
     for repeat in range(repeats):
-        copy = df.copy()
+        copy = df[["reaction_id", "reaction_smiles", "yield"]].copy()
         copy["reaction_id"] = copy["reaction_id"].astype(str) + f"_copy_{repeat}"
+        condition_a = "O" if repeat % 2 else "Cl"
+        condition_b = "C" if repeat < 2 else "P"
+        copy["reaction_smiles"] = copy["reaction_smiles"].str.replace(
+            ">>", f".{condition_a}.{condition_b}>>", regex=False
+        )
+        copy["product_key"] = copy["reaction_smiles"].str.split(">>").str[-1]
+        copy["reactant_key"] = copy["reaction_smiles"].str.split(">>").str[0]
         copy["yield"] = (copy["yield"] + repeat).clip(0, 100)
         frames.append(copy)
     return pd.concat(frames, ignore_index=True)
@@ -90,7 +104,7 @@ def _train_and_evaluate(
     train_df: pd.DataFrame,
     valid_df: pd.DataFrame,
     test_df: pd.DataFrame,
-    feature_config: dict[str, list[str]],
+    feature_config: dict[str, object],
     strategy: str,
 ) -> list[dict[str, object]]:
     """Train a Ridge model and return validation/test metrics."""

@@ -5,6 +5,7 @@ import pytest
 
 from bh_augmentation.data.split_data import (
     heldout_group_split,
+    leave_one_group_out_splits,
     low_data_split,
     random_split,
 )
@@ -110,5 +111,51 @@ def test_heldout_group_split_validates_group_column() -> None:
     """Missing group columns should raise a clear ValueError."""
     df = _sample_df(20)
 
-    with pytest.raises(ValueError, match="Group column is missing"):
+    with pytest.raises(ValueError, match="Available columns: reaction_id, group, yield"):
         heldout_group_split(df, group_column="missing")
+
+
+def test_heldout_group_split_accepts_arbitrary_existing_column() -> None:
+    """Any existing dataframe column should be usable as a held-out group."""
+    df = _sample_df(30)
+    df["product_key"] = [f"product_{index // 5}" for index in range(len(df))]
+
+    splits = heldout_group_split(
+        df,
+        group_column="product_key",
+        heldout_fraction=0.2,
+        valid_fraction=0.1,
+        seed=42,
+    )
+
+    train_groups = set(splits["train"]["product_key"])
+    test_groups = set(splits["test"]["product_key"])
+    assert train_groups.isdisjoint(test_groups)
+
+
+def test_leave_one_group_out_creates_one_leak_free_fold_per_group() -> None:
+    """LOGO should hold every group out exactly once."""
+    df = _sample_df(30)
+
+    folds = leave_one_group_out_splits(
+        df,
+        group_column="group",
+        valid_fraction=0.1,
+        seed=42,
+    )
+
+    assert len(folds) == df["group"].nunique()
+    assert {heldout for heldout, _ in folds} == set(df["group"])
+    for heldout, splits in folds:
+        assert set(splits["test"]["group"]) == {heldout}
+        assert heldout not in set(splits["train"]["group"])
+        assert heldout not in set(splits["valid"]["group"])
+        _assert_no_index_overlap(splits)
+
+
+def test_leave_one_group_out_rejects_missing_group_column() -> None:
+    """LOGO missing-column errors should list available columns."""
+    df = _sample_df(20)
+
+    with pytest.raises(ValueError, match="Available columns: reaction_id, group, yield"):
+        leave_one_group_out_splits(df, group_column="not_a_column")

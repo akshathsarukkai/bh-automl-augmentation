@@ -1,8 +1,8 @@
 # AutoML-Guided Data Augmentation for Low-Data Buchwald-Hartwig Yield Prediction
 
-This repository is an MVP research-code package for evaluating whether simple,
-label-preserving data augmentation can improve low-data Buchwald-Hartwig
-reaction yield prediction.
+This repository is an MVP research-code package for evaluating whether
+reaction-aware data augmentation can improve low-data Buchwald-Hartwig reaction
+yield prediction.
 
 The v0 scope is deliberately conservative. It focuses on reproducible data
 loading, cleaning, splitting, featurization, classical regression baselines,
@@ -20,12 +20,26 @@ are available for training?
 The MVP compares:
 
 - no augmentation
-- randomized SMILES augmentation, when RDKit is available
-- explicit reaction component order permutation, only for caller-approved
-  exchangeable columns
+- reaction-smiles-derived feature representations
 - low-data training fractions
 - random splits and held-out group splits
 - simulated single-round reaction recommendation
+
+## Canonical Representation
+
+The processed TDC Buchwald-Hartwig dataset has populated `reaction_smiles`, but
+its normalized `aryl_halide_smiles`, `amine_smiles`, `ligand_smiles`,
+`base_smiles`, and `additive_smiles` columns are fully `UNKNOWN`. These legacy
+columns are not required and are dropped when they contain no information.
+
+`reaction_smiles` is the canonical chemistry representation for current models
+and benchmarks. Feature builders split it into reactant/agent/product tokens
+before RDKit fingerprinting. The active modes are `reaction_morgan_sum`,
+`reaction_role_concat`, and `reaction_role_concat_delta`.
+
+Component-column augmentation is disabled. The active augmentation recombines
+condition tokens parsed from `reaction_smiles`. Stress-test `product_key` and
+`reactant_key` values are also derived from `reaction_smiles`.
 
 ## What The MVP Tests
 
@@ -34,9 +48,10 @@ The MVP compares:
 - Cleaning to a normalized Buchwald-Hartwig schema.
 - Deterministic train/validation/test splits.
 - Held-out group splits for ligand/base/additive/aryl-halide/amine columns.
-- Morgan fingerprints with RDKit, plus categorical condition one-hot features.
+- Role-aware reaction Morgan fingerprint ablations with RDKit.
 - Ridge, Random Forest, ExtraTrees, and optional XGBoost/CatBoost regressors.
-- Safe train-only augmentation.
+- Train-only condition recombination with teacher pseudo-labeling.
+- Auditing that augmentation is train-only and changes model inputs.
 - Regression metrics and decision metrics.
 - Markdown report generation and simple matplotlib plots.
 - A fixture-based end-to-end guardrail test requiring no real dataset.
@@ -45,7 +60,7 @@ The MVP compares:
 
 - It does not test generative chemistry models.
 - It does not create generative synthetic reaction data.
-- It does not use pseudo-labeling.
+- It does not pseudo-label measured validation or test reactions.
 - It does not train deep learning models.
 - It does not provide a web app or dashboard.
 - It does not claim random split performance is real chemistry
@@ -81,8 +96,8 @@ fingerprints and real randomized SMILES behavior:
 python -m pip install rdkit
 ```
 
-If RDKit is unavailable, non-RDKit tests and categorical-only workflows still
-run.
+If RDKit is unavailable, non-featurization utilities and their tests still run,
+but the three supported reaction feature modes require RDKit.
 
 ## Code Quality And CI
 
@@ -156,6 +171,19 @@ from bh_augmentation.data.load_data import save_tdc_buchwald_hartwig
 save_tdc_buchwald_hartwig("data/raw/tdc_buchwald_hartwig.csv")
 ```
 
+### Inspecting Raw Reaction Strings
+
+If a TDC or local CSV does not expose separated component columns, inspect the
+raw reaction string format before changing preprocessing:
+
+```bash
+python -m bh_augmentation.data.inspect_reactions --input data/raw/buchwald_hartwig_tdc.csv
+```
+
+The command prints columns, shape, likely reaction-string columns, and counts
+for strings containing `>`, exactly two `>` characters, `.`, halogens, and
+nitrogen.
+
 ## Baseline Run
 
 After `configs/baseline.yaml` points to a real cleaned CSV:
@@ -171,9 +199,39 @@ results/baseline/baseline_metrics.csv
 results/baseline/split_metadata.csv
 ```
 
+### Feature Ablations
+
+The supported named feature modes are:
+
+- `reaction_morgan_sum`: sums fingerprints for all reaction molecules. It is
+  compact but loses reactant/agent/product role information.
+- `reaction_role_concat`: concatenates summed reactant, agent, and product
+  fingerprints.
+- `reaction_role_concat_delta`: adds the numeric product-minus-reactant
+  fingerprint difference.
+
+Product features are acceptable for this reaction-yield task because the
+intended product structure is known. Results require more careful
+interpretation for prospective settings where product identity is uncertain.
+`reaction_role_concat_delta` is the default MVP representation. Component
+columns such as ligand, base, and additive may remain `UNKNOWN` in TDC and
+should not be primary features. The metrics CSV records `feature_kind` and
+`n_features` for each ablation.
+
+Migration from older configs:
+
+- `features.kind: reaction_smiles` is deprecated and maps to
+  `reaction_morgan_sum`.
+- `features.kind: reaction_plus_components` is deprecated and maps to
+  `reaction_role_concat_delta`.
+- `fp_concat`, `fp_plus_conditions`, and `categorical_conditions` are removed
+  named modes. Use one of the three supported reaction modes instead.
+- `reaction_combined_redundant` is deprecated and maps to
+  `reaction_role_concat_delta`.
+
 ## Augmentation Run
 
-To compare no augmentation against configured safe augmentation:
+Run the condition-recombination augmentation comparison:
 
 ```bash
 python -m bh_augmentation.run_augmentation --config configs/augmentation.yaml
@@ -182,12 +240,147 @@ python -m bh_augmentation.run_augmentation --config configs/augmentation.yaml
 Default output:
 
 ```text
-results/augmentation/safe_aug_metrics.csv
-results/augmentation/split_metadata.csv
+results/augmentation/condition_recombine_metrics.csv
+results/augmentation/condition_recombine_split_metadata.csv
 ```
 
 Validation and test sets are split from real data before augmentation. Only the
 training split may be augmented.
+
+Audit whether configured augmentation actually changes model inputs before
+trusting augmentation metrics:
+
+```bash
+python -m bh_augmentation.audit_augmentation \
+  --config configs/augmentation.yaml
+```
+
+The audit checks train-only application, split leakage, changed columns,
+feature-vector duplication, and copied labels. It writes:
+
+```text
+results/augmentation/audit/augmentation_audit.txt
+results/augmentation/audit/augmentation_audit.json
+```
+
+### Condition Recombination Pseudo-Label Augmentation
+
+The active method parses `A.B.C.D.E.F>>P` as two substrate tokens, condition
+tokens, and a product. It keeps `A.B` and `P` from a source training row,
+replaces the conditions with those from another training row, and rebuilds the
+reaction string. Candidates too dissimilar to measured training reactions are
+removed with a nearest-neighbor Tanimoto filter.
+
+A teacher model is fitted only on real training rows and predicts the synthetic
+yields, which are clipped to `[0, 100]`. The student then trains on real plus
+synthetic rows. Validation and test rows are never used by the teacher and are
+never augmented. Fully `UNKNOWN` normalized component columns are not used.
+
+Run the audit before the experiment:
+
+```bash
+python -m bh_augmentation.audit_augmentation --config configs/augmentation.yaml
+python -m bh_augmentation.run_augmentation --config configs/augmentation.yaml
+```
+
+### Validation-Selected Augmentation Policy Search
+
+The active augmentation config searches synthetic multipliers, minimum
+nearest-neighbor similarities, teacher models, and augmentation random seeds.
+Every policy is trained on the same real training split and ranked using
+validation RMSE only. The test split is untouched during search and is evaluated
+only after one policy has been selected for each train fraction, model, feature
+configuration, and fold.
+
+Run the audit and search:
+
+```bash
+python -m bh_augmentation.audit_augmentation --config configs/augmentation.yaml
+python -m bh_augmentation.run_augmentation --config configs/augmentation.yaml
+```
+
+Inspect the selected policies:
+
+```bash
+python - <<'PY'
+import pandas as pd
+print(pd.read_csv("results/augmentation/selected_policies.csv").to_string(index=False))
+PY
+```
+
+Search validation results, selected policies, and final selected-policy metrics
+are written separately under `results/augmentation/`. Compare validation and
+test rows in `selected_policy_metrics.csv` against the matching train fractions
+in the low-data baseline. Test metrics must not be used to revise the policy
+grid or selection rule.
+
+For larger synthetic fractions, use:
+
+```bash
+python -m bh_augmentation.audit_augmentation --config configs/augmentation_large_search.yaml
+python -m bh_augmentation.run_augmentation --config configs/augmentation_large_search.yaml
+```
+
+The large search excludes low-similarity policies at multipliers of 2 or 3.
+Student models weight real rows at `1.0` and synthetic rows by clipped nearest-
+training similarity. Models without `sample_weight` support emit a warning and
+fall back to unweighted fitting. Policy selection still uses validation RMSE
+only; test metrics are computed after selection.
+
+## Stress-Test Splits
+
+Create deterministic product and order-invariant reactant group keys:
+
+```bash
+python -m bh_augmentation.data.make_stress_dataset \
+  --input data/processed/bh_clean.csv \
+  --output data/processed/bh_clean_stress.csv
+```
+
+Run a held-out product experiment:
+
+```bash
+python -m bh_augmentation.run_baseline \
+  --config configs/stress_heldout_product.yaml
+```
+
+Run a held-out reactant experiment:
+
+```bash
+python -m bh_augmentation.run_baseline \
+  --config configs/stress_heldout_reactant.yaml
+```
+
+The current TDC dataset has only about five unique product groups, so held-out
+product results may have high variance. Each stress config uses a distinct
+results directory. Reusing an existing `output.metrics_path` overwrites that
+CSV rather than appending to it.
+
+### Leave-One-Group-Out Stress Tests
+
+A single held-out product split depends strongly on which of the five product
+groups is selected. Leave-one-group-out evaluation holds each group out once,
+then summarizes performance across all folds.
+
+Run product LOGO:
+
+```bash
+python -m bh_augmentation.run_baseline \
+  --config configs/stress_logo_product.yaml
+```
+
+Run reactant LOGO:
+
+```bash
+python -m bh_augmentation.run_baseline \
+  --config configs/stress_logo_reactant.yaml
+```
+
+Each results directory contains fold-level metrics, split metadata, and summary
+metrics. The summary reports the mean and standard deviation across held-out
+groups for each feature, model, split, and metric combination. Use the mean as
+overall performance and the standard deviation as sensitivity to which
+chemical group was excluded.
 
 ## AutoML Run
 
@@ -211,8 +404,8 @@ results/automl/best_config.json
 results/automl/final_test_metrics.csv
 ```
 
-The search space is intentionally small: Ridge, Random Forest, ExtraTrees,
-categorical condition features by default, and safe augmentation choices. The
+The search space is intentionally small: Ridge, Random Forest, ExtraTrees, and
+the supported reaction feature modes. The
 default objective is validation top-k hit rate, with validation RMSE available
 as a fallback objective.
 
@@ -322,12 +515,12 @@ experiments, where a small amount of leakage can dominate the apparent benefit.
 
 1. Run `pytest` to verify the fixture-data guardrail.
 2. Prepare or load a local Buchwald-Hartwig CSV.
-3. Run the baseline with categorical-only features if RDKit is unavailable.
-4. Install RDKit and enable molecular fingerprint features.
+3. Install RDKit.
+4. Run the four feature ablations.
 5. Run random-split baselines as a software sanity check only.
 6. Run held-out group splits for chemistry generalization stress tests.
 7. Run low-data fractions.
-8. Run safe augmentation comparisons.
+8. Run the augmentation audit before enabling any future augmentation.
 9. Run the recommendation simulation.
 10. Generate the final Markdown report.
 
@@ -342,8 +535,31 @@ experiments, where a small amount of leakage can dominate the apparent benefit.
 - Recommendation simulation is single-round only.
 - Reporting is intentionally lightweight and uses CSV summaries plus simple
   matplotlib plots.
-- Safe augmentation depends on caller-provided assumptions about which reaction
-  components are exchangeable.
+- Condition recombination assumes the first two left-side tokens are substrates;
+  this dataset-specific MVP convention requires chemical review.
+
+## Troubleshooting
+
+- If `No rows remain after cleaning`, inspect the raw columns and confirm that
+  a yield column and reaction string column are present.
+- If all component columns are `"UNKNOWN"`, run the reaction inspection command
+  above. TDC may expose only a full `Drug`/`reaction_smiles` string and not
+  separate ligand/base/additive/component fields.
+- If the feature matrix is all zeros, run:
+
+  ```bash
+  python -m bh_augmentation.features.diagnostics --input data/processed/bh_clean.csv --column reaction_smiles
+  ```
+
+  Confirm that reaction strings are split into molecular components before
+  RDKit fingerprinting.
+- TDC Buchwald-Hartwig may store reactions as serialized dict-like records such
+  as `{'product': '...', 'catalyst': '', 'reactant': '...'}` rather than
+  canonical reaction SMILES. The featurizer extracts molecular values from
+  those records before RDKit fingerprinting.
+- If TDC does not expose separated components, use
+  `reaction_role_concat_delta`, which derives roles from the parsed reaction
+  record, or use a richer processed dataset with explicit components.
 
 ## Future Extensions
 

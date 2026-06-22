@@ -1,0 +1,32 @@
+seed: 42
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: false
+  train_fractions:
+  - 0.01
+  - 0.05
+  - 0.1
+  - 0.2
+  - 0.5
+features:
+  kind: reaction_role_concat_delta
+  n_bits: 2048
+  radius: 2
+models:
+- ridge
+- random_forest
+metrics:
+- rmse
+- mae
+- r2
+augmentation: {}
+output:
+  metrics_path: results/augmentation/safe_aug_metrics.csv
+  split_metadata_path: results/augmentation/split_metadata.csv

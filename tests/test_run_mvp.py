@@ -26,9 +26,10 @@ def test_run_mvp_on_fixture_data_creates_outputs(tmp_path: Path) -> None:
             "valid_size": 0.2,
             "test_size": 0.2,
         },
-        "features": {
-            "smiles_columns": [],
-            "categorical_columns": ["solvent"],
+            "features": {
+                "kind": "reaction_role_concat_delta",
+                "n_bits": 64,
+                "radius": 2,
         },
         "models": ["ridge"],
         "metrics": ["rmse", "mae"],
@@ -57,7 +58,7 @@ def test_run_mvp_on_fixture_data_creates_outputs(tmp_path: Path) -> None:
     recommendation = pd.read_csv(results_dir / "recommendation" / "topk_metrics.csv")
     assert not baseline.empty
     assert not augmentation.empty
-    assert set(recommendation["strategy"]) == {"random", "model", "augmented_order_permutation"}
+    assert set(recommendation["strategy"]) == {"random", "model"}
     assert "Buchwald-Hartwig Augmentation Report" in (results_dir / "final_report.md").read_text(
         encoding="utf-8"
     )

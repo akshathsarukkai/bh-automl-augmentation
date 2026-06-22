@@ -1,0 +1,28 @@
+seed: 42
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: leave_one_group_out
+  group_column: product_key
+  valid_fraction: 0.1
+features:
+  compare:
+    - kind: reaction_morgan_sum
+      n_bits: 2048
+      radius: 2
+    - kind: reaction_role_concat
+      n_bits: 2048
+      radius: 2
+models:
+  include:
+    - ridge
+    - random_forest
+metrics:
+  - rmse
+  - mae
+  - r2
+  - spearman
+output:
+  metrics_path: results/stress/logo_product/fold_metrics.csv
+  summary_metrics_path: results/stress/logo_product/summary_metrics.csv
+  split_metadata_path: results/stress/logo_product/split_metadata.csv

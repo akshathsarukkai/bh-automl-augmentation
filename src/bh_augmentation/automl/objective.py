@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from typing import Any
 
 import numpy as np
@@ -17,6 +18,11 @@ from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
 from bh_augmentation.run_baseline import _resolve_feature_config
 
+SUPPORTED_FEATURE_SETS = [
+    "reaction_morgan_sum",
+    "reaction_role_concat",
+    "reaction_role_concat_delta",
+]
 
 MODEL_NAME_MAP = {
     "ridge": "ridge",
@@ -32,10 +38,10 @@ def suggest_trial_config(trial: Any, automl_config: dict[str, Any]) -> dict[str,
         "candidate_models",
         ["ridge", "random_forest", "extratrees"],
     )
-    feature_sets = automl_config.get("feature_sets", ["categorical_conditions"])
+    feature_sets = automl_config.get("feature_sets", SUPPORTED_FEATURE_SETS)
     augmentation_types = automl_config.get(
         "augmentation_types",
-        ["none", "randomized_smiles", "order_permutation"],
+        ["none"],
     )
     augmentation_ratios = automl_config.get("augmentation_ratios", [1, 2, 5])
 
@@ -133,6 +139,7 @@ def apply_trial_augmentation(
         return result
 
     if augmentation_type == "randomized_smiles":
+        _warn_legacy_augmentation(augmentation_type)
         return augment_randomized_smiles(
             train_df,
             smiles_columns=automl_config.get(
@@ -145,11 +152,12 @@ def apply_trial_augmentation(
         )
 
     if augmentation_type == "order_permutation":
+        _warn_legacy_augmentation(augmentation_type)
         return permute_reaction_components(
             train_df,
             component_columns=automl_config.get(
                 "component_columns",
-                ["aryl_halide_smiles", "amine_smiles"],
+                [],
             ),
             n_permutations=augmentation_ratio,
             seed=seed,
@@ -159,20 +167,25 @@ def apply_trial_augmentation(
     raise ValueError(f"Unknown augmentation type: {augmentation_type}")
 
 
+def _warn_legacy_augmentation(name: str) -> None:
+    warnings.warn(
+        f"AutoML augmentation '{name}' is legacy; active searches use "
+        "reaction_smiles features without component-column augmentation.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+
+
 def resolve_trial_feature_config(
     feature_set: str,
     base_feature_config: dict[str, Any],
     df: pd.DataFrame,
 ) -> dict[str, Any]:
     """Resolve a compact feature-set name to an implemented feature config."""
-    if feature_set == "categorical_conditions":
-        return {
-            "smiles_columns": [],
-            "categorical_columns": base_feature_config.get("categorical_columns", ["solvent"]),
-        }
-    if feature_set == "fp_plus_conditions":
-        return _resolve_feature_config({**base_feature_config, "kind": "fp_plus_conditions"}, df)
-    raise ValueError(f"Unknown feature set: {feature_set}")
+    if feature_set not in SUPPORTED_FEATURE_SETS:
+        supported = ", ".join(SUPPORTED_FEATURE_SETS)
+        raise ValueError(f"Unknown feature set: {feature_set}. Supported feature sets: {supported}.")
+    return _resolve_feature_config({**base_feature_config, "kind": feature_set}, df)
 
 
 def _suggest_float(trial: Any, name: str, low: float, high: float, log: bool = False) -> float:

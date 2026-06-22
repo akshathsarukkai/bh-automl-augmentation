@@ -135,7 +135,11 @@ def _base_runner_config(config: dict[str, Any], data_path: Path) -> dict[str, An
         ),
         "features": config.get(
             "features",
-            {"smiles_columns": [], "categorical_columns": ["solvent"]},
+            {
+                "kind": "reaction_role_concat_delta",
+                "n_bits": 2048,
+                "radius": 2,
+            },
         ),
         "models": config.get("models", ["ridge"]),
         "metrics": config.get("metrics", ["rmse", "mae"]),
@@ -166,15 +170,7 @@ def _low_data_config(base: dict[str, Any], output_dir: Path) -> dict[str, Any]:
 
 def _augmentation_config(base: dict[str, Any], output_dir: Path) -> dict[str, Any]:
     config = dict(base)
-    config["augmentation"] = {
-        "order_permutation": {
-            "enabled": True,
-            "ratio": 1.0,
-            "max_permutations": 1,
-            "random_state": config["seed"],
-            "component_columns": ["aryl_halide_smiles", "amine_smiles"],
-        }
-    }
+    config["augmentation"] = {}
     config["output"] = {
         "metrics_path": str(output_dir / "augmentation" / "safe_aug_metrics.csv"),
         "split_metadata_path": str(output_dir / "augmentation" / "split_metadata.csv"),
@@ -189,15 +185,7 @@ def _recommendation_config(base: dict[str, Any], output_dir: Path) -> dict[str, 
         "k": 2,
         "high_yield_threshold": 70,
     }
-    config["augmentation"] = {
-        "order_permutation": {
-            "enabled": True,
-            "ratio": 1.0,
-            "max_permutations": 1,
-            "random_state": config["seed"],
-            "component_columns": ["aryl_halide_smiles", "amine_smiles"],
-        }
-    }
+    config["augmentation"] = {}
     config["output"] = {
         "recommendation_metrics_path": str(output_dir / "recommendation" / "topk_metrics.csv")
     }

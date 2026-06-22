@@ -1,54 +1,47 @@
 seed: 42
 dataset:
   name: buchwald_hartwig
-  path: data/processed/bh_clean.csv
+  path: data/processed/bh_clean_stress.csv
 splits:
   method: random
   train_size: 0.8
   valid_size: 0.1
   test_size: 0.1
-  group_column: ligand_smiles
-  heldout_fraction: 0.2
-  valid_fraction: 0.1
 low_data:
-  enabled: false
-  train_fractions: [0.01, 0.05, 0.1, 0.2, 0.5]
+  enabled: true
+  train_fractions: [0.01, 0.05, 0.1]
 features:
-  kind: fp_plus_conditions
-  smiles_columns:
-    - aryl_halide_smiles
-    - amine_smiles
-    - ligand_smiles
-    - base_smiles
-    - additive_smiles
-  categorical_columns:
-    - solvent
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
 models:
-  - ridge
   - random_forest
 metrics:
   - rmse
   - mae
   - r2
+  - spearman
 augmentation:
-  smiles_randomization:
-    enabled: false
-    ratio: 1.0
-    n_variants: 3
+  condition_recombine_pseudolabel:
+    enabled: true
+    synthetic_multiplier: 1.0
+    max_synthetic_rows: 3000
+    teacher_model: random_forest
+    min_neighbor_similarity: 0.8
     random_state: 42
-    smiles_columns:
-      - aryl_halide_smiles
-      - amine_smiles
-  order_permutation:
-    enabled: false
-    ratio: 1.0
-    max_permutations: 2
-    random_state: 42
-    component_columns:
-      - aryl_halide_smiles
-      - amine_smiles
-  combined:
-    enabled: false
+augmentation_search:
+  enabled: true
+  method: condition_recombine_pseudolabel
+  selection_metric: rmse
+  selection_split: valid
+  lower_is_better: true
+  synthetic_multipliers: [0.25, 0.5, 1.0]
+  min_neighbor_similarities: [0.70, 0.80, 0.90]
+  teacher_models: [ridge, random_forest]
+  random_states: [0, 1, 2, 3, 4]
+  max_synthetic_rows: 3000
 output:
-  metrics_path: results/augmentation/safe_aug_metrics.csv
-  split_metadata_path: results/augmentation/split_metadata.csv
+  metrics_path: results/augmentation/selected_policy_metrics.csv
+  search_metrics_path: results/augmentation/policy_search_metrics.csv
+  selected_policies_path: results/augmentation/selected_policies.csv
+  split_metadata_path: results/augmentation/policy_search_split_metadata.csv

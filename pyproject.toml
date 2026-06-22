@@ -12,6 +12,7 @@ dependencies = [
   "pandas",
   "numpy",
   "scikit-learn",
+  "scipy",
   "matplotlib",
   "PyYAML",
 ]

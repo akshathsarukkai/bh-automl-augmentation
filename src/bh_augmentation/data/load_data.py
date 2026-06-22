@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from bh_augmentation.data.clean_data import clean_buchwald_hartwig
+
 TDC_BUCHWALD_HARTWIG_NAME = "Buchwald-Hartwig"
 
 
@@ -87,7 +89,10 @@ def save_tdc_buchwald_hartwig(output_path: str | Path) -> pd.DataFrame:
     pd.DataFrame
         The dataset that was written to disk.
     """
-    data = load_tdc_buchwald_hartwig()
+    data = clean_buchwald_hartwig(load_tdc_buchwald_hartwig())
+    diagnostics = data.attrs.get("tdc_adapter")
+    if diagnostics:
+        print(f"TDC preprocessing diagnostics: {diagnostics}")
     csv_path = Path(output_path)
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     data.to_csv(csv_path, index=False)

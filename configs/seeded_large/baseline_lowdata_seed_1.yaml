@@ -1,0 +1,35 @@
+seed: 1
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions:
+  - 0.01
+  - 0.05
+  - 0.1
+  - 0.2
+  - 0.5
+features:
+  compare:
+  - kind: reaction_morgan_sum
+    n_bits: 2048
+    radius: 2
+  - kind: reaction_role_concat
+    n_bits: 2048
+    radius: 2
+models:
+- ridge
+- random_forest
+metrics:
+- rmse
+- mae
+- r2
+- spearman
+output:
+  metrics_path: results/seeded_large/seed_1/baseline_lowdata_metrics.csv
+  split_metadata_path: results/seeded_large/seed_1/baseline_split_metadata.csv

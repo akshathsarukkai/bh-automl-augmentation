@@ -7,14 +7,20 @@ splits:
   train_size: 0.8
   valid_size: 0.1
   test_size: 0.1
-  group_column: ligand_smiles
-  heldout_fraction: 0.2
-  valid_fraction: 0.1
 low_data:
   enabled: false
   train_fractions: [0.01, 0.05, 0.1, 0.2, 0.5]
 features:
-  kind: fp_plus_conditions
+  compare:
+    - kind: reaction_morgan_sum
+      n_bits: 2048
+      radius: 2
+    - kind: reaction_role_concat
+      n_bits: 2048
+      radius: 2
+    - kind: reaction_role_concat_delta
+      n_bits: 2048
+      radius: 2
 models:
   - ridge
   - random_forest

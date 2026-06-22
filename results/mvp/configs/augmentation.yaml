@@ -1,0 +1,30 @@
+seed: 42
+dataset:
+  name: fixture_buchwald_hartwig
+  path: results/mvp/data/mvp_clean.csv
+splits:
+  method: random
+  train_size: 0.6
+  valid_size: 0.2
+  test_size: 0.2
+features:
+  smiles_columns: []
+  categorical_columns:
+  - solvent
+models:
+- ridge
+metrics:
+- rmse
+- mae
+augmentation:
+  order_permutation:
+    enabled: true
+    ratio: 1.0
+    max_permutations: 1
+    random_state: 42
+    component_columns:
+    - aryl_halide_smiles
+    - amine_smiles
+output:
+  metrics_path: results/mvp/augmentation/safe_aug_metrics.csv
+  split_metadata_path: results/mvp/augmentation/split_metadata.csv

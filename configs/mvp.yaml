@@ -10,9 +10,9 @@ splits:
   valid_size: 0.2
   test_size: 0.2
 features:
-  smiles_columns: []
-  categorical_columns:
-    - solvent
+  kind: reaction_role_concat_delta
+  n_bits: 2048
+  radius: 2
 models:
   - ridge
 metrics:

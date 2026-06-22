@@ -1,0 +1,13 @@
+reaction_id,aryl_halide_smiles,amine_smiles,ligand_smiles,base_smiles,additive_smiles,solvent,temperature,reaction_smiles,yield
+rxn_001_mvp_0,Brc1ccccc1,NCC,PPh3,K3PO4,UNKNOWN,toluene,90,Brc1ccccc1.NCC>>c1ccccc1NCC,81.5
+rxn_005_mvp_0,Clc1ccc(OC)cc1,NCCO,XPhos,K3PO4,UNKNOWN,toluene,95,Clc1ccc(OC)cc1.NCCO>>COc1ccc(NCCO)cc1,45.0
+rxn_007_mvp_0,Ic1ccccc1,NH2Et,SPhos,UNKNOWN,UNKNOWN,THF,70,Ic1ccccc1.NH2Et>>c1ccccc1NH2Et,0.0
+rxn_001_mvp_1,Brc1ccccc1,NCC,PPh3,K3PO4,UNKNOWN,toluene,90,Brc1ccccc1.NCC>>c1ccccc1NCC,82.5
+rxn_005_mvp_1,Clc1ccc(OC)cc1,NCCO,XPhos,K3PO4,UNKNOWN,toluene,95,Clc1ccc(OC)cc1.NCCO>>COc1ccc(NCCO)cc1,46.0
+rxn_007_mvp_1,Ic1ccccc1,NH2Et,SPhos,UNKNOWN,UNKNOWN,THF,70,Ic1ccccc1.NH2Et>>c1ccccc1NH2Et,1.0
+rxn_001_mvp_2,Brc1ccccc1,NCC,PPh3,K3PO4,UNKNOWN,toluene,90,Brc1ccccc1.NCC>>c1ccccc1NCC,83.5
+rxn_005_mvp_2,Clc1ccc(OC)cc1,NCCO,XPhos,K3PO4,UNKNOWN,toluene,95,Clc1ccc(OC)cc1.NCCO>>COc1ccc(NCCO)cc1,47.0
+rxn_007_mvp_2,Ic1ccccc1,NH2Et,SPhos,UNKNOWN,UNKNOWN,THF,70,Ic1ccccc1.NH2Et>>c1ccccc1NH2Et,2.0
+rxn_001_mvp_3,Brc1ccccc1,NCC,PPh3,K3PO4,UNKNOWN,toluene,90,Brc1ccccc1.NCC>>c1ccccc1NCC,84.5
+rxn_005_mvp_3,Clc1ccc(OC)cc1,NCCO,XPhos,K3PO4,UNKNOWN,toluene,95,Clc1ccc(OC)cc1.NCCO>>COc1ccc(NCCO)cc1,48.0
+rxn_007_mvp_3,Ic1ccccc1,NH2Et,SPhos,UNKNOWN,UNKNOWN,THF,70,Ic1ccccc1.NH2Et>>c1ccccc1NH2Et,3.0

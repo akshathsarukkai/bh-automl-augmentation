@@ -1,4 +1,4 @@
-"""Tests for randomized SMILES augmentation."""
+"""Legacy tests for component-column randomized SMILES augmentation."""
 
 from __future__ import annotations
 

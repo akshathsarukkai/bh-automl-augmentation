@@ -12,14 +12,14 @@ def _write_fixture_csv(path: Path, n_rows: int = 20) -> None:
     pd.DataFrame(
         {
             "reaction_id": [f"rxn_{index:03d}" for index in range(n_rows)],
-            "aryl_halide_smiles": (["CCO", "CCN", "CCC", "CNC"] * (n_rows // 4 + 1))[:n_rows],
-            "amine_smiles": (["N", "CN"] * (n_rows // 2 + 1))[:n_rows],
-            "ligand_smiles": ["P"] * n_rows,
-            "base_smiles": ["O"] * n_rows,
-            "additive_smiles": ["Cl"] * n_rows,
-            "solvent": (["DMF", "THF", "toluene", "dioxane"] * (n_rows // 4 + 1))[:n_rows],
-            "temperature": ([80, 90, 100, 110] * (n_rows // 4 + 1))[:n_rows],
-            "reaction_smiles": ["CCO.N>>CCN"] * n_rows,
+            "reaction_smiles": [
+                f"CC{'C' * (index % 4)}Br.N."
+                f"{'O' if index % 2 else 'Cl'}.{'C' if index % 3 else 'P'}"
+                f">>CC{'C' * (index % 4)}N"
+                for index in range(n_rows)
+            ],
+            "product_key": [f"product_{index % 4}" for index in range(n_rows)],
+            "reactant_key": [f"reactant_{index % 5}" for index in range(n_rows)],
             "yield": [float((index * 7) % 100) for index in range(n_rows)],
         }
     ).to_csv(path, index=False)
@@ -42,9 +42,8 @@ low_data:
     - 0.5
     - 1.0
 features:
-  smiles_columns: []
-  categorical_columns:
-    - solvent
+  kind: reaction_morgan_sum
+  n_bits: 8
 models:
   - ridge
 metrics:
@@ -84,14 +83,13 @@ def test_augmentation_runner_writes_metrics_for_each_low_data_fraction(
         _base_config(data_path, metrics_path)
         + """
 augmentation:
-  order_permutation:
+  condition_recombine_pseudolabel:
     enabled: true
-    ratio: 1.0
-    max_permutations: 1
+    synthetic_multiplier: 0.5
+    max_synthetic_rows: 20
+    teacher_model: ridge
+    min_neighbor_similarity: 0.0
     random_state: 13
-    component_columns:
-      - aryl_halide_smiles
-      - amine_smiles
 """,
         encoding="utf-8",
     )
@@ -101,7 +99,10 @@ augmentation:
     metrics = pd.read_csv(metrics_path)
     assert set(metrics["train_fraction"]) == {0.5, 1.0}
     assert set(metrics["split_method"]) == {"random"}
-    assert set(metrics["augmentation"]) == {"none", "order_permutation"}
+    assert set(metrics["augmentation"]) == {
+        "none",
+        "condition_recombine_pseudolabel",
+    }
     assert set(metrics["split"]) == {"valid", "test"}
     assert (metrics["eval_augmented_rows"] == 0).all()
     assert len(metrics) == 8

@@ -1,0 +1,5 @@
+train_fraction,split_method,group_column,model,split,metric,value
+1.0,random,,ridge,valid,rmse,20.46406263628621
+1.0,random,,ridge,valid,mae,20.000001907348633
+1.0,random,,ridge,test,rmse,21.034365615461148
+1.0,random,,ridge,test,mae,20.444446563720703

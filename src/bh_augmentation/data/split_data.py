@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 SplitDict = dict[str, pd.DataFrame]
+GroupFold = tuple[object, SplitDict]
 SPLIT_KEYS: Final[tuple[str, str, str]] = ("train", "valid", "test")
 
 
@@ -119,7 +120,11 @@ def heldout_group_split(
     """
     _validate_non_empty(df)
     if group_column not in df.columns:
-        raise ValueError(f"Group column is missing from DataFrame: {group_column}")
+        available = ", ".join(map(str, df.columns))
+        raise ValueError(
+            f"Group column is missing from DataFrame: {group_column}. "
+            f"Available columns: {available}."
+        )
     if not 0 < heldout_fraction < 1:
         raise ValueError("heldout_fraction must be between 0 and 1.")
     if not 0 <= valid_fraction < 1:
@@ -153,6 +158,55 @@ def heldout_group_split(
         "valid": remaining.loc[valid_indices].copy(),
         "test": test,
     }
+
+
+def leave_one_group_out_splits(
+    df: pd.DataFrame,
+    group_column: str,
+    valid_fraction: float = 0.1,
+    seed: int = 42,
+) -> list[GroupFold]:
+    """Create one deterministic train/valid/test fold per group value."""
+    _validate_non_empty(df)
+    if group_column not in df.columns:
+        available = ", ".join(map(str, df.columns))
+        raise ValueError(
+            f"Group column is missing from DataFrame: {group_column}. "
+            f"Available columns: {available}."
+        )
+    if not 0 < valid_fraction < 1:
+        raise ValueError("valid_fraction must be between 0 and 1.")
+    if df[group_column].isna().any():
+        raise ValueError(f"Group column contains missing values: {group_column}")
+
+    groups = sorted(df[group_column].unique().tolist(), key=str)
+    if len(groups) < 2:
+        raise ValueError("Leave-one-group-out requires at least two unique groups.")
+
+    folds: list[GroupFold] = []
+    for fold_index, heldout_group in enumerate(groups):
+        test_mask = df[group_column] == heldout_group
+        test = df.loc[test_mask].copy()
+        train_valid = df.loc[~test_mask].copy()
+
+        n_valid = max(1, int(math.floor(len(train_valid) * valid_fraction)))
+        shuffled_indices = _shuffled_index_array(train_valid.index, seed + fold_index)
+        valid_indices = shuffled_indices[:n_valid]
+        train_indices = shuffled_indices[n_valid:]
+        if len(train_indices) == 0:
+            raise ValueError("valid_fraction leaves no rows available for training.")
+
+        folds.append(
+            (
+                heldout_group,
+                {
+                    "train": train_valid.loc[train_indices].copy(),
+                    "valid": train_valid.loc[valid_indices].copy(),
+                    "test": test,
+                },
+            )
+        )
+    return folds
 
 
 def _validate_non_empty(df: pd.DataFrame) -> None:

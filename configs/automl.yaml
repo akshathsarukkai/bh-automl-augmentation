@@ -8,10 +8,9 @@ splits:
   valid_size: 0.1
   test_size: 0.1
 features:
-  kind: categorical_conditions
-  smiles_columns: []
-  categorical_columns:
-    - solvent
+  kind: reaction_role_concat_delta
+  n_bits: 2048
+  radius: 2
 automl:
   enabled: true
   n_trials: 10
@@ -23,23 +22,16 @@ automl:
     - random_forest
     - extratrees
   feature_sets:
-    - categorical_conditions
+    - reaction_morgan_sum
+    - reaction_role_concat
+    - reaction_role_concat_delta
   augmentation_types:
     - none
-    - randomized_smiles
-    - order_permutation
   augmentation_ratios:
     - 1
     - 2
     - 5
-  smiles_columns:
-    - aryl_halide_smiles
-    - amine_smiles
-  component_columns:
-    - aryl_halide_smiles
-    - amine_smiles
 output:
   trial_table_path: results/automl/trials.csv
   best_config_path: results/automl/best_config.json
   final_test_metrics_path: results/automl/final_test_metrics.csv
-    - random_forest

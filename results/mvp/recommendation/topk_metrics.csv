@@ -1,0 +1,4 @@
+strategy,seed_size,candidate_pool_size,model,k,high_yield_threshold,selected_reaction_ids,predicted_yields,true_yields,top_k_hit_rate,regret,experiments_to_first_hit
+random,3,9,,2,70.0,"['rxn_001_mvp_2', 'rxn_001_mvp_1']","[0.9756223516367559, 0.8585979199113825]","[83.5, 82.5]",1.0,0.0,1
+model,3,9,ridge,2,70.0,"['rxn_005_mvp_0', 'rxn_007_mvp_0']","[71.33333587646484, 71.33333587646484]","[45.0, 0.0]",0.0,38.5,3
+augmented_order_permutation,3,9,ridge,2,70.0,"['rxn_005_mvp_0', 'rxn_007_mvp_0']","[71.33333587646484, 71.33333587646484]","[45.0, 0.0]",0.0,38.5,3

@@ -1,0 +1,13 @@
+train_fraction,split_method,group_column,split,reaction_id,group_value
+1.0,random,,train,rxn_001_mvp_0,
+1.0,random,,train,rxn_005_mvp_2,
+1.0,random,,train,rxn_001_mvp_2,
+1.0,random,,train,rxn_001_mvp_3,
+1.0,random,,train,rxn_007_mvp_3,
+1.0,random,,train,rxn_001_mvp_1,
+1.0,random,,train,rxn_007_mvp_1,
+1.0,random,,valid,rxn_007_mvp_0,
+1.0,random,,valid,rxn_005_mvp_1,
+1.0,random,,test,rxn_005_mvp_3,
+1.0,random,,test,rxn_005_mvp_0,
+1.0,random,,test,rxn_007_mvp_2,

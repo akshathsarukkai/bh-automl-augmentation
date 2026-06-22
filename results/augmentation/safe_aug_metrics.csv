@@ -1,0 +1,13 @@
+train_fraction,split_method,group_column,feature_kind,n_features,augmentation,model,split,metric,value,train_rows,augmented_train_rows,eval_rows,eval_augmented_rows
+1.0,random,,reaction_role_concat_delta,8192,none,ridge,valid,rmse,15.025199640445095,3164,0,395,0
+1.0,random,,reaction_role_concat_delta,8192,none,ridge,valid,mae,12.135898520373091,3164,0,395,0
+1.0,random,,reaction_role_concat_delta,8192,none,ridge,valid,r2,0.7058197846791572,3164,0,395,0
+1.0,random,,reaction_role_concat_delta,8192,none,ridge,test,rmse,14.344027533388726,3164,0,396,0
+1.0,random,,reaction_role_concat_delta,8192,none,ridge,test,mae,11.643161607511116,3164,0,396,0
+1.0,random,,reaction_role_concat_delta,8192,none,ridge,test,r2,0.7407020500113999,3164,0,396,0
+1.0,random,,reaction_role_concat_delta,8192,none,random_forest,valid,rmse,5.226069848059096,3164,0,395,0
+1.0,random,,reaction_role_concat_delta,8192,none,random_forest,valid,mae,3.697509419951164,3164,0,395,0
+1.0,random,,reaction_role_concat_delta,8192,none,random_forest,valid,r2,0.9644103777073824,3164,0,395,0
+1.0,random,,reaction_role_concat_delta,8192,none,random_forest,test,rmse,6.214782380734039,3164,0,396,0
+1.0,random,,reaction_role_concat_delta,8192,none,random_forest,test,mae,4.3378674816488845,3164,0,396,0
+1.0,random,,reaction_role_concat_delta,8192,none,random_forest,test,r2,0.9513246912991689,3164,0,396,0

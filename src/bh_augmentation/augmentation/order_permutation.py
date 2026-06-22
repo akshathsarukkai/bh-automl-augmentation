@@ -1,4 +1,4 @@
-"""Safe reaction component order-permutation augmentation."""
+"""Legacy component-column order-permutation augmentation."""
 
 from __future__ import annotations
 

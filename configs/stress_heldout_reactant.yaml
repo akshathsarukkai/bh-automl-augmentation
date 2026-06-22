@@ -1,0 +1,29 @@
+seed: 42
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: heldout_group
+  group_column: reactant_key
+  heldout_fraction: 0.2
+  valid_fraction: 0.1
+low_data:
+  enabled: false
+features:
+  compare:
+  - kind: reaction_morgan_sum
+    n_bits: 2048
+    radius: 2
+  - kind: reaction_role_concat
+    n_bits: 2048
+    radius: 2
+models:
+- ridge
+- random_forest
+metrics:
+- rmse
+- mae
+- r2
+- spearman
+output:
+  metrics_path: results/stress/heldout_reactant/baseline_metrics.csv
+  split_metadata_path: results/stress/heldout_reactant/split_metadata.csv

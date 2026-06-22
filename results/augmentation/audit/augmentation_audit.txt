@@ -1,0 +1,68 @@
+PASS: augmentation changes model features
+feature_kind: reaction_role_concat
+
+variant: condition_recombine_pseudolabel (fold 0)
+status: PASS
+original train rows: 31
+augmented train rows: 49
+synthetic rows added: 18
+augmentation factor: 1.581
+validation/test rows modified: False
+evaluation ID leakage: False
+held-out group leakage: False
+columns changed: reaction_smiles, yield
+percent synthetic reaction_smiles changed: 100.00
+original X shape: [31, 6144]
+augmented X shape: [49, 6144]
+unique X before: 31
+unique X after: 49
+percent synthetic X duplicates original: 0.00
+percent synthetic X new: 100.00
+labels copied exactly: 0
+labels perturbed: 18
+labels pseudo-labeled: 18
+nearest-neighbor similarity: {"count": 18, "max": 0.9337748289108276, "mean": 0.8700891070895724, "median": 0.8601584434509277, "min": 0.8013244867324829, "std": 0.047622723708190276}
+
+variant: condition_recombine_pseudolabel (fold 1)
+status: PASS
+original train rows: 158
+augmented train rows: 286
+synthetic rows added: 128
+augmentation factor: 1.810
+validation/test rows modified: False
+evaluation ID leakage: False
+held-out group leakage: False
+columns changed: reaction_smiles, yield
+percent synthetic reaction_smiles changed: 100.00
+original X shape: [158, 6144]
+augmented X shape: [286, 6144]
+unique X before: 158
+unique X after: 286
+percent synthetic X duplicates original: 0.00
+percent synthetic X new: 100.00
+labels copied exactly: 0
+labels perturbed: 128
+labels pseudo-labeled: 128
+nearest-neighbor similarity: {"count": 128, "max": 0.9391891956329346, "mean": 0.8694622293114662, "median": 0.860927164554596, "min": 0.8024691343307495, "std": 0.04363740005074858}
+
+variant: condition_recombine_pseudolabel (fold 2)
+status: PASS
+original train rows: 316
+augmented train rows: 620
+synthetic rows added: 304
+augmentation factor: 1.962
+validation/test rows modified: False
+evaluation ID leakage: False
+held-out group leakage: False
+columns changed: reaction_smiles, yield
+percent synthetic reaction_smiles changed: 100.00
+original X shape: [316, 6144]
+augmented X shape: [620, 6144]
+unique X before: 316
+unique X after: 620
+percent synthetic X duplicates original: 0.00
+percent synthetic X new: 100.00
+labels copied exactly: 0
+labels perturbed: 304
+labels pseudo-labeled: 304
+nearest-neighbor similarity: {"count": 304, "max": 0.9487179517745972, "mean": 0.88105264345282, "median": 0.8801408410072327, "min": 0.800000011920929, "std": 0.03944223348425136}

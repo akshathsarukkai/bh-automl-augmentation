@@ -1,0 +1,9 @@
+train_fraction,split_method,group_column,augmentation,model,split,metric,value,train_rows,augmented_train_rows,eval_rows,eval_augmented_rows
+1.0,random,,none,ridge,valid,rmse,20.46406263628621,7,0,2,0
+1.0,random,,none,ridge,valid,mae,20.000001907348633,7,0,2,0
+1.0,random,,none,ridge,test,rmse,21.034365615461148,7,0,3,0
+1.0,random,,none,ridge,test,mae,20.444446563720703,7,0,3,0
+1.0,random,,order_permutation,ridge,valid,rmse,20.09697010612314,14,7,2,0
+1.0,random,,order_permutation,ridge,valid,mae,18.255318641662598,14,7,2,0
+1.0,random,,order_permutation,ridge,test,rmse,21.86920234235748,14,7,3,0
+1.0,random,,order_permutation,ridge,test,mae,20.056737899780273,14,7,3,0

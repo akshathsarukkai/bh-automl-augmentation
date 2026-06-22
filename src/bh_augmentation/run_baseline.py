@@ -13,6 +13,7 @@ from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.data.split_data import (
     heldout_group_split,
+    leave_one_group_out_splits,
     low_data_split,
     random_split,
     subset_train_split,
@@ -24,7 +25,11 @@ from bh_augmentation.evaluation.metrics import (
     rmse,
     spearman_corr,
 )
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.features.featurize import (
+    REACTION_FEATURE_KINDS,
+    build_feature_matrix,
+    canonical_feature_kind,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -42,21 +47,7 @@ METRIC_FUNCTIONS: dict[str, MetricFn] = {
     "spearman": spearman_corr,
 }
 
-DEFAULT_SMILES_COLUMNS = [
-    "aryl_halide_smiles",
-    "amine_smiles",
-    "ligand_smiles",
-    "base_smiles",
-    "additive_smiles",
-]
 DEFAULT_CATEGORICAL_COLUMNS = ["solvent"]
-SUPPORTED_HELDOUT_GROUP_COLUMNS = {
-    "ligand_smiles",
-    "base_smiles",
-    "additive_smiles",
-    "aryl_halide_smiles",
-    "amine_smiles",
-}
 
 
 def run_baseline(config_path: str | Path) -> Path:
@@ -71,45 +62,55 @@ def run_baseline(config_path: str | Path) -> Path:
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run baseline.")
 
-    split_variants = _create_split_variants(df, config, seed)
-    feature_config = _resolve_feature_config(config.get("features", {}), df)
-    X, y, _ = build_feature_matrix(df, feature_config)
+    baseline_folds = _create_baseline_folds(df, config, seed)
+    feature_configs = _resolve_feature_configs(config.get("features", {}), df)
 
-    model_configs = config.get("models", ["ridge"])
+    model_configs = _resolve_model_configs(config.get("models", ["ridge"]))
     metric_names = config.get("metrics", ["rmse", "mae", "r2"])
     split_method = str(config.get("splits", {}).get("method", "random"))
     group_column = _get_group_column(config.get("splits", {}))
     records: list[dict[str, object]] = []
 
-    _save_split_metadata(split_variants, config)
+    _save_baseline_split_metadata(baseline_folds, config)
 
-    for train_fraction, splits in split_variants:
-        for model_config in model_configs:
-            model_name, model_kwargs = _parse_model_config(model_config)
-            model = get_model(model_name, seed=seed, **model_kwargs)
-            train_indices = _split_positions(splits["train"])
-            fitted_model = train_model(model, X[train_indices], y[train_indices])
+    for feature_config in feature_configs:
+        X, y, _ = build_feature_matrix(df, feature_config)
+        feature_kind = str(feature_config.get("kind", "custom"))
+        n_features = int(X.shape[1])
 
-            for split_name in ["valid", "test"]:
-                split_indices = _split_positions(splits[split_name])
-                predictions = predict_model(fitted_model, X[split_indices])
-                y_true = y[split_indices]
-                for metric_name in metric_names:
-                    metric_value = _compute_metric(metric_name, y_true, predictions)
-                    records.append(
-                        {
+        for train_fraction, heldout_group_value, splits in baseline_folds:
+            for model_config in model_configs:
+                model_name, model_kwargs = _parse_model_config(model_config)
+                model = get_model(model_name, seed=seed, **model_kwargs)
+                train_indices = _split_positions(splits["train"])
+                fitted_model = train_model(model, X[train_indices], y[train_indices])
+
+                for split_name in ["valid", "test"]:
+                    split_indices = _split_positions(splits[split_name])
+                    predictions = predict_model(fitted_model, X[split_indices])
+                    y_true = y[split_indices]
+                    for metric_name in metric_names:
+                        metric_value = _compute_metric(metric_name, y_true, predictions)
+                        record = {
                             "train_fraction": train_fraction,
                             "split_method": split_method,
                             "group_column": group_column,
+                            "feature_kind": feature_kind,
+                            "n_features": n_features,
                             "model": model_name,
                             "split": split_name,
                             "metric": metric_name,
                             "value": metric_value,
                         }
-                    )
+                        if split_method == "leave_one_group_out":
+                            record["heldout_group_value"] = heldout_group_value
+                        records.append(record)
 
     output_path = _get_metrics_output_path(config)
-    return save_metrics_csv(records, output_path)
+    saved_path = save_metrics_csv(records, output_path)
+    if split_method == "leave_one_group_out":
+        _save_logo_summary(records, config)
+    return saved_path
 
 
 def main() -> None:
@@ -150,7 +151,7 @@ def _create_splits(df: pd.DataFrame, split_config: dict[str, Any], seed: int) ->
         )
     if method == "heldout_group":
         group_column = str(split_config["group_column"])
-        _validate_supported_group_column(group_column)
+        _validate_group_column(df, group_column)
         return heldout_group_split(
             df,
             group_column=group_column,
@@ -196,22 +197,71 @@ def _create_split_variants(
     return variants
 
 
+def _create_baseline_folds(
+    df: pd.DataFrame,
+    config: dict[str, Any],
+    seed: int,
+) -> list[tuple[float, object, dict[str, pd.DataFrame]]]:
+    split_config = config.get("splits", {})
+    if split_config.get("method") != "leave_one_group_out":
+        return [
+            (train_fraction, "", splits)
+            for train_fraction, splits in _create_split_variants(df, config, seed)
+        ]
+    if config.get("low_data", {}).get("enabled", False):
+        raise ValueError("low_data cannot be combined with leave_one_group_out.")
+
+    group_column = str(split_config.get("group_column", ""))
+    _validate_group_column(df, group_column)
+    folds = leave_one_group_out_splits(
+        df,
+        group_column=group_column,
+        valid_fraction=float(split_config.get("valid_fraction", 0.1)),
+        seed=seed,
+    )
+    return [(1.0, heldout_group, splits) for heldout_group, splits in folds]
+
+
 def _resolve_feature_config(
     feature_config: dict[str, Any],
     df: pd.DataFrame,
 ) -> dict[str, Any]:
     resolved = dict(feature_config)
-    if "smiles_columns" not in resolved:
-        if resolved.get("kind") == "fp_plus_conditions":
-            resolved["smiles_columns"] = [
-                column for column in DEFAULT_SMILES_COLUMNS if column in df.columns
-            ]
-        else:
-            resolved["smiles_columns"] = []
+    kind = canonical_feature_kind(resolved.get("kind"))
+    if kind:
+        resolved["kind"] = kind
+    if kind in REACTION_FEATURE_KINDS:
+        resolved.pop("smiles_columns", None)
+    elif "smiles_columns" not in resolved:
+        resolved["smiles_columns"] = []
     if "categorical_columns" not in resolved:
-        resolved["categorical_columns"] = [
-            column for column in DEFAULT_CATEGORICAL_COLUMNS if column in df.columns
-        ]
+        resolved["categorical_columns"] = (
+            []
+            if kind in REACTION_FEATURE_KINDS
+            else [column for column in DEFAULT_CATEGORICAL_COLUMNS if column in df.columns]
+        )
+    return resolved
+
+
+def _resolve_feature_configs(
+    feature_config: dict[str, Any],
+    df: pd.DataFrame,
+) -> list[dict[str, Any]]:
+    comparisons = feature_config.get("compare")
+    if comparisons is None:
+        return [_resolve_feature_config(feature_config, df)]
+    if not isinstance(comparisons, list) or not comparisons:
+        raise ValueError("features.compare must contain at least one feature configuration.")
+
+    shared = {key: value for key, value in feature_config.items() if key != "compare"}
+    resolved: list[dict[str, Any]] = []
+    for comparison in comparisons:
+        if not isinstance(comparison, dict):
+            raise ValueError("Each features.compare entry must be a mapping.")
+        merged = {**shared, **comparison}
+        if not merged.get("kind"):
+            raise ValueError("Each features.compare entry must define kind.")
+        resolved.append(_resolve_feature_config(merged, df))
     return resolved
 
 
@@ -225,6 +275,17 @@ def _parse_model_config(model_config: str | dict[str, Any]) -> tuple[str, dict[s
         params = dict(model_config.get("params", {}))
         return str(name), params
     raise ValueError(f"Unsupported model config: {model_config}")
+
+
+def _resolve_model_configs(models_config: object) -> list[str | dict[str, Any]]:
+    if isinstance(models_config, dict):
+        included = models_config.get("include")
+        if not isinstance(included, list) or not included:
+            raise ValueError("models.include must contain at least one model.")
+        return included
+    if isinstance(models_config, list) and models_config:
+        return models_config
+    raise ValueError("models must be a non-empty list or contain models.include.")
 
 
 def _compute_metric(metric_name: str, y_true: np.ndarray, y_pred: np.ndarray) -> float:
@@ -247,6 +308,13 @@ def _get_split_metadata_output_path(config: dict[str, Any]) -> Path:
     output_config = config.get("output", {})
     default_path = _get_metrics_output_path(config).with_name("split_metadata.csv")
     return Path(output_config.get("split_metadata_path", default_path))
+
+
+def _get_summary_output_path(config: dict[str, Any]) -> Path:
+    output_config = config.get("output", {})
+    metrics_path = _get_metrics_output_path(config)
+    default_path = metrics_path.with_name(f"{metrics_path.stem}_summary.csv")
+    return Path(output_config.get("summary_metrics_path", default_path))
 
 
 def _save_split_metadata(
@@ -277,20 +345,83 @@ def _save_split_metadata(
     return output_path
 
 
+def _save_baseline_split_metadata(
+    baseline_folds: list[tuple[float, object, dict[str, pd.DataFrame]]],
+    config: dict[str, Any],
+) -> Path:
+    if config.get("splits", {}).get("method") != "leave_one_group_out":
+        variants = [(fraction, splits) for fraction, _, splits in baseline_folds]
+        return _save_split_metadata(variants, config)
+
+    split_config = config.get("splits", {})
+    group_column = _get_group_column(split_config)
+    records: list[dict[str, object]] = []
+    for train_fraction, heldout_group_value, splits in baseline_folds:
+        for split_name, split_df in splits.items():
+            for _, row in split_df.iterrows():
+                records.append(
+                    {
+                        "train_fraction": train_fraction,
+                        "split_method": "leave_one_group_out",
+                        "group_column": group_column,
+                        "heldout_group_value": heldout_group_value,
+                        "split": split_name,
+                        "reaction_id": row.get("reaction_id", ""),
+                        "group_value": row.get(group_column, ""),
+                    }
+                )
+
+    output_path = _get_split_metadata_output_path(config)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    pd.DataFrame(records).to_csv(output_path, index=False)
+    return output_path
+
+
+def _save_logo_summary(
+    records: list[dict[str, object]],
+    config: dict[str, Any],
+) -> Path:
+    metrics = pd.DataFrame(records)
+    group_columns = [
+        "group_column",
+        "feature_kind",
+        "n_features",
+        "model",
+        "split",
+        "metric",
+    ]
+    summary = (
+        metrics.groupby(group_columns, dropna=False)["value"]
+        .agg(mean="mean", std="std")
+        .reset_index()
+    )
+    output_path = _get_summary_output_path(config)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    summary.to_csv(output_path, index=False)
+    return output_path
+
+
 def _get_group_column(split_config: dict[str, Any]) -> str:
-    if split_config.get("method", "random") != "heldout_group":
+    if split_config.get("method", "random") not in {
+        "heldout_group",
+        "leave_one_group_out",
+    }:
         return ""
     group_column = str(split_config.get("group_column", ""))
-    _validate_supported_group_column(group_column)
+    if not group_column:
+        raise ValueError(
+            "splits.group_column is required for heldout_group and "
+            "leave_one_group_out splits."
+        )
     return group_column
 
 
-def _validate_supported_group_column(group_column: str) -> None:
-    if group_column not in SUPPORTED_HELDOUT_GROUP_COLUMNS:
-        supported = ", ".join(sorted(SUPPORTED_HELDOUT_GROUP_COLUMNS))
+def _validate_group_column(df: pd.DataFrame, group_column: str) -> None:
+    if group_column not in df.columns:
+        available = ", ".join(map(str, df.columns))
         raise ValueError(
-            f"Unsupported held-out group column: {group_column}. "
-            f"Supported group columns: {supported}."
+            f"Held-out group column is missing after cleaning: {group_column}. "
+            f"Available columns: {available}."
         )
 
 

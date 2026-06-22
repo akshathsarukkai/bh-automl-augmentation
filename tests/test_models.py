@@ -87,6 +87,24 @@ def test_train_model_validates_fit_method() -> None:
         train_model(object(), X, y)
 
 
+def test_train_model_warns_and_falls_back_without_sample_weight() -> None:
+    class UnweightedModel:
+        def __init__(self) -> None:
+            self.fitted = False
+
+        def fit(self, X: np.ndarray, y: np.ndarray) -> None:
+            self.fitted = True
+
+    X, y = _synthetic_regression_data()
+    model = UnweightedModel()
+
+    with pytest.warns(UserWarning, match="does not support sample_weight"):
+        fitted = train_model(model, X, y, sample_weight=np.ones(len(y)))
+
+    assert fitted is model
+    assert model.fitted is True
+
+
 def test_predict_model_validates_predict_method() -> None:
     """Prediction helper should require a predict-compatible object."""
     X, _ = _synthetic_regression_data()
