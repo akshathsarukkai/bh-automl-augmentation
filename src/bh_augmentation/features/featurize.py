@@ -1,9 +1,11 @@
 """Featurization helpers for molecular components and reaction conditions."""
 
 import ast
+import hashlib
 import warnings
+from collections.abc import Sequence
 from contextlib import contextmanager
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -36,6 +38,7 @@ DICT_AGENT_KEYS = [
     "additives",
 ]
 DICT_PRODUCT_KEYS = ["product", "products"]
+_WARNED_HASH_FINGERPRINT_FALLBACK = False
 
 
 def morgan_fingerprint(
@@ -58,12 +61,9 @@ def morgan_fingerprint(
     try:
         from rdkit import Chem, DataStructs
         from rdkit.Chem import AllChem
-    except ImportError as exc:
-        raise ImportError(
-            "RDKit is required for Morgan fingerprints. Install RDKit with "
-            "`conda install -c conda-forge rdkit` or an equivalent package "
-            "manager command."
-        ) from exc
+    except ImportError:
+        _warn_hash_fingerprint_fallback(warn_invalid)
+        return _hash_smiles_fingerprint(smiles, radius=radius, n_bits=n_bits)
 
     with _quiet_rdkit_errors(enabled=not warn_invalid):
         molecule = Chem.MolFromSmiles(smiles)
@@ -83,6 +83,43 @@ def morgan_fingerprint(
     array = np.zeros((n_bits,), dtype=np.int8)
     DataStructs.ConvertToNumpyArray(fingerprint, array)
     return array.astype(np.float32)
+
+
+def _warn_hash_fingerprint_fallback(warn_invalid: bool) -> None:
+    global _WARNED_HASH_FINGERPRINT_FALLBACK
+    if warn_invalid and not _WARNED_HASH_FINGERPRINT_FALLBACK:
+        warnings.warn(
+            "RDKit is not installed; using deterministic hash fingerprints as a "
+            "lightweight fallback. Install RDKit for true Morgan fingerprints.",
+            UserWarning,
+            stacklevel=3,
+        )
+        _WARNED_HASH_FINGERPRINT_FALLBACK = True
+
+
+def _hash_smiles_fingerprint(smiles: str, radius: int, n_bits: int) -> np.ndarray:
+    """Return a deterministic non-chemical fallback fingerprint."""
+    if _looks_invalid_smiles_token(smiles):
+        return np.zeros(n_bits, dtype=np.float32)
+
+    text = smiles.strip()
+    tokens = {text}
+    max_ngram = max(1, min(len(text), radius + 2))
+    for width in range(1, max_ngram + 1):
+        tokens.update(text[index : index + width] for index in range(len(text) - width + 1))
+
+    fingerprint = np.zeros(n_bits, dtype=np.float32)
+    for token in tokens:
+        digest = hashlib.blake2b(token.encode("utf-8"), digest_size=8).digest()
+        fingerprint[int.from_bytes(digest, "little") % n_bits] = 1.0
+    return fingerprint
+
+
+def _looks_invalid_smiles_token(smiles: str) -> bool:
+    stripped = smiles.strip()
+    if not stripped or stripped.upper() in {"UNKNOWN", "INVALID", "NAN", "NONE"}:
+        return True
+    return any(marker in stripped for marker in ["?", ">", "{", "}"])
 
 
 def reaction_smiles_fingerprint(

@@ -95,6 +95,32 @@ def test_morgan_fingerprint_invalid_smiles_returns_zeros() -> None:
     np.testing.assert_array_equal(fingerprint, np.zeros(16, dtype=np.float32))
 
 
+def test_build_feature_matrix_without_rdkit_uses_hash_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Base CI should not require RDKit for lightweight runner tests."""
+    monkeypatch.setitem(sys.modules, "rdkit", None)
+    monkeypatch.delitem(sys.modules, "rdkit.Chem", raising=False)
+    monkeypatch.delitem(sys.modules, "rdkit.Chem.AllChem", raising=False)
+    monkeypatch.delitem(sys.modules, "rdkit.DataStructs", raising=False)
+    df = pd.DataFrame(
+        {
+            "reaction_smiles": ["CCBr.N>>CCN", "c1ccccc1Br.N>>c1ccccc1N"],
+            "yield": [70.0, 80.0],
+        }
+    )
+
+    X, y, names = build_feature_matrix(df, {"kind": "reaction_morgan_sum", "n_bits": 32})
+
+    assert X.shape == (2, 32)
+    assert y.tolist() == [70.0, 80.0]
+    assert len(names) == 32
+    assert np.all(np.any(X != 0, axis=1))
+
+    featurize_module._WARNED_HASH_FINGERPRINT_FALLBACK = False
+    with pytest.warns(UserWarning, match="hash fingerprints"):
+        direct = morgan_fingerprint("CCO", n_bits=32)
+    assert direct.sum() > 0
+
+
 def test_legacy_component_fingerprint_features_concatenate_columns() -> None:
     """The legacy helper should concatenate explicitly requested columns."""
     df = pd.DataFrame(
