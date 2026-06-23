@@ -1,0 +1,87 @@
+seed: 4
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions:
+  - 0.01
+  - 0.05
+  - 0.1
+features:
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
+models:
+- random_forest
+metrics:
+- rmse
+- mae
+- r2
+- spearman
+augmentation:
+  condition_recombine_ensemble_filter:
+    enabled: true
+    synthetic_multiplier: 1.0
+    max_synthetic_rows: 3000
+    min_neighbor_similarity: 0.8
+    random_state: 42
+    teachers:
+    - model: ridge
+      random_state: 0
+    - model: random_forest
+      random_state: 0
+    - model: random_forest
+      random_state: 1
+    - model: random_forest
+      random_state: 2
+    uncertainty_filter:
+      enabled: true
+      max_teacher_std: 12.0
+      max_prediction_range: 35.0
+    pseudo_label:
+      mode: ensemble_mean
+      clip_min: 0.0
+      clip_max: 100.0
+    synthetic_weighting:
+      enabled: false
+augmentation_search:
+  enabled: true
+  method: condition_recombine_ensemble_filter
+  selection_metric: rmse
+  selection_split: valid
+  lower_is_better: true
+  synthetic_multipliers:
+  - 0.5
+  - 1.0
+  - 1.5
+  min_neighbor_similarities:
+  - 0.75
+  - 0.8
+  - 0.85
+  - 0.9
+  max_teacher_stds:
+  - 8.0
+  - 12.0
+  - 16.0
+  max_prediction_ranges:
+  - 25.0
+  - 35.0
+  - 50.0
+  random_states:
+  - 0
+  - 1
+  - 2
+  - 3
+  - 4
+  max_synthetic_rows: 3000
+output:
+  metrics_path: results/seeded_ensemble/seed_4/selected_policy_metrics.csv
+  search_metrics_path: results/seeded_ensemble/seed_4/policy_search_metrics.csv
+  selected_policies_path: results/seeded_ensemble/seed_4/selected_policies.csv
+  split_metadata_path: results/seeded_ensemble/seed_4/augmentation_split_metadata.csv

@@ -1,11 +1,13 @@
 PASS: augmentation changes model features
 feature_kind: reaction_role_concat
 
-variant: condition_recombine_pseudolabel (fold 0)
+variant: condition_recombine_ensemble_filter (fold 0)
 status: PASS
 original train rows: 31
 augmented train rows: 49
 synthetic rows added: 18
+candidate rows generated: 31
+acceptance rate: 0.581
 augmentation factor: 1.581
 validation/test rows modified: False
 evaluation ID leakage: False
@@ -22,47 +24,57 @@ labels copied exactly: 0
 labels perturbed: 18
 labels pseudo-labeled: 18
 nearest-neighbor similarity: {"count": 18, "max": 0.9337748289108276, "mean": 0.8700891070895724, "median": 0.8601584434509277, "min": 0.8013244867324829, "std": 0.047622723708190276}
+teacher std: {"count": 18, "max": 11.064272012182805, "mean": 4.598699782407283, "median": 4.460704387676046, "min": 0.6353288939272892, "std": 3.103159219083606}
+prediction range: {"count": 18, "max": 27.204519288539885, "mean": 11.50439740995566, "median": 11.110503998696803, "min": 1.63285343050957, "std": 7.632278213455816}
 
-variant: condition_recombine_pseudolabel (fold 1)
+variant: condition_recombine_ensemble_filter (fold 1)
 status: PASS
 original train rows: 158
-augmented train rows: 286
-synthetic rows added: 128
-augmentation factor: 1.810
+augmented train rows: 282
+synthetic rows added: 124
+candidate rows generated: 158
+acceptance rate: 0.785
+augmentation factor: 1.785
 validation/test rows modified: False
 evaluation ID leakage: False
 held-out group leakage: False
 columns changed: reaction_smiles, yield
 percent synthetic reaction_smiles changed: 100.00
 original X shape: [158, 6144]
-augmented X shape: [286, 6144]
+augmented X shape: [282, 6144]
 unique X before: 158
-unique X after: 286
+unique X after: 282
 percent synthetic X duplicates original: 0.00
 percent synthetic X new: 100.00
 labels copied exactly: 0
-labels perturbed: 128
-labels pseudo-labeled: 128
-nearest-neighbor similarity: {"count": 128, "max": 0.9391891956329346, "mean": 0.8694622293114662, "median": 0.860927164554596, "min": 0.8024691343307495, "std": 0.04363740005074858}
+labels perturbed: 124
+labels pseudo-labeled: 124
+nearest-neighbor similarity: {"count": 124, "max": 0.9391891956329346, "mean": 0.8689232680105394, "median": 0.860927164554596, "min": 0.8024691343307495, "std": 0.043546835722131014}
+teacher std: {"count": 124, "max": 11.22258950674738, "mean": 3.7935906501929173, "median": 3.4261184770870776, "min": 0.2898580437549445, "std": 2.3627723277914603}
+prediction range: {"count": 124, "max": 26.3179472091794, "mean": 9.53860389861128, "median": 8.654467754960061, "min": 0.8034735488891585, "std": 5.776949574797768}
 
-variant: condition_recombine_pseudolabel (fold 2)
+variant: condition_recombine_ensemble_filter (fold 2)
 status: PASS
 original train rows: 316
-augmented train rows: 620
-synthetic rows added: 304
-augmentation factor: 1.962
+augmented train rows: 613
+synthetic rows added: 297
+candidate rows generated: 316
+acceptance rate: 0.940
+augmentation factor: 1.940
 validation/test rows modified: False
 evaluation ID leakage: False
 held-out group leakage: False
 columns changed: reaction_smiles, yield
 percent synthetic reaction_smiles changed: 100.00
 original X shape: [316, 6144]
-augmented X shape: [620, 6144]
+augmented X shape: [613, 6144]
 unique X before: 316
-unique X after: 620
+unique X after: 613
 percent synthetic X duplicates original: 0.00
 percent synthetic X new: 100.00
-labels copied exactly: 0
-labels perturbed: 304
-labels pseudo-labeled: 304
-nearest-neighbor similarity: {"count": 304, "max": 0.9487179517745972, "mean": 0.88105264345282, "median": 0.8801408410072327, "min": 0.800000011920929, "std": 0.03944223348425136}
+labels copied exactly: 6
+labels perturbed: 291
+labels pseudo-labeled: 297
+nearest-neighbor similarity: {"count": 297, "max": 0.9487179517745972, "mean": 0.8816589096981267, "median": 0.8807947039604187, "min": 0.800000011920929, "std": 0.03918971192636117}
+teacher std: {"count": 297, "max": 11.620523481579395, "mean": 4.0992811487091005, "median": 3.4371611072043255, "min": 0.37761411593241057, "std": 2.7020768338259464}
+prediction range: {"count": 297, "max": 27.82352632761002, "mean": 10.123973275232396, "median": 8.744532796144485, "min": 0.9033173465728765, "std": 6.419037972831316}

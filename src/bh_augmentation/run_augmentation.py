@@ -15,6 +15,9 @@ from bh_augmentation.augmentation.condition_recombine import (
     condition_recombine_pseudolabel,
 )
 from bh_augmentation.augmentation.order_permutation import permute_reaction_components
+from bh_augmentation.augmentation.ensemble_filter import (
+    condition_recombine_ensemble_filter,
+)
 from bh_augmentation.augmentation.search import (
     apply_augmentation_policy,
     build_augmentation_policy_grid,
@@ -173,6 +176,7 @@ def _run_augmentation_search(
 
     for feature_config in feature_configs:
         for fold_index, (train_fraction, heldout_group, splits) in enumerate(folds):
+            augmentation_cache: dict[object, object] = {}
             context = {
                 "fold_index": fold_index,
                 "train_fraction": train_fraction,
@@ -193,6 +197,7 @@ def _run_augmentation_search(
                         metrics,
                         seed,
                         model_kwargs=model_kwargs,
+                        augmentation_cache=augmentation_cache,
                     )
                     for key, value in context.items():
                         frame[key] = value
@@ -237,6 +242,13 @@ def _run_augmentation_search(
                                 "mean_synthetic_weight",
                                 "min_synthetic_weight",
                                 "max_synthetic_weight",
+                                "max_teacher_std",
+                                "max_prediction_range",
+                                "n_candidates_generated",
+                                "acceptance_rate",
+                                "mean_teacher_std",
+                                "mean_prediction_range",
+                                "mean_nearest_train_similarity",
                             ]
                         },
                     }
@@ -251,6 +263,7 @@ def _run_augmentation_search(
                         metrics,
                         seed,
                         context,
+                        augmentation_cache,
                     )
                 )
 
@@ -283,8 +296,11 @@ def _evaluate_selected_policy(
     metrics: list[str],
     seed: int,
     context: dict[str, object],
+    augmentation_cache: dict[object, object],
 ) -> list[dict[str, object]]:
-    augmented_train = apply_augmentation_policy(splits["train"], policy, feature_config)
+    augmented_train = apply_augmentation_policy(
+        splits["train"], policy, feature_config, cache=augmentation_cache
+    )
     combined = pd.concat(
         [
             augmented_train.assign(__split="train"),
@@ -333,11 +349,10 @@ def _evaluate_selected_policy(
 
 def _search_config_with_defaults(config: dict[str, Any]) -> dict[str, Any]:
     search = dict(config.get("augmentation_search", {}))
-    fixed = config.get("augmentation", {}).get(
-        "condition_recombine_pseudolabel", {}
-    )
+    method = str(search.get("method", "condition_recombine_pseudolabel"))
+    fixed = config.get("augmentation", {}).get(method, {})
     defaults = {
-        "method": "condition_recombine_pseudolabel",
+        "method": method,
         "synthetic_multipliers": [fixed.get("synthetic_multiplier", 1.0)],
         "min_neighbor_similarities": [
             fixed.get("min_neighbor_similarity", 0.3)
@@ -347,6 +362,17 @@ def _search_config_with_defaults(config: dict[str, Any]) -> dict[str, Any]:
         "max_synthetic_rows": fixed.get("max_synthetic_rows", 3000),
         "synthetic_weighting": fixed.get("synthetic_weighting", {}),
     }
+    if method == "condition_recombine_ensemble_filter":
+        uncertainty = fixed.get("uncertainty_filter", {})
+        defaults.update(
+            {
+                "max_teacher_stds": [uncertainty.get("max_teacher_std", 12.0)],
+                "max_prediction_ranges": [
+                    uncertainty.get("max_prediction_range", 35.0)
+                ],
+                "ensemble_config": fixed,
+            }
+        )
     return {**defaults, **search}
 
 
@@ -374,6 +400,9 @@ def _build_training_variants(
     recombine_config = augmentation_config.get(
         "condition_recombine_pseudolabel", {}
     )
+    ensemble_config = augmentation_config.get(
+        "condition_recombine_ensemble_filter", {}
+    )
 
     if recombine_config.get("enabled", False):
         max_rows = recombine_config.get("max_synthetic_rows", 3000)
@@ -393,6 +422,20 @@ def _build_training_variants(
         variants["condition_recombine_pseudolabel"] = assign_synthetic_sample_weights(
             augmented,
             recombine_config.get("synthetic_weighting"),
+        )
+
+    if ensemble_config.get("enabled", False):
+        augmented, _ = condition_recombine_ensemble_filter(
+            train_df,
+            feature_config,
+            ensemble_config,
+            random_state=int(ensemble_config.get("random_state", seed)),
+        )
+        variants["condition_recombine_ensemble_filter"] = (
+            assign_synthetic_sample_weights(
+                augmented,
+                ensemble_config.get("synthetic_weighting"),
+            )
         )
 
     if smiles_config.get("enabled", False):
@@ -538,16 +581,28 @@ def _variant_metrics(
         "mean_synthetic_weight": np.nan,
         "min_synthetic_weight": np.nan,
         "max_synthetic_weight": np.nan,
+        "max_teacher_std": np.nan,
+        "max_prediction_range": np.nan,
+        "n_candidates_generated": int(synthetic_mask.sum()),
+        "acceptance_rate": 1.0 if synthetic_mask.any() else 0.0,
+        "mean_teacher_std": np.nan,
+        "mean_prediction_range": np.nan,
+        "mean_nearest_train_similarity": np.nan,
     }
-    if variant_name == "condition_recombine_pseudolabel":
+    if variant_name in {
+        "condition_recombine_pseudolabel",
+        "condition_recombine_ensemble_filter",
+    }:
         settings = augmentation_config.get(variant_name, {})
         metadata.update(
             {
                 "synthetic_multiplier": float(
                     settings.get("synthetic_multiplier", 1.0)
                 ),
-                "teacher_model": str(
-                    settings.get("teacher_model", "random_forest")
+                "teacher_model": (
+                    "ensemble"
+                    if variant_name == "condition_recombine_ensemble_filter"
+                    else str(settings.get("teacher_model", "random_forest"))
                 ),
                 "min_neighbor_similarity": float(
                     settings.get("min_neighbor_similarity", 0.3)
@@ -568,6 +623,20 @@ def _variant_metrics(
                     "mean_synthetic_weight": float(synthetic_weights.mean()),
                     "min_synthetic_weight": float(synthetic_weights.min()),
                     "max_synthetic_weight": float(synthetic_weights.max()),
+                }
+            )
+        if variant_name == "condition_recombine_ensemble_filter":
+            uncertainty = settings.get("uncertainty_filter", {})
+            ensemble_metadata = train_df.attrs.get("augmentation_metadata", {})
+            metadata.update(
+                {
+                    "max_teacher_std": float(
+                        uncertainty.get("max_teacher_std", 12.0)
+                    ),
+                    "max_prediction_range": float(
+                        uncertainty.get("max_prediction_range", 35.0)
+                    ),
+                    **ensemble_metadata,
                 }
             )
     return metadata

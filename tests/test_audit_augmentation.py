@@ -111,3 +111,30 @@ def test_audit_verifies_validation_and_test_are_not_augmented(
 
     assert audit["validation_test_rows_modified"] is False
     assert audit["eval_ids_in_augmented_training"] == []
+
+
+def test_audit_reports_ensemble_uncertainty_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(audit_module, "build_feature_matrix", _fake_feature_builder)
+    original, augmented, valid, test = _frames(changed_reaction=True)
+    synthetic_mask = augmented["is_augmented"].fillna(False)
+    augmented.loc[synthetic_mask, "teacher_std_prediction"] = 4.0
+    augmented.loc[synthetic_mask, "teacher_prediction_range"] = 10.0
+    augmented.attrs["augmentation_metadata"] = {
+        "n_candidates_generated": 2,
+        "acceptance_rate": 0.5,
+    }
+
+    audit = audit_training_data(
+        original,
+        augmented,
+        valid,
+        test,
+        {"kind": "reaction_role_concat_delta"},
+    )
+
+    assert audit["candidate_rows_generated"] == 2
+    assert audit["acceptance_rate"] == 0.5
+    assert audit["teacher_std_prediction"]["mean"] == 4.0
+    assert audit["teacher_prediction_range"]["mean"] == 10.0

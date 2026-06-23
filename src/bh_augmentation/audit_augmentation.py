@@ -36,6 +36,13 @@ METADATA_COLUMNS = {
     "pseudo_label_model",
     "nearest_train_similarity",
     "sample_weight",
+    "teacher_mean_prediction",
+    "teacher_std_prediction",
+    "teacher_min_prediction",
+    "teacher_max_prediction",
+    "teacher_prediction_range",
+    "accepted_by_uncertainty_filter",
+    "accepted_by_similarity_filter",
 }
 
 
@@ -194,6 +201,7 @@ def audit_training_data(
     )
     reaction_changed_percent = _percent(reaction_changed, synthetic_count)
     leakage = bool(eval_id_overlap or heldout_leakage)
+    augmentation_metadata = augmented_train.attrs.get("augmentation_metadata", {})
     warnings: list[str] = []
     if synthetic_count and copied_labels == synthetic_count and duplicate_count == synthetic_count:
         warnings.append("WARNING: labels are copied while synthetic features are duplicated")
@@ -204,12 +212,21 @@ def audit_training_data(
             if synthetic_count > 0
             and reaction_changed > 0
             and new_count > 0
+            and pseudo_labeled == synthetic_count
             and not leakage
             else "FAIL"
         ),
         "original_train_rows": len(original),
         "augmented_train_rows": len(augmented),
         "synthetic_rows_added": synthetic_count,
+        "candidate_rows_generated": int(
+            augmentation_metadata.get("n_candidates_generated", synthetic_count)
+        ),
+        "acceptance_rate": float(
+            augmentation_metadata.get(
+                "acceptance_rate", 1.0 if synthetic_count else 0.0
+            )
+        ),
         "augmentation_factor": _safe_ratio(len(augmented), len(original)),
         "validation_test_rows_modified": False,
         "eval_ids_in_augmented_training": eval_id_overlap,
@@ -236,6 +253,12 @@ def audit_training_data(
         "synthetic_labels_pseudo_labeled": pseudo_labeled,
         "nearest_train_similarity": _distribution(
             synthetic.get("nearest_train_similarity")
+        ),
+        "teacher_std_prediction": _distribution(
+            synthetic.get("teacher_std_prediction")
+        ),
+        "teacher_prediction_range": _distribution(
+            synthetic.get("teacher_prediction_range")
         ),
         "warnings": warnings,
     }
@@ -391,6 +414,8 @@ def _format_audit_report(report: dict[str, Any]) -> str:
                 f"original train rows: {audit['original_train_rows']}",
                 f"augmented train rows: {audit['augmented_train_rows']}",
                 f"synthetic rows added: {audit['synthetic_rows_added']}",
+                f"candidate rows generated: {audit['candidate_rows_generated']}",
+                f"acceptance rate: {audit['acceptance_rate']:.3f}",
                 f"augmentation factor: {audit['augmentation_factor']:.3f}",
                 f"validation/test rows modified: {audit['validation_test_rows_modified']}",
                 f"evaluation ID leakage: {bool(audit['eval_ids_in_augmented_training'])}",
@@ -410,6 +435,10 @@ def _format_audit_report(report: dict[str, Any]) -> str:
                 f"labels pseudo-labeled: {audit['synthetic_labels_pseudo_labeled']}",
                 "nearest-neighbor similarity: "
                 + json.dumps(audit["nearest_train_similarity"], sort_keys=True),
+                "teacher std: "
+                + json.dumps(audit["teacher_std_prediction"], sort_keys=True),
+                "prediction range: "
+                + json.dumps(audit["teacher_prediction_range"], sort_keys=True),
             ]
         )
         lines.extend(audit["warnings"])

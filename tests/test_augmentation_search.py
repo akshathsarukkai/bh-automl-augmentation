@@ -62,6 +62,24 @@ def test_large_policy_grid_enforces_similarity_safety_constraints() -> None:
     )
 
 
+def test_ensemble_policy_grid_expands_uncertainty_parameters() -> None:
+    policies = build_augmentation_policy_grid(
+        {
+            "method": "condition_recombine_ensemble_filter",
+            "synthetic_multipliers": [0.5, 1.0, 1.5],
+            "min_neighbor_similarities": [0.75, 0.8, 0.85, 0.9],
+            "max_teacher_stds": [8.0, 12.0, 16.0],
+            "max_prediction_ranges": [25.0, 35.0, 50.0],
+            "random_states": [0, 1, 2, 3, 4],
+        }
+    )
+
+    assert len(policies) == 540
+    assert len({policy["policy_id"] for policy in policies}) == 540
+    assert all("__std_" in policy["policy_id"] for policy in policies)
+    assert all("__range_" in policy["policy_id"] for policy in policies)
+
+
 def test_similarity_weighting_assigns_real_and_clipped_synthetic_weights() -> None:
     data = pd.DataFrame(
         {
@@ -185,6 +203,92 @@ output:
     assert set(selected_metrics["split"]) == {"valid", "test"}
     assert selected_metrics["synthetic_weighting_enabled"].all()
     assert selected_metrics["mean_synthetic_weight"].between(0.25, 0.85).all()
+
+
+def test_ensemble_policy_search_runner_writes_selected_outputs(tmp_path: Path) -> None:
+    data_path = tmp_path / "reactions.csv"
+    config_path = tmp_path / "ensemble.yaml"
+    search_path = tmp_path / "search.csv"
+    selected_path = tmp_path / "selected.csv"
+    metrics_path = tmp_path / "metrics.csv"
+    pd.DataFrame(
+        {
+            "reaction_id": [f"r{index}" for index in range(20)],
+            "reaction_smiles": [
+                f"{'C' * (index + 2)}Br.N.{'O' if index % 2 else 'Cl'}.C"
+                f">>{'C' * (index + 2)}N"
+                for index in range(20)
+            ],
+            "yield": [float((index * 9) % 100) for index in range(20)],
+        }
+    ).to_csv(data_path, index=False)
+    config_path.write_text(
+        f"""
+seed: 3
+dataset:
+  path: {data_path}
+splits:
+  method: random
+  train_size: 0.6
+  valid_size: 0.2
+  test_size: 0.2
+features:
+  kind: reaction_morgan_sum
+  n_bits: 8
+models:
+  - ridge
+metrics:
+  - rmse
+augmentation:
+  condition_recombine_ensemble_filter:
+    enabled: true
+    synthetic_multiplier: 0.5
+    max_synthetic_rows: 20
+    min_neighbor_similarity: 0.0
+    teachers:
+      - model: ridge
+        random_state: 0
+      - model: random_forest
+        random_state: 0
+    uncertainty_filter:
+      enabled: true
+      max_teacher_std: 100.0
+      max_prediction_range: 200.0
+    pseudo_label:
+      mode: ensemble_mean
+augmentation_search:
+  enabled: true
+  method: condition_recombine_ensemble_filter
+  synthetic_multipliers: [0.5]
+  min_neighbor_similarities: [0.0]
+  max_teacher_stds: [50.0, 100.0]
+  max_prediction_ranges: [200.0]
+  random_states: [1]
+output:
+  metrics_path: {metrics_path}
+  search_metrics_path: {search_path}
+  selected_policies_path: {selected_path}
+""",
+        encoding="utf-8",
+    )
+
+    run_augmentation(config_path)
+    search = pd.read_csv(search_path)
+    selected = pd.read_csv(selected_path)
+    metrics = pd.read_csv(metrics_path)
+
+    assert search["policy_id"].nunique() == 2
+    assert set(search["split"]) == {"valid"}
+    assert len(selected) == 1
+    assert set(metrics["split"]) == {"valid", "test"}
+    assert metrics["selected_policy"].all()
+    assert {
+        "n_candidates_generated",
+        "acceptance_rate",
+        "mean_teacher_std",
+        "mean_prediction_range",
+        "mean_nearest_train_similarity",
+    }.issubset(metrics.columns)
 
 
 def _selection_row(

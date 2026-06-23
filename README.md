@@ -327,6 +327,30 @@ training similarity. Models without `sample_weight` support emit a warning and
 fall back to unweighted fitting. Policy selection still uses validation RMSE
 only; test metrics are computed after selection.
 
+### Teacher Ensemble Uncertainty-Filtered Augmentation
+
+`condition_recombine_ensemble_filter` uses the same train-only condition-block
+recombination, but labels each candidate with multiple teachers trained only on
+real training rows. Teacher disagreement is summarized by prediction standard
+deviation and range. Candidates must pass both nearest-training similarity and
+configurable disagreement thresholds before the ensemble mean becomes their
+pseudo-label.
+
+Policies vary synthetic fraction, similarity, uncertainty thresholds, and
+candidate seed. Selection uses validation RMSE only; the untouched test split is
+evaluated after selection.
+
+```bash
+pytest
+python -m bh_augmentation.audit_augmentation --config configs/augmentation_ensemble_filter.yaml
+python -m bh_augmentation.run_augmentation --config configs/augmentation_ensemble_filter.yaml
+```
+
+Compare `results/augmentation_ensemble_filter/selected_policy_metrics.csv`
+against `results/stress/lowdata/baseline_metrics.csv` and the current
+`condition_recombine_pseudolabel` selected-policy results. Use matched train
+fractions and seeds, and do not use test differences to revise policy selection.
+
 ## Stress-Test Splits
 
 Create deterministic product and order-invariant reactant group keys:
