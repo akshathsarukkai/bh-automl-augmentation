@@ -1,0 +1,119 @@
+seed: 42
+
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean_stress.csv
+
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+
+low_data:
+  enabled: true
+  train_fractions: [0.01, 0.05, 0.1]
+
+features:
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
+
+models:
+  - name: random_forest
+    params:
+      n_estimators: 20
+
+metrics:
+  - rmse
+  - mae
+  - r2
+  - spearman
+
+augmentation:
+  utility_guided_feature_gan:
+    enabled: true
+    synthetic_multiplier: 1.0
+    max_synthetic_rows: 1000
+    random_state: 42
+    max_effective_rounds: 2
+    representation:
+      use_dim_reduction: true
+      method: truncated_svd
+      n_components: 128
+      reconstruct_to_original_dim: true
+    conditioning:
+      mode: yield_bin
+      n_yield_bins: 5
+      include_yield_value: true
+      include_product_key: false
+      include_reactant_key: false
+    model:
+      noise_dim: 64
+      hidden_dim: 256
+      n_epochs: 200
+      max_effective_epochs: 3
+      batch_size: 32
+      critic_steps: 5
+      learning_rate: 0.0002
+      beta1: 0.5
+      beta2: 0.9
+      gradient_penalty: 10.0
+    pseudo_label:
+      mode: teacher_ensemble
+      clip_min: 0.0
+      clip_max: 100.0
+      teachers:
+        - model: ridge
+          random_state: 0
+        - model: random_forest
+          random_state: 0
+        - model: random_forest
+          random_state: 1
+        - model: random_forest
+          random_state: 2
+    filters:
+      enabled: true
+      similarity_metric: cosine
+      min_nearest_similarity: 0.60
+      max_nearest_similarity: 0.995
+      max_teacher_std: 12.0
+      max_prediction_range: 35.0
+      remove_near_duplicates: true
+    diversity:
+      max_synthetic_per_nearest_real: 5
+    utility_guidance:
+      enabled: true
+      reward_metric: rmse
+      lower_is_better: true
+      inner_valid_size: 0.2
+      n_rounds: 5
+      candidates_per_round: 200
+      batch_sizes: [16, 32, 64]
+      update_strategy: cross_entropy_method
+      elite_fraction: 0.25
+      reward_baseline: no_augmentation
+
+augmentation_search:
+  enabled: true
+  method: utility_guided_feature_gan
+  selection_metric: rmse
+  selection_split: valid
+  lower_is_better: true
+  synthetic_multipliers: [0.25, 0.5]
+  noise_dims: [32]
+  hidden_dims: [128]
+  svd_components: [64]
+  n_epochs: [50]
+  batch_sizes: [32]
+  learning_rates: [0.0002]
+  gradient_penalties: [10.0]
+  utility_rounds: [3]
+  random_states: [0]
+  max_synthetic_rows: 1000
+
+output:
+  metrics_path: results/augmentation_utility_guided_gan/selected_policy_metrics.csv
+  search_metrics_path: results/augmentation_utility_guided_gan/policy_search_metrics.csv
+  selected_policies_path: results/augmentation_utility_guided_gan/selected_policies.csv
+  split_metadata_path: results/augmentation_utility_guided_gan/split_metadata.csv

@@ -14,10 +14,10 @@ from bh_augmentation.augmentation.condition_recombine import (
     assign_synthetic_sample_weights,
     condition_recombine_pseudolabel,
 )
-from bh_augmentation.augmentation.order_permutation import permute_reaction_components
 from bh_augmentation.augmentation.ensemble_filter import (
     condition_recombine_ensemble_filter,
 )
+from bh_augmentation.augmentation.order_permutation import permute_reaction_components
 from bh_augmentation.augmentation.search import (
     apply_augmentation_policy,
     build_augmentation_policy_grid,
@@ -26,6 +26,9 @@ from bh_augmentation.augmentation.search import (
     select_best_policy,
 )
 from bh_augmentation.augmentation.smiles_randomization import augment_randomized_smiles
+from bh_augmentation.augmentation.utility_guided_feature_gan import (
+    run_utility_guided_feature_gan_augmentation,
+)
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.features.featurize import build_feature_matrix
@@ -158,6 +161,8 @@ def _run_augmentation_search(
     search_config = _search_config_with_defaults(config)
     if str(search_config.get("selection_split", "valid")) != "valid":
         raise ValueError("augmentation_search.selection_split must be 'valid'.")
+    if str(search_config.get("method")) == "utility_guided_feature_gan":
+        return _run_feature_gan_search(config, df, seed, search_config)
 
     policies = build_augmentation_policy_grid(search_config)
     folds = _create_baseline_folds(df, config, seed)
@@ -347,6 +352,220 @@ def _evaluate_selected_policy(
     return records
 
 
+def _run_feature_gan_search(
+    config: dict[str, Any],
+    df: pd.DataFrame,
+    seed: int,
+    search_config: dict[str, Any],
+) -> Path:
+    policies = build_augmentation_policy_grid(search_config)
+    folds = _create_baseline_folds(df, config, seed)
+    feature_configs = _resolve_feature_configs(config.get("features", {}), df)
+    model_configs = _resolve_model_configs(config.get("models", ["ridge"]))
+    metrics = list(config.get("metrics", ["rmse", "mae", "r2"]))
+    selection_metric = str(search_config.get("selection_metric", "rmse"))
+    lower_is_better = bool(search_config.get("lower_is_better", True))
+    split_method = str(config.get("splits", {}).get("method", "random"))
+    group_column = _get_group_column(config.get("splits", {}))
+    search_frames: list[pd.DataFrame] = []
+    selected_policy_rows: list[dict[str, object]] = []
+    selected_metric_rows: list[dict[str, object]] = []
+    _save_baseline_split_metadata(folds, config)
+
+    for feature_config in feature_configs:
+        for fold_index, (train_fraction, heldout_group, splits) in enumerate(folds):
+            context = {
+                "fold_index": fold_index,
+                "train_fraction": train_fraction,
+                "split_method": split_method,
+                "group_column": group_column,
+                "heldout_group_value": heldout_group,
+            }
+            X_valid, y_valid, _ = build_feature_matrix(splits["valid"], feature_config)
+            X_test, y_test, _ = build_feature_matrix(splits["test"], feature_config)
+            for model_config in model_configs:
+                model_name, model_kwargs = _parse_model_config(model_config)
+                evaluation_cache: dict[object, object] = {}
+                frames = []
+                for policy in policies:
+                    frame = _evaluate_feature_gan_policy(
+                        splits["train"],
+                        splits["valid"],
+                        X_valid,
+                        y_valid,
+                        policy,
+                        feature_config,
+                        model_name,
+                        model_kwargs,
+                        metrics,
+                        seed,
+                        evaluation_cache,
+                    )
+                    for key, value in context.items():
+                        frame[key] = value
+                    frames.append(frame)
+                policy_metrics = pd.concat(frames, ignore_index=True)
+                selected = select_best_policy(policy_metrics, selection_metric, lower_is_better)
+                policy_metrics.loc[policy_metrics["policy_id"] == selected["policy_id"], "selected_policy"] = True
+                search_frames.append(policy_metrics)
+                selected_policy = next(policy for policy in policies if policy["policy_id"] == selected["policy_id"])
+                selected_policy_rows.append(
+                    {
+                        **context,
+                        **{key: selected[key] for key in selected if key not in {"split", "metric", "value", "selected_policy"}},
+                        "selection_metric": selection_metric,
+                        "selection_value": selected["value"],
+                        "lower_is_better": lower_is_better,
+                    }
+                )
+                selected_metric_rows.extend(
+                    _evaluate_selected_feature_gan_policy(
+                        splits["train"],
+                        splits["valid"],
+                        X_valid,
+                        y_valid,
+                        X_test,
+                        y_test,
+                        selected_policy,
+                        feature_config,
+                        model_name,
+                        model_kwargs,
+                        metrics,
+                        seed,
+                        context,
+                        evaluation_cache,
+                    )
+                )
+
+    output = config.get("output", {})
+    search_path = Path(output.get("search_metrics_path", "results/augmentation_utility_guided_gan/policy_search_metrics.csv"))
+    selected_path = Path(output.get("selected_policies_path", "results/augmentation_utility_guided_gan/selected_policies.csv"))
+    metrics_path = _get_metrics_output_path(config)
+    save_metrics_csv(pd.concat(search_frames, ignore_index=True).to_dict("records"), search_path)
+    save_metrics_csv(selected_policy_rows, selected_path)
+    return save_metrics_csv(selected_metric_rows, metrics_path)
+
+
+def _evaluate_feature_gan_policy(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    X_valid: np.ndarray,
+    y_valid: np.ndarray,
+    policy: dict[str, Any],
+    feature_config: dict[str, Any],
+    model_name: str,
+    model_kwargs: dict[str, Any],
+    metrics: list[str],
+    seed: int,
+    cache: dict[object, object],
+) -> pd.DataFrame:
+    result, metadata = _feature_gan_result(train_df, valid_df, feature_config, model_name, policy, seed, cache)
+    signature = _array_signature(result["X_train_augmented"], result["y_train_augmented"])
+    evaluation_key = ("feature_gan_validation", model_name, repr(sorted(model_kwargs.items())), signature)
+    cached = cache.get(evaluation_key)
+    if cached is None:
+        X_valid_student = _feature_gan_eval_features(X_valid, result)
+        model = train_model(
+            get_model(model_name, seed=seed, **model_kwargs),
+            result["X_train_augmented"],
+            result["y_train_augmented"],
+            sample_weight=result.get("sample_weight"),
+        )
+        pred = predict_model(model, X_valid_student)
+        values = {metric: _compute_metric(metric, y_valid, pred) for metric in metrics}
+        cached = values
+        cache[evaluation_key] = cached
+    metadata = {**metadata, "outer_valid_rmse": cached.get("rmse", np.nan)}
+    rows = [{**metadata, "selected_policy": False, "split": "valid", "metric": metric, "value": cached[metric]} for metric in metrics]
+    return pd.DataFrame(rows)
+
+
+def _evaluate_selected_feature_gan_policy(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    X_valid: np.ndarray,
+    y_valid: np.ndarray,
+    X_test: np.ndarray,
+    y_test: np.ndarray,
+    policy: dict[str, Any],
+    feature_config: dict[str, Any],
+    model_name: str,
+    model_kwargs: dict[str, Any],
+    metrics: list[str],
+    seed: int,
+    context: dict[str, object],
+    cache: dict[object, object],
+) -> list[dict[str, object]]:
+    result, metadata = _feature_gan_result(train_df, valid_df, feature_config, model_name, policy, seed, cache)
+    X_valid_student = _feature_gan_eval_features(X_valid, result)
+    X_test_student = _feature_gan_eval_features(X_test, result)
+    model = train_model(
+        get_model(model_name, seed=seed, **model_kwargs),
+        result["X_train_augmented"],
+        result["y_train_augmented"],
+        sample_weight=result.get("sample_weight"),
+    )
+    valid_pred = predict_model(model, X_valid_student)
+    metadata = {**metadata, "outer_valid_rmse": _compute_metric("rmse", y_valid, valid_pred)}
+    rows = []
+    for split_name, y_eval, pred in [
+        ("valid", y_valid, valid_pred),
+        ("test", y_test, predict_model(model, X_test_student)),
+    ]:
+        for metric in metrics:
+            rows.append({**context, **metadata, "selected_policy": True, "split": split_name, "metric": metric, "value": _compute_metric(metric, y_eval, pred)})
+    return rows
+
+
+def _feature_gan_result(
+    train_df: pd.DataFrame,
+    valid_df: pd.DataFrame,
+    feature_config: dict[str, Any],
+    model_name: str,
+    policy: dict[str, Any],
+    seed: int,
+    cache: dict[object, object],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    key = ("feature_gan_result", policy["policy_id"], id(train_df))
+    if key in cache:
+        return cache[key]
+    config = _utility_policy_config(policy)
+    result, metadata = run_utility_guided_feature_gan_augmentation(
+        train_df, valid_df, feature_config, model_name, config, int(policy["random_state"])
+    )
+    policy_metadata = {key: value for key, value in policy.items() if key != "utility_config"}
+    metadata = {**policy_metadata, **metadata, "policy_id": policy["policy_id"], "augmentation_random_state": int(policy["random_state"]), "feature_kind": str(feature_config.get("kind", "custom")), "n_features": int(result["X_train_augmented"].shape[1]), "model": model_name, "outer_valid_rmse": np.nan}
+    cache[key] = (result, metadata)
+    return result, metadata
+
+
+def _feature_gan_eval_features(X_eval: np.ndarray, result: dict[str, Any]) -> np.ndarray:
+    if bool(result.get("train_student_in_latent_space", False)):
+        transform = result["feature_transform"]
+        return transform.transform(X_eval).astype(np.float32)
+    return X_eval.astype(np.float32)
+
+
+def _utility_policy_config(policy: dict[str, Any]) -> dict[str, Any]:
+    config = dict(policy.get("utility_config", {}))
+    config["synthetic_multiplier"] = float(policy["synthetic_multiplier"])
+    config["max_synthetic_rows"] = int(policy["max_synthetic_rows"])
+    representation = dict(config.get("representation", {}))
+    representation["n_components"] = int(policy["svd_components"])
+    config["representation"] = representation
+    model = dict(config.get("model", {}))
+    model.update({"noise_dim": int(policy["noise_dim"]), "hidden_dim": int(policy["hidden_dim"]), "n_epochs": int(policy["n_epochs"]), "batch_size": int(policy["batch_size"]), "learning_rate": float(policy["learning_rate"]), "gradient_penalty": float(policy["gradient_penalty"])})
+    config["model"] = model
+    utility = dict(config.get("utility_guidance", {}))
+    utility["n_rounds"] = int(policy["utility_rounds"])
+    config["utility_guidance"] = utility
+    return config
+
+
+def _array_signature(X: np.ndarray, y: np.ndarray) -> tuple[object, ...]:
+    return (X.shape, y.shape, float(np.round(X.sum(), 4)), float(np.round(y.sum(), 4)))
+
+
 def _search_config_with_defaults(config: dict[str, Any]) -> dict[str, Any]:
     search = dict(config.get("augmentation_search", {}))
     method = str(search.get("method", "condition_recombine_pseudolabel"))
@@ -373,6 +592,8 @@ def _search_config_with_defaults(config: dict[str, Any]) -> dict[str, Any]:
                 "ensemble_config": fixed,
             }
         )
+    if method == "utility_guided_feature_gan":
+        defaults.update({"utility_config": fixed})
     return {**defaults, **search}
 
 

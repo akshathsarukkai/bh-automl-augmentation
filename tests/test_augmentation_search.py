@@ -80,6 +80,32 @@ def test_ensemble_policy_grid_expands_uncertainty_parameters() -> None:
     assert all("__range_" in policy["policy_id"] for policy in policies)
 
 
+def test_utility_guided_feature_gan_policy_grid_expands_parameters() -> None:
+    policies = build_augmentation_policy_grid(
+        {
+            "method": "utility_guided_feature_gan",
+            "synthetic_multipliers": [0.25, 0.5, 1.0],
+            "noise_dims": [32, 64],
+            "hidden_dims": [128, 256],
+            "svd_components": [64, 128],
+            "n_epochs": [100, 200],
+            "batch_sizes": [32],
+            "learning_rates": [0.0002],
+            "gradient_penalties": [10.0],
+            "utility_rounds": [3, 5],
+            "random_states": [0, 1, 2],
+            "max_synthetic_rows": 1000,
+            "utility_config": {"filters": {"min_nearest_similarity": 0.6}},
+        }
+    )
+
+    assert len(policies) == 288
+    assert len({policy["policy_id"] for policy in policies}) == 288
+    assert all("__noise_" in policy["policy_id"] for policy in policies)
+    assert all("__svd_" in policy["policy_id"] for policy in policies)
+    assert all(policy["augmentation_method"] == "utility_guided_feature_gan" for policy in policies)
+
+
 def test_similarity_weighting_assigns_real_and_clipped_synthetic_weights() -> None:
     data = pd.DataFrame(
         {

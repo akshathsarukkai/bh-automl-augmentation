@@ -28,12 +28,15 @@ def build_augmentation_policy_grid(search_config: dict[str, Any]) -> list[dict[s
     supported = {
         "condition_recombine_pseudolabel",
         "condition_recombine_ensemble_filter",
+        "utility_guided_feature_gan",
     }
     if method not in supported:
         raise ValueError(f"Unsupported augmentation search method: {method}.")
 
     if method == "condition_recombine_ensemble_filter":
         return _build_ensemble_policy_grid(search_config)
+    if method == "utility_guided_feature_gan":
+        return _build_utility_gan_policy_grid(search_config)
 
     dimensions = {
         "synthetic_multipliers": search_config.get("synthetic_multipliers", [1.0]),
@@ -363,6 +366,17 @@ def _policy_id(policy: dict[str, Any]) -> str:
             f"__range_{_number(policy['max_prediction_range'])}"
             f"__seed_{policy['random_state']}"
         )
+    if policy["augmentation_method"] == "utility_guided_feature_gan":
+        return (
+            f"{policy['augmentation_method']}"
+            f"__mult_{_number(policy['synthetic_multiplier'])}"
+            f"__noise_{policy['noise_dim']}"
+            f"__hidden_{policy['hidden_dim']}"
+            f"__svd_{policy['svd_components']}"
+            f"__epochs_{policy['n_epochs']}"
+            f"__rounds_{policy['utility_rounds']}"
+            f"__seed_{policy['random_state']}"
+        )
     teacher = {"random_forest": "rf"}.get(
         str(policy["teacher_model"]), str(policy["teacher_model"])
     )
@@ -434,6 +448,62 @@ def _build_ensemble_policy_grid(
             "max_synthetic_rows": None if max_rows is None else int(max_rows),
             "ensemble_config": ensemble_config,
             "synthetic_weighting": weighting,
+        }
+        policy["policy_id"] = _policy_id(policy)
+        policies.append(policy)
+    return policies
+
+
+def _build_utility_gan_policy_grid(search_config: dict[str, Any]) -> list[dict[str, Any]]:
+    dimensions = {
+        "synthetic_multipliers": search_config.get("synthetic_multipliers", [1.0]),
+        "noise_dims": search_config.get("noise_dims", [64]),
+        "hidden_dims": search_config.get("hidden_dims", [256]),
+        "svd_components": search_config.get("svd_components", [128]),
+        "n_epochs": search_config.get("n_epochs", [200]),
+        "batch_sizes": search_config.get("batch_sizes", [32]),
+        "learning_rates": search_config.get("learning_rates", [0.0002]),
+        "gradient_penalties": search_config.get("gradient_penalties", [10.0]),
+        "utility_rounds": search_config.get("utility_rounds", [5]),
+        "random_states": search_config.get("random_states", [42]),
+    }
+    for name, values in dimensions.items():
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"augmentation_search.{name} must be a non-empty list.")
+
+    base_config = dict(search_config.get("utility_config", {}))
+    max_rows = search_config.get("max_synthetic_rows", base_config.get("max_synthetic_rows", 1000))
+    policies: list[dict[str, Any]] = []
+    for multiplier, noise_dim, hidden_dim, svd_components, epochs, batch_size, lr, gp, rounds, random_state in product(
+        dimensions["synthetic_multipliers"],
+        dimensions["noise_dims"],
+        dimensions["hidden_dims"],
+        dimensions["svd_components"],
+        dimensions["n_epochs"],
+        dimensions["batch_sizes"],
+        dimensions["learning_rates"],
+        dimensions["gradient_penalties"],
+        dimensions["utility_rounds"],
+        dimensions["random_states"],
+    ):
+        policy = {
+            "augmentation_method": "utility_guided_feature_gan",
+            "synthetic_multiplier": float(multiplier),
+            "min_neighbor_similarity": float(
+                base_config.get("filters", {}).get("min_nearest_similarity", 0.6)
+            ),
+            "teacher_model": "teacher_ensemble",
+            "random_state": int(random_state),
+            "max_synthetic_rows": int(max_rows),
+            "noise_dim": int(noise_dim),
+            "hidden_dim": int(hidden_dim),
+            "svd_components": int(svd_components),
+            "n_epochs": int(epochs),
+            "batch_size": int(batch_size),
+            "learning_rate": float(lr),
+            "gradient_penalty": float(gp),
+            "utility_rounds": int(rounds),
+            "utility_config": base_config,
         }
         policy["policy_id"] = _policy_id(policy)
         policies.append(policy)

@@ -351,6 +351,48 @@ against `results/stress/lowdata/baseline_metrics.csv` and the current
 `condition_recombine_pseudolabel` selected-policy results. Use matched train
 fractions and seeds, and do not use test differences to revise policy selection.
 
+### Utility-Guided Feature GAN Augmentation
+
+`utility_guided_feature_gan` is not a plain GAN and it does not generate raw
+reaction SMILES. It learns feature-space candidates from the train-only
+`reaction_role_concat` representation, optionally through train-only
+TruncatedSVD. A WGAN-GP-style generator and critic encourage realistic feature
+points, while an inner reward-validation split scores whether candidate batches
+improve downstream yield prediction.
+
+The split roles are deliberately separate:
+
+- generator train rows fit the feature transform, generator, critic, teachers,
+  and nearest-neighbor filters
+- reward-valid rows score inner utility rewards during candidate selection
+- outer validation rows select the final policy
+- test rows are untouched until the selected policy is evaluated once
+
+Run:
+
+```bash
+pytest
+python -m bh_augmentation.run_augmentation --config configs/augmentation_utility_guided_gan.yaml
+```
+
+The checked-in config is intentionally laptop-sized. Expand the search grid only
+after the smoke run is passing, since each policy trains a generator, teacher
+ensemble, and downstream student model.
+
+To train the student directly in the SVD latent space where the generator
+operates, run:
+
+```bash
+python -m bh_augmentation.run_augmentation \
+  --config configs/augmentation_utility_guided_gan_latent_tiny.yaml
+```
+
+Outputs are written to:
+
+- `results/augmentation_utility_guided_gan/policy_search_metrics.csv`
+- `results/augmentation_utility_guided_gan/selected_policies.csv`
+- `results/augmentation_utility_guided_gan/selected_policy_metrics.csv`
+
 ## Stress-Test Splits
 
 Create deterministic product and order-invariant reactant group keys:
