@@ -5,6 +5,7 @@ scipy
 pytest
 matplotlib
 PyYAML
+torch
 
 # Optional dataset source, install manually when needed:
 # PyTDC

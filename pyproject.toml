@@ -15,6 +15,7 @@ dependencies = [
   "scipy",
   "matplotlib",
   "PyYAML",
+  "torch",
 ]
 
 [project.optional-dependencies]

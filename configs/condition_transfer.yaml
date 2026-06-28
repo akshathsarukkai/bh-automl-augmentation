@@ -1,0 +1,73 @@
+seed: 42
+seeds: [0, 1, 2, 3, 4]
+
+dataset:
+  path: data/processed/bh_clean_stress.csv
+
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+
+low_data:
+  enabled: true
+  train_fractions: [0.01, 0.05, 0.10, 0.20]
+
+features:
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
+
+models:
+  - ridge
+  - random_forest
+
+metrics:
+  - rmse
+  - mae
+  - r2
+  - spearman
+
+condition_transfer:
+  enabled: true
+  donor_strategies:
+    - random
+    - nearest_reaction
+    - nearest_substrate
+    - high_yield_nearest
+  label_strategies:
+    - teacher_ensemble
+    - uncertainty_filtered_teacher
+    - average_label
+    - source_label
+    - donor_label
+  synthetic_multipliers: [0.5, 1.0, 2.0]
+  n_neighbors: [5]
+  min_similarities: [null, 0.7]
+  max_teacher_stds: [null, 10.0, 15.0]
+  high_yield_threshold: 70.0
+  clip_y_min: 0.0
+  clip_y_max: 100.0
+  candidates_per_real: 20
+  teacher_models:
+    - ridge
+    - random_forest
+
+selection:
+  split: valid
+  metric: rmse
+  lower_is_better: true
+
+output:
+  directory: results/condition_transfer
+  policy_metrics_path: results/condition_transfer/policy_metrics.csv
+  selected_policies_path: results/condition_transfer/selected_policies.csv
+  selected_policy_metrics_path: results/condition_transfer/selected_policy_metrics.csv
+  summary_path: results/condition_transfer/summary.csv
+  synthetic_audit_path: results/condition_transfer/synthetic_audit.csv
+  condition_transfer_vs_original_rf_by_seed_path: results/condition_transfer/condition_transfer_vs_original_rf_by_seed.csv
+  condition_transfer_vs_original_rf_summary_path: results/condition_transfer/condition_transfer_vs_original_rf_summary.csv
+  condition_transfer_vs_real_only_same_model_by_seed_path: results/condition_transfer/condition_transfer_vs_real_only_same_model_by_seed.csv
+  condition_transfer_vs_real_only_same_model_summary_path: results/condition_transfer/condition_transfer_vs_real_only_same_model_summary.csv
+

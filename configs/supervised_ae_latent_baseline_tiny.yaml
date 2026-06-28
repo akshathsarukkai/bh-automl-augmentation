@@ -1,0 +1,59 @@
+seed: 42
+seeds: [0]
+
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean_stress.csv
+
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+
+low_data:
+  enabled: true
+  train_fractions: [0.01]
+
+features:
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
+
+models:
+  - ridge
+  - random_forest
+
+metrics:
+  - rmse
+  - mae
+  - r2
+  - spearman
+
+svd_baseline:
+  enabled: true
+  components: [16]
+
+supervised_autoencoder:
+  enabled: true
+  latent_dims: [16]
+  hidden_dims: [128]
+  dropout: 0.1
+  reconstruction_weight: 1.0
+  yield_weight: 1.0
+  latent_l2_weight: 0.0
+  learning_rate: 0.001
+  weight_decay: 0.000001
+  batch_size: 32
+  max_epochs: 5
+  patience: 2
+  internal_valid_size: 0.2
+  device: auto
+
+output:
+  metrics_path: results/supervised_ae_latent_baseline_tiny/metrics.csv
+  summary_path: results/supervised_ae_latent_baseline_tiny/summary.csv
+  history_dir: results/supervised_ae_latent_baseline_tiny/history
+  ae_vs_original_rf_by_seed_path: results/supervised_ae_latent_baseline_tiny/ae_vs_original_rf_by_seed.csv
+  ae_vs_original_rf_summary_path: results/supervised_ae_latent_baseline_tiny/ae_vs_original_rf_summary.csv
+
