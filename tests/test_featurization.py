@@ -14,6 +14,7 @@ import pytest
 import bh_augmentation.features.featurize as featurize_module
 from bh_augmentation.features.diagnostics import diagnose_smiles_featurization
 from bh_augmentation.features.featurize import (
+    ROLE_SEPARATED_CONDITION_COLUMNS,
     build_feature_matrix,
     component_fingerprint_features,
     extract_reaction_parts,
@@ -469,6 +470,53 @@ def test_reaction_feature_ablation_malformed_record_does_not_crash() -> None:
     assert X.sum() == 0
 
 
+def test_role_separated_conditions_feature_width() -> None:
+    """Recovered BH roles should be fingerprinted as seven separate blocks."""
+    df = _role_separated_condition_df()
+
+    with fake_rdkit_modules():
+        X, y, feature_names = build_feature_matrix(
+            df,
+            {"kind": "role_separated_conditions", "n_bits": 8, "radius": 2},
+        )
+
+    assert X.shape == (2, 56)
+    assert len(feature_names) == 56
+    assert feature_names[:2] == [
+        "recovered_reactant_1_smiles_0",
+        "recovered_reactant_1_smiles_1",
+    ]
+    np.testing.assert_array_equal(y, np.array([70.0, 80.0], dtype=np.float32))
+
+
+def test_role_separated_conditions_delta_feature_width() -> None:
+    """Delta mode should add three product-minus-reactant blocks."""
+    df = _role_separated_condition_df()
+
+    with fake_rdkit_modules():
+        X, _, feature_names = build_feature_matrix(
+            df,
+            {"kind": "role_separated_conditions_delta", "n_bits": 8, "radius": 2},
+        )
+
+    assert X.shape == (2, 80)
+    assert len(feature_names) == 80
+    assert feature_names[-8] == "delta_product_minus_reactant_pair_0"
+
+
+def test_role_separated_conditions_missing_columns_raise_clear_error() -> None:
+    """Users should be directed to the enriched condition CSV when columns are missing."""
+    df = pd.DataFrame(
+        {
+            "reaction_smiles": ["CCBr.N>>CCN"],
+            "yield": [70.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="bh_clean_stress_with_conditions.csv"):
+        build_feature_matrix(df, {"kind": "role_separated_conditions", "n_bits": 8})
+
+
 def test_diagnose_smiles_featurization_reports_split_success() -> None:
     """Diagnostics should show reaction strings fail whole parse but split successfully."""
     dict_record = "{'product': 'CCNCC', 'catalyst': '', 'reactant': 'CCBr.NCC'}"
@@ -489,3 +537,20 @@ def test_diagnose_smiles_featurization_reports_split_success() -> None:
     assert summary["rows_producing_nonzero_fingerprints"] == 3
     assert repr("CCBr.NCC>>CCNCC") in summary["first_examples_that_fail_whole_string_parsing"]
     assert ["CCBr", "NCC", "CCNCC"] in summary["first_extracted_token_lists"]
+
+
+def _role_separated_condition_df() -> pd.DataFrame:
+    rows = []
+    for index, product in enumerate(["CCN", "CCNC"], start=1):
+        row = {
+            "yield": 60.0 + index * 10,
+            "recovered_reactant_1_smiles": "CCBr",
+            "recovered_reactant_2_smiles": "N",
+            "recovered_catalyst_smiles": "Cl[Pd]Cl",
+            "recovered_ligand_smiles": "P(c1ccccc1)(c1ccccc1)c1ccccc1",
+            "recovered_base_smiles": "K3PO4",
+            "recovered_solvent_or_additive_smiles": "O1CCOCC1",
+            "recovered_product_smiles": product,
+        }
+        rows.append(row)
+    return pd.DataFrame(rows, columns=["yield", *ROLE_SEPARATED_CONDITION_COLUMNS])

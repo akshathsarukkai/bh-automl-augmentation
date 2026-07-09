@@ -7,7 +7,7 @@ import pytest
 from sklearn.ensemble import ExtraTreesRegressor, RandomForestRegressor
 from sklearn.linear_model import Ridge
 
-from bh_augmentation.models.baselines import get_model
+from bh_augmentation.models.baselines import get_model, make_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
 
@@ -67,8 +67,39 @@ def test_optional_xgboost_missing_raises_helpful_error(monkeypatch: pytest.Monke
     """Requesting missing XGBoost should not break package import."""
     monkeypatch.setitem(sys.modules, "xgboost", None)
 
-    with pytest.raises(ImportError, match="python -m pip install xgboost"):
+    with pytest.raises(ImportError, match="XGBoost was requested.*pip install xgboost"):
         get_model("xgboost")
+
+
+def test_make_model_alias_uses_random_state_name() -> None:
+    """The compatibility alias should map random_state to the shared factory seed."""
+    model = make_model("random_forest", random_state=123, n_estimators=5)
+
+    assert isinstance(model, RandomForestRegressor)
+    assert model.random_state == 123
+
+
+def test_xgboost_factory_returns_fit_predict_model_when_installed() -> None:
+    """Installed XGBoost should instantiate through the shared model factory."""
+    pytest.importorskip("xgboost")
+
+    model = make_model("xgboost", random_state=0, n_estimators=5, n_jobs=1)
+
+    assert hasattr(model, "fit")
+    assert hasattr(model, "predict")
+
+
+def test_xgboost_smoke_fit_when_installed() -> None:
+    """Installed XGBoost should fit a tiny regression problem."""
+    pytest.importorskip("xgboost")
+    X, y = _synthetic_regression_data()
+    model = make_model("xgboost", random_state=0, n_estimators=5, n_jobs=1)
+
+    fitted = train_model(model, X, y)
+    predictions = predict_model(fitted, X)
+
+    assert predictions.shape == (len(X),)
+    assert np.isfinite(predictions).all()
 
 
 def test_optional_catboost_missing_raises_helpful_error(monkeypatch: pytest.MonkeyPatch) -> None:

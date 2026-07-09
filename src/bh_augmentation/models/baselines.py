@@ -63,21 +63,30 @@ def get_model(name: str, seed: int = 42, **kwargs: Any) -> Any:
     raise ValueError(f"Unknown model name: {name}. Supported models: {supported}.")
 
 
+def make_model(name: str, random_state: int = 42, **kwargs: Any) -> Any:
+    """Compatibility alias for creating baseline regression models."""
+    return get_model(name, seed=random_state, **kwargs)
+
+
 def _get_xgboost_model(seed: int, **kwargs: Any) -> Any:
     """Create an XGBoost regressor if XGBoost is installed."""
     try:
         from xgboost import XGBRegressor
     except ImportError as exc:
         raise ImportError(
-            "XGBoost is optional and is not installed. Install it explicitly "
-            "with `python -m pip install xgboost`, or use a scikit-learn model "
-            "such as `ridge`, `random_forest`, or `extra_trees`."
+            "XGBoost was requested but is not installed. Install it with "
+            "`pip install xgboost`."
         ) from exc
 
     defaults = {
-        "n_estimators": 100,
-        "random_state": seed,
+        "n_estimators": 300,
+        "max_depth": 4,
+        "learning_rate": 0.05,
+        "subsample": 0.9,
+        "colsample_bytree": 0.9,
+        "reg_lambda": 1.0,
         "objective": "reg:squarederror",
+        "random_state": seed,
         "n_jobs": -1,
     }
     defaults.update(kwargs)

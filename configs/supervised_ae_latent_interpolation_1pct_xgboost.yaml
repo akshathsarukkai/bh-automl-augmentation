@@ -1,0 +1,92 @@
+seed: 42
+seeds:
+- 0
+- 1
+- 2
+- 3
+- 4
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions:
+  - 0.01
+features:
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
+models:
+- ridge
+- random_forest
+- xgboost
+metrics:
+- rmse
+- mae
+- r2
+- spearman
+supervised_autoencoder:
+  latent_dims:
+  - 16
+  - 64
+  hidden_dims:
+  - 1024
+  - 256
+  dropout: 0.1
+  reconstruction_weight: 1.0
+  yield_weight: 1.0
+  latent_l2_weight: 0.0
+  learning_rate: 0.001
+  weight_decay: 1.0e-06
+  batch_size: 32
+  max_epochs: 100
+  patience: 15
+  internal_valid_size: 0.2
+  device: auto
+latent_interpolation:
+  enabled: true
+  synthetic_multipliers:
+  - 0.5
+  - 1.0
+  n_neighbors:
+  - 5
+  alpha_min: 0.2
+  alpha_max: 0.8
+  alpha_distributions:
+  - beta_2_2
+  label_strategies:
+  - mixup_label
+  - teacher_ensemble
+  - blended
+  teacher_models:
+  - ridge
+  - random_forest
+  teacher_blend_weights:
+  - 0.5
+  min_neighbor_similarities:
+  - null
+  max_teacher_stds:
+  - null
+  clip_y_min: 0.0
+  clip_y_max: 100.0
+  candidates_per_real: 10
+selection:
+  split: valid
+  metric: rmse
+  lower_is_better: true
+output:
+  directory: results/supervised_ae_latent_interpolation_1pct_xgboost
+  policy_metrics_path: results/supervised_ae_latent_interpolation_1pct_xgboost/policy_metrics.csv
+  selected_policies_path: results/supervised_ae_latent_interpolation_1pct_xgboost/selected_policies.csv
+  selected_policy_metrics_path: results/supervised_ae_latent_interpolation_1pct_xgboost/selected_policy_metrics.csv
+  summary_path: results/supervised_ae_latent_interpolation_1pct_xgboost/summary.csv
+  audit_path: results/supervised_ae_latent_interpolation_1pct_xgboost/synthetic_audit.csv
+  interpolation_vs_original_rf_by_seed_path: results/supervised_ae_latent_interpolation_1pct_xgboost/interpolation_vs_original_rf_by_seed.csv
+  interpolation_vs_original_rf_summary_path: results/supervised_ae_latent_interpolation_1pct_xgboost/interpolation_vs_original_rf_summary.csv
+  interpolation_vs_ae_only_by_seed_path: results/supervised_ae_latent_interpolation_1pct_xgboost/interpolation_vs_ae_only_by_seed.csv
+  interpolation_vs_ae_only_summary_path: results/supervised_ae_latent_interpolation_1pct_xgboost/interpolation_vs_ae_only_summary.csv

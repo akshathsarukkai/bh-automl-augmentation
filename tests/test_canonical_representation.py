@@ -19,6 +19,11 @@ ACTIVE_FEATURE_KINDS = {
     "reaction_role_concat",
     "reaction_role_concat_delta",
 }
+CONFIG_FEATURE_KINDS = {
+    *ACTIVE_FEATURE_KINDS,
+    "role_separated_conditions",
+    "role_separated_conditions_delta",
+}
 
 
 def test_cleaning_drops_fully_unknown_deprecated_components_and_keeps_keys() -> None:
@@ -71,4 +76,4 @@ def test_active_configs_do_not_reference_deprecated_component_columns() -> None:
         configured_kinds = [features.get("kind")]
         configured_kinds.extend(item.get("kind") for item in features.get("compare", []))
         for kind in filter(None, configured_kinds):
-            assert kind in ACTIVE_FEATURE_KINDS, (path, kind)
+            assert kind in CONFIG_FEATURE_KINDS, (path, kind)

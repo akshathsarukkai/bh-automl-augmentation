@@ -1,0 +1,32 @@
+seed: 42
+dataset:
+  name: buchwald_hartwig
+  path: data/processed/bh_clean_stress_with_conditions.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: false
+features:
+  compare:
+    - kind: reaction_role_concat
+      n_bits: 2048
+      radius: 2
+    - kind: role_separated_conditions
+      n_bits: 2048
+      radius: 2
+    - kind: role_separated_conditions_delta
+      n_bits: 2048
+      radius: 2
+models:
+  - xgboost
+metrics:
+  - rmse
+  - mae
+  - r2
+  - spearman
+output:
+  metrics_path: results/baseline_role_separated_conditions_xgboost/metrics.csv
+  split_metadata_path: results/baseline_role_separated_conditions_xgboost/split_metadata.csv

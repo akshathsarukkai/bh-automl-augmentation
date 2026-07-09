@@ -14,6 +14,8 @@ REACTION_FEATURE_KINDS = {
     "reaction_morgan_sum",
     "reaction_role_concat",
     "reaction_role_concat_delta",
+    "role_separated_conditions",
+    "role_separated_conditions_delta",
 }
 DEPRECATED_FEATURE_ALIASES = {
     "reaction_smiles": "reaction_morgan_sum",
@@ -39,6 +41,16 @@ DICT_AGENT_KEYS = [
 ]
 DICT_PRODUCT_KEYS = ["product", "products"]
 _WARNED_HASH_FINGERPRINT_FALLBACK = False
+
+ROLE_SEPARATED_CONDITION_COLUMNS = [
+    "recovered_reactant_1_smiles",
+    "recovered_reactant_2_smiles",
+    "recovered_catalyst_smiles",
+    "recovered_ligand_smiles",
+    "recovered_base_smiles",
+    "recovered_solvent_or_additive_smiles",
+    "recovered_product_smiles",
+]
 
 
 def morgan_fingerprint(
@@ -347,6 +359,14 @@ def _reaction_feature_matrix(
     radius: int,
     n_bits: int,
 ) -> tuple[np.ndarray, list[str]]:
+    if kind in {"role_separated_conditions", "role_separated_conditions_delta"}:
+        return _role_separated_condition_feature_matrix(
+            df,
+            kind=kind,
+            radius=radius,
+            n_bits=n_bits,
+        )
+
     if "reaction_smiles" not in df.columns:
         raise ValueError(f"Feature kind '{kind}' requires reaction_smiles.")
 
@@ -381,6 +401,66 @@ def _reaction_feature_vector(
     raise ValueError(f"Unknown reaction feature kind: {kind}")
 
 
+def _role_separated_condition_feature_matrix(
+    df: pd.DataFrame,
+    kind: str,
+    radius: int,
+    n_bits: int,
+) -> tuple[np.ndarray, list[str]]:
+    _validate_role_separated_condition_columns(df)
+    rows = [
+        _role_separated_condition_feature_vector(row, kind=kind, radius=radius, n_bits=n_bits)
+        for _, row in df.iterrows()
+    ]
+    width = _reaction_feature_width(kind, n_bits)
+    features = np.vstack(rows).astype(np.float32) if rows else np.empty((0, width), dtype=np.float32)
+    return features, _reaction_feature_names(kind, n_bits)
+
+
+def _role_separated_condition_feature_vector(
+    row: pd.Series,
+    kind: str,
+    radius: int,
+    n_bits: int,
+) -> np.ndarray:
+    fingerprints = {
+        column: morgan_fingerprint(
+            row.get(column, ""),
+            radius=radius,
+            n_bits=n_bits,
+            warn_invalid=False,
+        )
+        for column in ROLE_SEPARATED_CONDITION_COLUMNS
+    }
+    role_blocks = [fingerprints[column] for column in ROLE_SEPARATED_CONDITION_COLUMNS]
+    if kind == "role_separated_conditions":
+        return np.concatenate(role_blocks).astype(np.float32)
+    if kind == "role_separated_conditions_delta":
+        product = fingerprints["recovered_product_smiles"]
+        reactant_1 = fingerprints["recovered_reactant_1_smiles"]
+        reactant_2 = fingerprints["recovered_reactant_2_smiles"]
+        reactant_pair = reactant_1 + reactant_2
+        deltas = [
+            product - reactant_1,
+            product - reactant_2,
+            product - reactant_pair,
+        ]
+        return np.concatenate([*role_blocks, *deltas]).astype(np.float32)
+    raise ValueError(f"Unknown role-separated condition feature kind: {kind}")
+
+
+def _validate_role_separated_condition_columns(df: pd.DataFrame) -> None:
+    missing = [column for column in ROLE_SEPARATED_CONDITION_COLUMNS if column not in df.columns]
+    if missing:
+        missing_text = ", ".join(missing)
+        raise ValueError(
+            "Feature kind 'role_separated_conditions' requires recovered condition "
+            f"columns, but these are missing: {missing_text}. Generate "
+            "data/processed/bh_clean_stress_with_conditions.csv first with "
+            "bh_condition_reader.py."
+        )
+
+
 def _sum_morgan_fingerprints(
     smiles_tokens: Sequence[str],
     radius: int,
@@ -402,6 +482,8 @@ def _reaction_feature_width(kind: str, n_bits: int) -> int:
         "reaction_morgan_sum": 1,
         "reaction_role_concat": 3,
         "reaction_role_concat_delta": 4,
+        "role_separated_conditions": 7,
+        "role_separated_conditions_delta": 10,
     }
     return multipliers[kind] * n_bits
 
@@ -415,6 +497,13 @@ def _reaction_feature_names(kind: str, n_bits: int) -> list[str]:
             "agents",
             "products",
             "delta_product_minus_reactant",
+        ],
+        "role_separated_conditions": ROLE_SEPARATED_CONDITION_COLUMNS,
+        "role_separated_conditions_delta": [
+            *ROLE_SEPARATED_CONDITION_COLUMNS,
+            "delta_product_minus_reactant_1",
+            "delta_product_minus_reactant_2",
+            "delta_product_minus_reactant_pair",
         ],
     }
     return [f"{section}_{bit}" for section in sections[kind] for bit in range(n_bits)]
