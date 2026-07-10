@@ -41,11 +41,23 @@ ROLE_TRANSFER_MODES = {
     "solvent_or_additive_only": ["solvent_or_additive"],
     "catalyst_ligand": ["catalyst", "ligand"],
     "ligand_base": ["ligand", "base"],
+    "ligand_solvent_or_additive": ["ligand", "solvent_or_additive"],
     "base_solvent_or_additive": ["base", "solvent_or_additive"],
     "catalyst_ligand_base": ["catalyst", "ligand", "base"],
+    "ligand_base_solvent_or_additive": ["ligand", "base", "solvent_or_additive"],
     "full_condition_block": ["catalyst", "ligand", "base", "solvent_or_additive"],
 }
-DONOR_STRATEGIES = {"random", "nearest_substrate", "nearest_condition", "high_yield_nearest", "diverse_role_value"}
+DONOR_STRATEGIES = {
+    "random",
+    "nearest_substrate",
+    "nearest_condition",
+    "high_yield_nearest",
+    "diverse_role_value",
+    "same_substrate_different_role",
+    "same_nontransferred_roles",
+    "matched_product_or_reactant_key",
+    "high_yield_same_context",
+}
 LABEL_STRATEGIES = {
     "teacher_ensemble",
     "uncertainty_filtered_teacher",
@@ -72,6 +84,12 @@ class RoleAwareConditionTransferConfig:
     clip_y_max: float = 100.0
     random_state: int = 0
     max_resample_attempts: int = 10
+    effective_role_transfer_mode: str | None = None
+    invariant_roles_excluded: str = ""
+    n_unique_catalysts: int = 0
+    n_unique_ligands: int = 0
+    n_unique_bases: int = 0
+    n_unique_solvents: int = 0
 
 
 def build_role_transferred_reaction_smiles(
@@ -155,12 +173,14 @@ def generate_role_aware_condition_transfer_examples(
         return _package_result(_empty_synthetic_df(), np.empty(0), metadata, candidate_df, np.empty((0, X_train_array.shape[1])))
 
     rng = np.random.default_rng(config.random_state)
+    effective_mode = _effective_role_transfer_mode(config)
     substrate_similarity = _role_similarity_matrix(train, ["reactant_1", "reactant_2", "product"])
     condition_similarity = _role_similarity_matrix(train, ["catalyst", "ligand", "base", "solvent_or_additive"])
     role_values = {
         role: train[ROLE_COLUMNS[role]].astype(str).to_numpy()
         for role in ["catalyst", "ligand", "base", "solvent_or_additive"]
     }
+    context_values = _context_values(train)
     train_records = train.to_dict("records")
     source_dataframe_indices = train["_source_dataframe_index"].to_numpy()
     np.fill_diagonal(substrate_similarity, -np.inf)
@@ -170,29 +190,34 @@ def generate_role_aware_condition_transfer_examples(
     rows: list[dict[str, Any]] = []
     n_identical_skipped = 0
     n_invalid_role_parse_skipped = 0
+    n_same_context_donors_found = 0
+    n_role_changed_candidates_found = 0
     max_candidates = max(1, int(config.max_candidates_per_source)) * n_real_train
     attempts = max(max_candidates, target_count * max(5, int(config.max_resample_attempts)))
     for candidate_id in range(attempts):
         if len(rows) >= max_candidates:
             break
         source_position = int(rng.integers(0, n_real_train))
-        donor_position, donor_similarity = _select_donor_position(
+        donor_position, donor_similarity, donor_fallback_level, donor_stats = _select_donor_position(
             train=train,
             source_position=source_position,
             y_train=y_train_array,
             substrate_similarity=substrate_similarity,
             condition_similarity=condition_similarity,
             role_values=role_values,
+            context_values=context_values,
             config=config,
             rng=rng,
         )
         if donor_position is None:
             continue
+        n_same_context_donors_found += donor_stats["n_same_context_donors_found"]
+        n_role_changed_candidates_found += donor_stats["n_role_changed_candidates_found"]
 
         synthetic = build_role_transferred_reaction_smiles(
             train_records[source_position],
             train_records[donor_position],
-            config.role_transfer_mode,
+            effective_mode,
         )
         if synthetic["synthetic_reaction_smiles"] == str(train_records[source_position]["reaction_smiles"]):
             n_identical_skipped += 1
@@ -216,6 +241,7 @@ def generate_role_aware_condition_transfer_examples(
                 "source_yield": float(y_train_array[source_position]),
                 "donor_yield": float(y_train_array[donor_position]),
                 "donor_similarity": float(donor_similarity),
+                "donor_fallback_level": donor_fallback_level,
                 "teacher_mean": np.nan,
                 "teacher_std": np.nan,
                 "synthetic_label": np.nan,
@@ -233,6 +259,8 @@ def generate_role_aware_condition_transfer_examples(
             config,
             n_identical_skipped=n_identical_skipped,
             n_invalid_role_parse_skipped=n_invalid_role_parse_skipped,
+            n_same_context_donors_found=n_same_context_donors_found,
+            n_role_changed_candidates_found=n_role_changed_candidates_found,
         )
         return _package_result(_empty_synthetic_df(), np.empty(0), metadata, candidate_df, np.empty((0, X_train_array.shape[1])))
 
@@ -260,6 +288,8 @@ def generate_role_aware_condition_transfer_examples(
         config,
         n_identical_skipped=n_identical_skipped,
         n_invalid_role_parse_skipped=n_invalid_role_parse_skipped,
+        n_same_context_donors_found=n_same_context_donors_found,
+        n_role_changed_candidates_found=n_role_changed_candidates_found,
     )
     metadata["teacher_models_used"] = ",".join(teachers_used)
     return _package_result(
@@ -278,23 +308,45 @@ def _select_donor_position(
     substrate_similarity: np.ndarray,
     condition_similarity: np.ndarray,
     role_values: dict[str, np.ndarray],
+    context_values: dict[str, np.ndarray],
     config: RoleAwareConditionTransferConfig,
     rng: np.random.Generator,
-) -> tuple[int | None, float]:
+) -> tuple[int | None, float, str, dict[str, int]]:
     candidates = [position for position in range(len(train)) if position != source_position]
+    transferred_roles = ROLE_TRANSFER_MODES[_effective_role_transfer_mode(config)]
+    role_changed_candidates = _filter_role_changed(candidates, source_position, role_values, transferred_roles)
+    stats = {
+        "n_same_context_donors_found": 0,
+        "n_role_changed_candidates_found": len(role_changed_candidates),
+    }
+
+    if config.donor_strategy in {
+        "same_substrate_different_role",
+        "same_nontransferred_roles",
+        "matched_product_or_reactant_key",
+        "high_yield_same_context",
+    }:
+        return _select_context_aware_donor(
+            candidates=role_changed_candidates,
+            source_position=source_position,
+            y_train=y_train,
+            substrate_similarity=substrate_similarity,
+            role_values=role_values,
+            context_values=context_values,
+            transferred_roles=transferred_roles,
+            strategy=config.donor_strategy,
+            rng=rng,
+            stats=stats,
+        )
+
     if config.donor_strategy == "diverse_role_value":
-        roles = ROLE_TRANSFER_MODES[config.role_transfer_mode]
-        candidates = [
-            position
-            for position in candidates
-            if any(role_values[role][position] != role_values[role][source_position] for role in roles)
-        ]
+        candidates = role_changed_candidates
     if not candidates:
-        return None, float("nan")
+        return None, float("nan"), "unavailable", stats
 
     if config.donor_strategy == "random":
         donor_position = int(rng.choice(candidates))
-        return donor_position, float(substrate_similarity[source_position, donor_position])
+        return donor_position, float(substrate_similarity[source_position, donor_position]), "random", stats
 
     similarity = condition_similarity if config.donor_strategy == "nearest_condition" else substrate_similarity
     candidate_array = np.asarray(candidates, dtype=int)
@@ -304,16 +356,122 @@ def _select_donor_position(
         candidate_array = candidate_array[keep]
         scores = scores[keep]
     if len(candidate_array) == 0:
-        return None, float("nan")
+        return None, float("nan"), "unavailable", stats
 
     if config.donor_strategy == "high_yield_nearest":
         order = np.lexsort((-scores, -y_train[candidate_array]))
         donor_position = int(candidate_array[order[0]])
-        return donor_position, float(similarity[source_position, donor_position])
+        return donor_position, float(similarity[source_position, donor_position]), "high_yield_nearest", stats
 
     best_index = int(np.argmax(scores))
     donor_position = int(candidate_array[best_index])
-    return donor_position, float(scores[best_index])
+    return donor_position, float(scores[best_index]), config.donor_strategy, stats
+
+
+def _select_context_aware_donor(
+    candidates: list[int],
+    source_position: int,
+    y_train: np.ndarray,
+    substrate_similarity: np.ndarray,
+    role_values: dict[str, np.ndarray],
+    context_values: dict[str, np.ndarray],
+    transferred_roles: list[str],
+    strategy: str,
+    rng: np.random.Generator,
+    stats: dict[str, int],
+) -> tuple[int | None, float, str, dict[str, int]]:
+    if not candidates:
+        return None, float("nan"), "unavailable", stats
+
+    nontransferred_roles = [
+        role for role in ["catalyst", "ligand", "base", "solvent_or_additive"] if role not in transferred_roles
+    ]
+    same_nontransferred = [
+        position
+        for position in candidates
+        if all(role_values[role][position] == role_values[role][source_position] for role in nontransferred_roles)
+    ]
+    same_reactant = [
+        position
+        for position in candidates
+        if context_values["reactant_key"][position] == context_values["reactant_key"][source_position]
+    ]
+    same_product = [
+        position
+        for position in candidates
+        if context_values["product_key"][position] == context_values["product_key"][source_position]
+    ]
+    same_product_or_reactant = sorted(set(same_product) | set(same_reactant))
+
+    if strategy == "same_substrate_different_role":
+        levels = [("strict_same_reactant_key", same_reactant)]
+    elif strategy == "same_nontransferred_roles":
+        levels = [("strict_same_nontransferred_roles", same_nontransferred)]
+    elif strategy == "matched_product_or_reactant_key":
+        levels = [("strict_matched_product_or_reactant_key", same_product_or_reactant)]
+    else:
+        levels = [
+            ("strict_same_nontransferred_roles", same_nontransferred),
+            ("strict_matched_product_or_reactant_key", same_product_or_reactant),
+        ]
+
+    levels.extend(
+        [
+            ("same_product_key", same_product),
+            ("nearest_substrate", candidates),
+            ("random_changed_role", candidates),
+        ]
+    )
+    for fallback_level, level_candidates in levels:
+        unique_candidates = sorted(set(level_candidates))
+        if not unique_candidates:
+            continue
+        if fallback_level.startswith("strict") or fallback_level == "same_product_key":
+            stats["n_same_context_donors_found"] += len(unique_candidates)
+        donor_position = _choose_from_candidates(
+            unique_candidates,
+            source_position=source_position,
+            y_train=y_train,
+            substrate_similarity=substrate_similarity,
+            prefer_high_yield=strategy == "high_yield_same_context",
+            random_choice=fallback_level == "random_changed_role",
+            rng=rng,
+        )
+        return donor_position, float(substrate_similarity[source_position, donor_position]), fallback_level, stats
+    return None, float("nan"), "unavailable", stats
+
+
+def _choose_from_candidates(
+    candidates: list[int],
+    source_position: int,
+    y_train: np.ndarray,
+    substrate_similarity: np.ndarray,
+    prefer_high_yield: bool,
+    random_choice: bool,
+    rng: np.random.Generator,
+) -> int:
+    if random_choice:
+        return int(rng.choice(candidates))
+    candidate_array = np.asarray(candidates, dtype=int)
+    scores = substrate_similarity[source_position, candidate_array]
+    if prefer_high_yield:
+        order = np.lexsort((-scores, -y_train[candidate_array]))
+    else:
+        order = np.argsort(-scores, kind="mergesort")
+    return int(candidate_array[order[0]])
+
+
+def _filter_role_changed(
+    candidates: list[int],
+    source_position: int,
+    role_values: dict[str, np.ndarray],
+    transferred_roles: list[str],
+) -> list[int]:
+    return [
+        position
+        for position in candidates
+        if any(role_values[role][position] != role_values[role][source_position] for role in transferred_roles)
+    ]
 
 
 def _role_similarity_matrix(train: pd.DataFrame, roles: list[str]) -> np.ndarray:
@@ -339,6 +497,24 @@ def _role_similarity_matrix(train: pd.DataFrame, roles: list[str]) -> np.ndarray
     similarity = normalized @ normalized.T
     _SIMILARITY_MATRIX_CACHE[key] = similarity
     return similarity.copy()
+
+
+def _context_values(train: pd.DataFrame) -> dict[str, np.ndarray]:
+    reactant_pair = (
+        train[ROLE_COLUMNS["reactant_1"]].astype(str)
+        + "."
+        + train[ROLE_COLUMNS["reactant_2"]].astype(str)
+    )
+    reactant_key = train["reactant_key"].astype(str) if "reactant_key" in train else reactant_pair
+    product_key = train["product_key"].astype(str) if "product_key" in train else train[ROLE_COLUMNS["product"]].astype(str)
+    return {
+        "reactant_key": reactant_key.to_numpy(),
+        "product_key": product_key.to_numpy(),
+    }
+
+
+def _effective_role_transfer_mode(config: RoleAwareConditionTransferConfig) -> str:
+    return config.effective_role_transfer_mode or config.role_transfer_mode
 
 
 def _teacher_predictions(
@@ -452,6 +628,8 @@ def _metadata_from_candidates(
     config: RoleAwareConditionTransferConfig,
     n_identical_skipped: int = 0,
     n_invalid_role_parse_skipped: int = 0,
+    n_same_context_donors_found: int = 0,
+    n_role_changed_candidates_found: int = 0,
 ) -> dict[str, Any]:
     kept = candidate_df.loc[candidate_df.get("kept", False).eq(True)] if not candidate_df.empty else candidate_df
     accepted_count = int(candidate_df.get("accepted", pd.Series(dtype=bool)).sum()) if not candidate_df.empty else 0
@@ -466,8 +644,14 @@ def _metadata_from_candidates(
         uncertainty_rejected = int((candidate_df["teacher_std"].to_numpy(dtype=float) > float(config.max_teacher_std)).sum())
     return {
         "role_transfer_mode": config.role_transfer_mode,
+        "effective_role_transfer_mode": _effective_role_transfer_mode(config),
         "donor_strategy": config.donor_strategy,
         "label_strategy": config.label_strategy,
+        "n_unique_catalysts": int(config.n_unique_catalysts),
+        "n_unique_ligands": int(config.n_unique_ligands),
+        "n_unique_bases": int(config.n_unique_bases),
+        "n_unique_solvents": int(config.n_unique_solvents),
+        "invariant_roles_excluded": config.invariant_roles_excluded,
         "synthetic_multiplier": float(config.synthetic_multiplier),
         "min_similarity": np.nan if config.min_similarity is None else float(config.min_similarity),
         "max_teacher_std": np.nan if config.max_teacher_std is None else float(config.max_teacher_std),
@@ -482,6 +666,10 @@ def _metadata_from_candidates(
         "n_identical_skipped": int(n_identical_skipped),
         "n_invalid_role_parse_skipped": int(n_invalid_role_parse_skipped),
         "n_teacher_uncertainty_rejected": int(uncertainty_rejected),
+        "n_zero_synthetic_policy_skipped": int(len(kept) == 0),
+        "donor_fallback_level": _most_common(kept, "donor_fallback_level"),
+        "n_same_context_donors_found": int(n_same_context_donors_found),
+        "n_role_changed_candidates_found": int(n_role_changed_candidates_found),
         "unique_source_catalysts": int(train[ROLE_COLUMNS["catalyst"]].nunique(dropna=False)),
         "unique_source_ligands": int(train[ROLE_COLUMNS["ligand"]].nunique(dropna=False)),
         "unique_source_bases": int(train[ROLE_COLUMNS["base"]].nunique(dropna=False)),
@@ -494,6 +682,7 @@ def _metadata_from_candidates(
         "changed_ligand_fraction": _safe_bool_mean(kept, "changed_ligand"),
         "changed_base_fraction": _safe_bool_mean(kept, "changed_base"),
         "changed_solvent_fraction": _safe_bool_mean(kept, "changed_solvent_or_additive"),
+        "changed_any_transferred_role_fraction": _changed_any_transferred_role_fraction(kept, _effective_role_transfer_mode(config)),
     }
 
 
@@ -521,6 +710,7 @@ def _synthetic_columns() -> list[str]:
         "source_yield",
         "donor_yield",
         "donor_similarity",
+        "donor_fallback_level",
         "teacher_mean",
         "teacher_std",
         "synthetic_label",
@@ -591,3 +781,23 @@ def _safe_nunique(df: pd.DataFrame, column: str) -> int:
 
 def _safe_bool_mean(df: pd.DataFrame, column: str) -> float:
     return float(df[column].astype(bool).mean()) if column in df and not df.empty else float("nan")
+
+
+def _most_common(df: pd.DataFrame, column: str) -> str:
+    if column not in df or df.empty:
+        return ""
+    counts = df[column].astype(str).value_counts()
+    return str(counts.index[0]) if not counts.empty else ""
+
+
+def _changed_any_transferred_role_fraction(df: pd.DataFrame, mode: str) -> float:
+    if df.empty:
+        return float("nan")
+    columns = [
+        f"changed_{role}" if role != "solvent_or_additive" else "changed_solvent_or_additive"
+        for role in ROLE_TRANSFER_MODES[mode]
+    ]
+    existing = [column for column in columns if column in df]
+    if not existing:
+        return float("nan")
+    return float(df[existing].astype(bool).any(axis=1).mean())

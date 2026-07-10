@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from bh_augmentation.augmentation.role_aware_condition_transfer import (
+    ROLE_TRANSFER_MODES,
     RoleAwareConditionTransferConfig,
     generate_role_aware_condition_transfer_examples,
 )
@@ -49,6 +50,13 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
     print(f"Rows used after condition-role parsing: {len(df)}")
     print("Role validation status counts:")
     print(df["role_validation_status"].value_counts(dropna=False).to_string())
+    role_value_counts = _role_value_counts(df)
+    _write_role_value_counts(role_value_counts, output_paths["role_value_counts_path"])
+    invariant_roles = set(role_value_counts.loc[role_value_counts["invariant"], "role"].astype(str))
+    print("Role value counts:")
+    print(role_value_counts.to_string(index=False))
+    if invariant_roles:
+        print(f"Invariant roles excluded by default: {', '.join(sorted(invariant_roles))}")
 
     feature_config = {"kind": "reaction_role_concat", **dict(config.get("features", {}))}
     feature_config["kind"] = "reaction_role_concat"
@@ -86,7 +94,7 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
                 )
             )
 
-            for policy_index, policy in enumerate(_iter_role_transfer_policies(config, seed)):
+            for policy_index, policy in enumerate(_iter_role_transfer_policies(config, seed, role_value_counts)):
                 policy_id = _policy_id(seed, float(train_fraction), policy_index, policy)
                 result = generate_role_aware_condition_transfer_examples(train_df, X_train, y_train, policy)
                 metadata = dict(result["metadata"])
@@ -163,6 +171,32 @@ def _prepare_condition_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     return df.loc[mask].reset_index(drop=True)
 
 
+def _role_value_counts(df: pd.DataFrame) -> pd.DataFrame:
+    role_columns = {
+        "catalyst": "recovered_catalyst_smiles",
+        "ligand": "recovered_ligand_smiles",
+        "base": "recovered_base_smiles",
+        "solvent_or_additive": "recovered_solvent_or_additive_smiles",
+    }
+    rows = []
+    for role, column in role_columns.items():
+        n_unique = int(df[column].nunique(dropna=False))
+        rows.append(
+            {
+                "role": role,
+                "column": column,
+                "n_unique": n_unique,
+                "invariant": n_unique <= 1,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _write_role_value_counts(role_value_counts: pd.DataFrame, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    role_value_counts.to_csv(output_path, index=False)
+
+
 def _evaluate_models(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -201,17 +235,27 @@ def _evaluate_models(
     return records
 
 
-def _iter_role_transfer_policies(config: dict[str, Any], seed: int) -> list[RoleAwareConditionTransferConfig]:
+def _iter_role_transfer_policies(
+    config: dict[str, Any],
+    seed: int,
+    role_value_counts: pd.DataFrame,
+) -> list[RoleAwareConditionTransferConfig]:
     transfer = config.get("role_aware_condition_transfer", {})
     if not transfer.get("enabled", True):
         return []
     policies: list[RoleAwareConditionTransferConfig] = []
+    exclude_invariant_roles = bool(transfer.get("exclude_invariant_roles", True))
+    invariant_roles = set(role_value_counts.loc[role_value_counts["invariant"], "role"].astype(str))
+    role_count_map = role_value_counts.set_index("role")["n_unique"].to_dict()
     for mode, donor_strategy, label_strategy, multiplier in product(
         _as_list(transfer.get("role_transfer_modes", ["ligand_only"])),
         _as_list(transfer.get("donor_strategies", ["random"])),
         _as_list(transfer.get("label_strategies", ["uncertainty_filtered_teacher"])),
         _as_list(transfer.get("synthetic_multipliers", [0.5])),
     ):
+        effective_mode, excluded_roles = _effective_policy_mode(str(mode), invariant_roles, exclude_invariant_roles)
+        if effective_mode is None:
+            continue
         min_values = _as_list(transfer.get("min_similarities", [None])) if donor_strategy != "random" else [None]
         std_values = (
             _as_list(transfer.get("max_teacher_stds", [None]))
@@ -233,6 +277,12 @@ def _iter_role_transfer_policies(config: dict[str, Any], seed: int) -> list[Role
                     clip_y_max=float(transfer.get("clip_y_max", 100.0)),
                     random_state=seed,
                     max_resample_attempts=int(transfer.get("max_resample_attempts", 10)),
+                    effective_role_transfer_mode=effective_mode,
+                    invariant_roles_excluded=",".join(sorted(excluded_roles)),
+                    n_unique_catalysts=int(role_count_map.get("catalyst", 0)),
+                    n_unique_ligands=int(role_count_map.get("ligand", 0)),
+                    n_unique_bases=int(role_count_map.get("base", 0)),
+                    n_unique_solvents=int(role_count_map.get("solvent_or_additive", 0)),
                 )
             )
     max_policies = transfer.get("max_policies")
@@ -245,21 +295,79 @@ def _iter_role_transfer_policies(config: dict[str, Any], seed: int) -> list[Role
     return policies
 
 
+def _effective_policy_mode(
+    requested_mode: str,
+    invariant_roles: set[str],
+    exclude_invariant_roles: bool,
+) -> tuple[str | None, set[str]]:
+    roles = ROLE_TRANSFER_MODES[requested_mode]
+    if not exclude_invariant_roles:
+        return requested_mode, set()
+    effective_roles = [role for role in roles if role not in invariant_roles]
+    excluded_roles = set(roles) - set(effective_roles)
+    if not effective_roles:
+        return None, excluded_roles
+    effective_mode = _mode_name_for_roles(effective_roles)
+    return effective_mode, excluded_roles
+
+
+def _mode_name_for_roles(roles: list[str]) -> str:
+    role_set = set(roles)
+    for mode, mode_roles in ROLE_TRANSFER_MODES.items():
+        if set(mode_roles) == role_set:
+            return mode
+    return "_".join(roles)
+
+
 def _select_policies(policy_metrics: pd.DataFrame, config: dict[str, Any]) -> pd.DataFrame:
     selection = config.get("selection", {})
     split = str(selection.get("split", "valid"))
     metric = str(selection.get("metric", "rmse"))
     lower_is_better = bool(selection.get("lower_is_better", True))
+    allow_zero = bool(
+        config.get("role_aware_condition_transfer", {}).get(
+            "allow_zero_synthetic_policy_selection",
+            False,
+        )
+    )
     candidates = policy_metrics.loc[
         (policy_metrics["representation"] == "role_aware_condition_transfer")
         & (policy_metrics["split"] == split)
         & (policy_metrics["metric"] == metric)
     ].copy()
-    if candidates.empty:
-        return pd.DataFrame()
+    if not allow_zero and not candidates.empty:
+        candidates = candidates.loc[candidates["n_synthetic_train"].fillna(0).astype(float) > 0].copy()
     candidates = candidates.sort_values("value", ascending=lower_is_better, kind="mergesort")
     selected = candidates.groupby(["seed", "train_fraction", "model"], dropna=False, as_index=False).head(1)
-    return selected.rename(columns={"value": f"{split}_{metric}"}).reset_index(drop=True)
+
+    baseline = policy_metrics.loc[
+        (policy_metrics["representation"] == "original_6144")
+        & (policy_metrics["split"] == split)
+        & (policy_metrics["metric"] == metric)
+    ].copy()
+    if baseline.empty and selected.empty:
+        return pd.DataFrame()
+    selected_keys = (
+        selected[["seed", "train_fraction", "model"]].drop_duplicates()
+        if not selected.empty
+        else pd.DataFrame(columns=["seed", "train_fraction", "model"])
+    )
+    fallback = baseline.merge(
+        selected_keys.assign(has_selected_policy=True),
+        on=["seed", "train_fraction", "model"],
+        how="left",
+    )
+    fallback = fallback.loc[~fallback["has_selected_policy"].eq(True)].drop(columns=["has_selected_policy"])
+    if not fallback.empty:
+        fallback = fallback.copy()
+        fallback["role_transfer_mode"] = "real_only_fallback"
+        fallback["effective_role_transfer_mode"] = "real_only_fallback"
+        fallback["donor_strategy"] = ""
+        fallback["label_strategy"] = ""
+        fallback["n_synthetic_train"] = 0
+        fallback["n_zero_synthetic_policy_skipped"] = 1
+    combined = pd.concat([selected, fallback], ignore_index=True)
+    return combined.rename(columns={"value": f"{split}_{metric}"}).reset_index(drop=True)
 
 
 def _mark_selected_policy_metrics(policy_metrics: pd.DataFrame, selected_policies: pd.DataFrame) -> pd.DataFrame:
@@ -285,6 +393,7 @@ def _summarize(policy_metrics: pd.DataFrame, selected_policy_metrics: pd.DataFra
         "train_fraction",
         "representation",
         "role_transfer_mode",
+        "effective_role_transfer_mode",
         "donor_strategy",
         "label_strategy",
         "model",
@@ -390,7 +499,25 @@ def _print_selected_policy_table(selected_policies: pd.DataFrame, selected_polic
         aggfunc="first",
     ).reset_index()
     table = selected_policies.merge(pivot, on=["seed", "train_fraction", "model", "policy_id"], how="left")
-    columns = [column for column in ["seed", "train_fraction", "model", "role_transfer_mode", "donor_strategy", "label_strategy", "synthetic_multiplier", "valid_rmse", "rmse", "r2", "spearman"] if column in table.columns]
+    columns = [
+        column
+        for column in [
+            "seed",
+            "train_fraction",
+            "model",
+            "role_transfer_mode",
+            "effective_role_transfer_mode",
+            "donor_strategy",
+            "label_strategy",
+            "synthetic_multiplier",
+            "n_synthetic_train",
+            "valid_rmse",
+            "rmse",
+            "r2",
+            "spearman",
+        ]
+        if column in table.columns
+    ]
     print("\nSELECTED ROLE-AWARE CONDITION-TRANSFER POLICIES")
     print(table[columns].rename(columns={"rmse": "test_rmse", "r2": "test_r2", "spearman": "test_spearman"}).to_string(index=False))
 
@@ -421,8 +548,14 @@ def _policy_metric_fields(metadata: dict[str, Any]) -> dict[str, object]:
 def _empty_policy_metadata() -> dict[str, object]:
     return {
         "role_transfer_mode": "",
+        "effective_role_transfer_mode": "",
         "donor_strategy": "",
         "label_strategy": "",
+        "n_unique_catalysts": np.nan,
+        "n_unique_ligands": np.nan,
+        "n_unique_bases": np.nan,
+        "n_unique_solvents": np.nan,
+        "invariant_roles_excluded": "",
         "synthetic_multiplier": np.nan,
         "min_similarity": np.nan,
         "max_teacher_std": np.nan,
@@ -434,6 +567,11 @@ def _empty_policy_metadata() -> dict[str, object]:
         "mean_teacher_std": np.nan,
         "mean_synthetic_yield": np.nan,
         "std_synthetic_yield": np.nan,
+        "donor_fallback_level": "",
+        "n_zero_synthetic_policy_skipped": 0,
+        "n_same_context_donors_found": 0,
+        "n_role_changed_candidates_found": 0,
+        "changed_any_transferred_role_fraction": np.nan,
     }
 
 
@@ -442,7 +580,8 @@ def _policy_id(seed: int, train_fraction: float, policy_index: int, policy: Role
         f"seed={seed}|frac={train_fraction}|policy={policy_index}|"
         f"mode={policy.role_transfer_mode}|donor={policy.donor_strategy}|"
         f"label={policy.label_strategy}|mult={policy.synthetic_multiplier}|"
-        f"sim={policy.min_similarity}|std={policy.max_teacher_std}"
+        f"sim={policy.min_similarity}|std={policy.max_teacher_std}|"
+        f"effective={policy.effective_role_transfer_mode or policy.role_transfer_mode}"
     )
 
 
@@ -456,6 +595,7 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
         "selected_policy_metrics_path": Path(output.get("selected_policy_metrics_path", directory / "selected_policy_metrics.csv")),
         "summary_path": Path(output.get("summary_path", directory / "summary.csv")),
         "role_transfer_audit_path": Path(output.get("role_transfer_audit_path", directory / "role_transfer_audit.csv")),
+        "role_value_counts_path": Path(output.get("role_value_counts_path", directory / "role_value_counts.csv")),
         "role_transfer_vs_real_only_same_model_by_seed_path": Path(output.get("role_transfer_vs_real_only_same_model_by_seed_path", directory / "role_transfer_vs_real_only_same_model_by_seed.csv")),
         "role_transfer_vs_real_only_same_model_summary_path": Path(output.get("role_transfer_vs_real_only_same_model_summary_path", directory / "role_transfer_vs_real_only_same_model_summary.csv")),
         "role_transfer_vs_original_rf_by_seed_path": Path(output.get("role_transfer_vs_original_rf_by_seed_path", directory / "role_transfer_vs_original_rf_by_seed.csv")),

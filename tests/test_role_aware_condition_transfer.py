@@ -20,6 +20,8 @@ from bh_augmentation.data.bh_condition_reader import (
 )
 from bh_augmentation.features.featurize import build_feature_matrix
 from bh_augmentation.run_role_aware_condition_transfer import (
+    _iter_role_transfer_policies,
+    _role_value_counts,
     _select_policies,
     run_role_aware_condition_transfer,
 )
@@ -179,6 +181,148 @@ def test_audit_metadata_contains_changed_role_fractions() -> None:
         assert column in metadata
 
 
+def test_invariant_catalyst_is_detected() -> None:
+    counts = _role_value_counts(_invariant_catalyst_df())
+
+    catalyst = counts.set_index("role").loc["catalyst"]
+    assert catalyst["n_unique"] == 1
+    assert bool(catalyst["invariant"])
+
+
+def test_catalyst_modes_are_made_catalyst_free_when_excluding_invariant_roles() -> None:
+    counts = _role_value_counts(_invariant_catalyst_df())
+    config = {
+        "role_aware_condition_transfer": {
+            "exclude_invariant_roles": True,
+            "role_transfer_modes": ["catalyst_only", "full_condition_block"],
+            "donor_strategies": ["random"],
+            "label_strategies": ["source_label"],
+            "synthetic_multipliers": [0.5],
+            "teacher_models": ["ridge"],
+        }
+    }
+
+    policies = _iter_role_transfer_policies(config, seed=0, role_value_counts=counts)
+
+    assert len(policies) == 1
+    assert policies[0].role_transfer_mode == "full_condition_block"
+    assert policies[0].effective_role_transfer_mode == "ligand_base_solvent_or_additive"
+    assert policies[0].invariant_roles_excluded == "catalyst"
+
+
+def test_ligand_base_solvent_mode_changes_at_least_one_variable_role() -> None:
+    train = _invariant_catalyst_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            role_transfer_mode="ligand_base_solvent_or_additive",
+            donor_strategy="diverse_role_value",
+            label_strategy="source_label",
+        ),
+    )
+
+    synthetic = result["synthetic_df"]
+    assert not synthetic.empty
+    changed = synthetic[["changed_ligand", "changed_base", "changed_solvent_or_additive"]].astype(bool)
+    assert changed.any(axis=1).all()
+    assert not synthetic["changed_catalyst"].astype(bool).any()
+
+
+def test_zero_synthetic_policies_are_not_eligible_for_selection() -> None:
+    metrics = pd.DataFrame(
+        [
+            _metric_row("zero", "valid", "rmse", 1.0, n_synthetic_train=0),
+            _metric_row("zero", "test", "rmse", 1.0, n_synthetic_train=0),
+            _metric_row("nonzero", "valid", "rmse", 5.0, n_synthetic_train=3),
+            _metric_row("nonzero", "test", "rmse", 5.0, n_synthetic_train=3),
+            _metric_row("real", "valid", "rmse", 10.0, representation="original_6144", n_synthetic_train=0),
+        ]
+    )
+
+    selected = _select_policies(
+        metrics,
+        {
+            "selection": {"split": "valid", "metric": "rmse", "lower_is_better": True},
+            "role_aware_condition_transfer": {"allow_zero_synthetic_policy_selection": False},
+        },
+    )
+
+    assert selected.iloc[0]["policy_id"] == "nonzero"
+
+
+@pytest.mark.parametrize(
+    ("mode", "same_columns", "different_column"),
+    [
+        ("ligand_only", ["synthetic_base_smiles", "synthetic_solvent_or_additive_smiles"], "synthetic_ligand_smiles"),
+        ("base_only", ["synthetic_ligand_smiles", "synthetic_solvent_or_additive_smiles"], "synthetic_base_smiles"),
+        ("solvent_or_additive_only", ["synthetic_ligand_smiles", "synthetic_base_smiles"], "synthetic_solvent_or_additive_smiles"),
+    ],
+)
+def test_same_nontransferred_roles_keeps_context_when_possible(
+    mode: str,
+    same_columns: list[str],
+    different_column: str,
+) -> None:
+    train = _same_context_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(role_transfer_mode=mode, donor_strategy="same_nontransferred_roles", label_strategy="source_label"),
+    )
+
+    kept = result["candidate_df"].loc[result["candidate_df"]["kept"]]
+    assert not kept.empty
+    assert set(kept["donor_fallback_level"]) == {"strict_same_nontransferred_roles"}
+    for _, row in kept.iterrows():
+        source = train.iloc[int(row["source_position"])]
+        for column in same_columns:
+            source_column = column.replace("synthetic_", "recovered_")
+            assert row[column] == source[source_column]
+        assert row[different_column] != source[different_column.replace("synthetic_", "recovered_")]
+
+
+def test_audit_contains_invariant_and_fallback_fields() -> None:
+    train = _invariant_catalyst_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            role_transfer_mode="full_condition_block",
+            effective_role_transfer_mode="ligand_base_solvent_or_additive",
+            invariant_roles_excluded="catalyst",
+            n_unique_catalysts=1,
+            n_unique_ligands=3,
+            n_unique_bases=3,
+            n_unique_solvents=3,
+            donor_strategy="same_nontransferred_roles",
+            label_strategy="source_label",
+        ),
+    )
+
+    metadata = result["metadata"]
+    for column in [
+        "n_unique_catalysts",
+        "invariant_roles_excluded",
+        "effective_role_transfer_mode",
+        "donor_fallback_level",
+        "n_zero_synthetic_policy_skipped",
+        "n_same_context_donors_found",
+        "n_role_changed_candidates_found",
+        "changed_any_transferred_role_fraction",
+    ]:
+        assert column in metadata
+
+
 def test_runner_smoke_tiny_config_outputs(tmp_path: Path) -> None:
     pytest.importorskip("xgboost")
     data_path = tmp_path / "reactions.csv"
@@ -214,6 +358,8 @@ role_aware_condition_transfer:
   role_transfer_modes: [ligand_only, full_condition_block]
   donor_strategies: [random]
   label_strategies: [teacher_ensemble]
+  exclude_invariant_roles: true
+  allow_zero_synthetic_policy_selection: false
   synthetic_multipliers: [0.5]
   max_candidates_per_source: 2
   max_teacher_stds: [10.0]
@@ -230,6 +376,7 @@ output:
   selected_policy_metrics_path: {output_dir / "selected_policy_metrics.csv"}
   summary_path: {output_dir / "summary.csv"}
   role_transfer_audit_path: {output_dir / "role_transfer_audit.csv"}
+  role_value_counts_path: {output_dir / "role_value_counts.csv"}
   role_transfer_vs_real_only_same_model_by_seed_path: {output_dir / "role_transfer_vs_real_only_same_model_by_seed.csv"}
   role_transfer_vs_real_only_same_model_summary_path: {output_dir / "role_transfer_vs_real_only_same_model_summary.csv"}
   role_transfer_vs_original_rf_by_seed_path: {output_dir / "role_transfer_vs_original_rf_by_seed.csv"}
@@ -245,6 +392,7 @@ output:
     audit = pd.read_csv(paths["role_transfer_audit_path"])
     assert "role_transfer_mode" in policy_metrics.columns
     assert "role_transfer_mode" in audit.columns
+    assert paths["role_value_counts_path"].exists()
     assert "original_6144" in set(policy_metrics["representation"])
     assert "role_aware_condition_transfer" in set(policy_metrics["representation"])
     assert set(policy_metrics["split"]) == {"valid", "test"}
@@ -252,19 +400,27 @@ output:
     assert {"changed_ligand_fraction", "changed_base_fraction"} <= set(audit.columns)
 
 
-def _metric_row(policy_id: str, split: str, metric: str, value: float) -> dict[str, object]:
+def _metric_row(
+    policy_id: str,
+    split: str,
+    metric: str,
+    value: float,
+    representation: str = "role_aware_condition_transfer",
+    n_synthetic_train: int = 1,
+) -> dict[str, object]:
     return {
         "seed": 0,
         "train_fraction": 0.1,
         "model": "xgboost",
         "policy_id": policy_id,
-        "representation": "role_aware_condition_transfer",
+        "representation": representation,
         "role_transfer_mode": "ligand_only",
         "donor_strategy": "random",
         "label_strategy": "teacher_ensemble",
         "split": split,
         "metric": metric,
         "value": value,
+        "n_synthetic_train": n_synthetic_train,
     }
 
 
@@ -291,6 +447,58 @@ def _feature_config() -> dict[str, object]:
 
 def _train_df(n: int = 6) -> pd.DataFrame:
     rows = [_row(index % 6) for index in range(n)]
+    return pd.DataFrame(rows)
+
+
+def _invariant_catalyst_df() -> pd.DataFrame:
+    rows = []
+    for index in range(6):
+        row = _row(index)
+        row["recovered_catalyst_smiles"] = "Cl[Pd]Cl"
+        row["reaction_smiles"] = (
+            f"{row['recovered_reactant_1_smiles']}.{row['recovered_reactant_2_smiles']}."
+            f"{row['recovered_catalyst_smiles']}.{row['recovered_ligand_smiles']}."
+            f"{row['recovered_base_smiles']}.{row['recovered_solvent_or_additive_smiles']}>>"
+            f"{row['recovered_product_smiles']}"
+        )
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _same_context_df() -> pd.DataFrame:
+    catalyst = "Cl[Pd]Cl"
+    product = "c1ccc(Nc2ccccc2)cc1"
+    values = [
+        (ligand, base, solvent, float(index * 10 + 10))
+        for index, (ligand, base, solvent) in enumerate(
+            (ligand, base, solvent)
+            for ligand in ["LigA", "LigB"]
+            for base in ["BaseA", "BaseB"]
+            for solvent in ["SolvA", "SolvB"]
+        )
+    ]
+    rows = []
+    for index, (ligand, base, solvent, y_value) in enumerate(values):
+        r1 = f"Brc1ccccc1C{index}"
+        r2 = "Nc1ccccc1"
+        rows.append(
+            {
+                "reaction_id": f"context_{index}",
+                "reaction_smiles": f"{r1}.{r2}.{catalyst}.{ligand}.{base}.{solvent}>>{product}",
+                "yield": y_value,
+                "reactant_key": f"{r1}.{r2}",
+                "product_key": product,
+                "recovered_reactant_1_smiles": r1,
+                "recovered_reactant_2_smiles": r2,
+                "recovered_catalyst_smiles": catalyst,
+                "recovered_ligand_smiles": ligand,
+                "recovered_base_smiles": base,
+                "recovered_solvent_or_additive_smiles": solvent,
+                "recovered_product_smiles": product,
+                "condition_parse_status": "ok",
+                "role_validation_status": "valid",
+            }
+        )
     return pd.DataFrame(rows)
 
 
