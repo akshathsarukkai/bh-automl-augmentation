@@ -1,0 +1,69 @@
+seed: 0
+seeds: [0]
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions: [0.01]
+features:
+  kind: reaction_role_concat
+  n_bits: 32
+  radius: 2
+models:
+  - ridge
+  - name: xgboost
+    params: &tiny_xgb
+      n_estimators: 5
+      max_depth: 2
+      learning_rate: 0.1
+      n_jobs: 1
+      tree_method: hist
+metrics: [rmse, mae, r2, spearman]
+condition_transfer:
+  enabled: true
+  selection_model:
+    name: xgboost
+    params: *tiny_xgb
+  donor_strategies: [random, high_yield_nearest]
+  label_strategies: [teacher_ensemble, uncertainty_filtered_teacher]
+  policy_pairs:
+    - {donor_strategy: random, label_strategy: teacher_ensemble}
+    - {donor_strategy: high_yield_nearest, label_strategy: uncertainty_filtered_teacher}
+  synthetic_multipliers: [0.5]
+  n_neighbors: [3]
+  min_similarities: [null]
+  max_teacher_stds: [15.0]
+  high_yield_threshold: 70.0
+  clip_y_min: 0.0
+  clip_y_max: 100.0
+  candidates_per_real: 3
+  teacher_models: [ridge]
+supervised_autoencoder:
+  latent_dims: [16]
+  hidden_dims: [32]
+  dropout: 0.0
+  reconstruction_weight: 1.0
+  yield_weight: 1.0
+  latent_l2_weight: 0.0
+  learning_rate: 0.001
+  weight_decay: 0.0
+  batch_size: 8
+  max_epochs: 2
+  patience: 1
+  internal_valid_size: 0.2
+  device: cpu
+  real_example_weight: 1.0
+  synthetic_example_weights: [0.5]
+  synthetic_reconstruction_weight: 1.0
+evaluate_full_data_reference: false
+selection:
+  split: valid
+  metric: rmse
+  lower_is_better: true
+output:
+  directory: results/condition_transfer_supervised_ae_tiny

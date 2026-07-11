@@ -1,0 +1,101 @@
+seed: 42
+seeds: [0, 1, 2, 3, 4]
+
+dataset:
+  path: data/processed/bh_clean_stress.csv
+
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+
+low_data:
+  enabled: true
+  train_fractions: [0.01, 0.05, 0.10, 0.20]
+
+features:
+  kind: reaction_role_concat
+  n_bits: 2048
+  radius: 2
+
+models:
+  - ridge
+  - name: xgboost
+    params: &xgboost_params
+      n_estimators: 300
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.9
+      colsample_bytree: 0.9
+      reg_lambda: 1.0
+      objective: reg:squarederror
+      n_jobs: -1
+      tree_method: hist
+
+metrics: [rmse, mae, r2, spearman]
+
+condition_transfer:
+  enabled: true
+  selection_model:
+    name: xgboost
+    params: *xgboost_params
+  donor_strategies: [random, high_yield_nearest, nearest_reaction]
+  label_strategies: [teacher_ensemble, uncertainty_filtered_teacher]
+  policy_pairs:
+    - {donor_strategy: random, label_strategy: teacher_ensemble}
+    - {donor_strategy: random, label_strategy: uncertainty_filtered_teacher}
+    - {donor_strategy: high_yield_nearest, label_strategy: teacher_ensemble}
+    - {donor_strategy: high_yield_nearest, label_strategy: uncertainty_filtered_teacher}
+    - {donor_strategy: nearest_reaction, label_strategy: uncertainty_filtered_teacher}
+  synthetic_multipliers: [0.5, 1.0]
+  n_neighbors: [5]
+  min_similarities: [null]
+  max_teacher_stds: [10.0, 15.0]
+  high_yield_threshold: 70.0
+  clip_y_min: 0.0
+  clip_y_max: 100.0
+  candidates_per_real: 10
+  teacher_models: [ridge, random_forest]
+
+supervised_autoencoder:
+  latent_dims: [16, 64]
+  hidden_dims: [1024, 256]
+  dropout: 0.1
+  reconstruction_weight: 1.0
+  yield_weight: 1.0
+  latent_l2_weight: 0.0
+  learning_rate: 0.001
+  weight_decay: 0.000001
+  batch_size: 32
+  max_epochs: 100
+  patience: 15
+  internal_valid_size: 0.2
+  device: auto
+  real_example_weight: 1.0
+  synthetic_example_weights: [0.25, 0.5, 1.0]
+  synthetic_reconstruction_weight: 1.0
+
+evaluate_full_data_reference: true
+
+selection:
+  split: valid
+  metric: rmse
+  lower_is_better: true
+
+output:
+  directory: results/condition_transfer_supervised_ae_xgboost
+  policy_metrics_path: results/condition_transfer_supervised_ae_xgboost/policy_metrics.csv
+  selected_hybrid_policies_path: results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policies.csv
+  selected_hybrid_policy_metrics_path: results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policy_metrics.csv
+  ae_training_audit_path: results/condition_transfer_supervised_ae_xgboost/ae_training_audit.csv
+  synthetic_training_audit_path: results/condition_transfer_supervised_ae_xgboost/synthetic_training_audit.csv
+  summary_path: results/condition_transfer_supervised_ae_xgboost/summary.csv
+  hybrid_vs_real_only_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_real_only_by_seed.csv
+  hybrid_vs_real_only_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_real_only_summary.csv
+  hybrid_vs_anonymous_transfer_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_anonymous_transfer_by_seed.csv
+  hybrid_vs_anonymous_transfer_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_anonymous_transfer_summary.csv
+  hybrid_vs_ae_only_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_ae_only_by_seed.csv
+  hybrid_vs_ae_only_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_ae_only_summary.csv
+  hybrid_vs_best_parent_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_best_parent_by_seed.csv
+  hybrid_vs_best_parent_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_best_parent_summary.csv

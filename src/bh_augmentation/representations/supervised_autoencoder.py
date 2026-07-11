@@ -61,6 +61,8 @@ def fit_supervised_autoencoder(
     X_valid: np.ndarray | None,
     y_valid: np.ndarray | None,
     config: SupervisedAEConfig,
+    sample_weight: np.ndarray | None = None,
+    reconstruction_sample_weight: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """Fit a supervised autoencoder and return model artifacts.
 
@@ -80,6 +82,12 @@ def fit_supervised_autoencoder(
         raise ValueError("X_train and y_train must contain the same number of rows.")
     if len(X_train_array) == 0:
         raise ValueError("Supervised autoencoder requires at least one training row.")
+    yield_weights = _validate_sample_weight(sample_weight, len(X_train_array), "sample_weight")
+    reconstruction_weights = _validate_sample_weight(
+        reconstruction_sample_weight,
+        len(X_train_array),
+        "reconstruction_sample_weight",
+    )
 
     has_valid = X_valid is not None and y_valid is not None and len(X_valid) > 0
     X_valid_array = _as_float32_matrix(X_valid) if has_valid else None
@@ -114,6 +122,8 @@ def fit_supervised_autoencoder(
     train_dataset = TensorDataset(
         torch.from_numpy(X_train_array),
         torch.from_numpy(y_train_scaled),
+        torch.from_numpy(yield_weights),
+        torch.from_numpy(reconstruction_weights),
     )
     generator = torch.Generator()
     generator.manual_seed(int(config.random_state))
@@ -139,12 +149,23 @@ def fit_supervised_autoencoder(
         model.train()
         train_totals = _empty_loss_totals()
         n_seen = 0
-        for batch_X, batch_y in train_loader:
+        for batch_X, batch_y, batch_yield_weight, batch_reconstruction_weight in train_loader:
             batch_X = batch_X.to(device)
             batch_y = batch_y.to(device)
+            batch_yield_weight = batch_yield_weight.to(device)
+            batch_reconstruction_weight = batch_reconstruction_weight.to(device)
             optimizer.zero_grad(set_to_none=True)
             z, x_reconstructed, y_pred_scaled = model(batch_X)
-            losses = _compute_losses(batch_X, batch_y, z, x_reconstructed, y_pred_scaled, config)
+            losses = _compute_losses(
+                batch_X,
+                batch_y,
+                z,
+                x_reconstructed,
+                y_pred_scaled,
+                config,
+                yield_sample_weight=batch_yield_weight,
+                reconstruction_sample_weight=batch_reconstruction_weight,
+            )
             losses["total_loss"].backward()
             optimizer.step()
 
@@ -194,6 +215,8 @@ def fit_supervised_autoencoder(
         "best_epoch": best_epoch,
         "config": asdict(config),
         "device": str(device),
+        "sample_weight_sum": float(yield_weights.sum()),
+        "reconstruction_sample_weight_sum": float(reconstruction_weights.sum()),
     }
 
 
@@ -263,9 +286,24 @@ def _compute_losses(
     x_reconstructed: torch.Tensor,
     y_pred_scaled: torch.Tensor,
     config: SupervisedAEConfig,
+    yield_sample_weight: torch.Tensor | None = None,
+    reconstruction_sample_weight: torch.Tensor | None = None,
 ) -> dict[str, torch.Tensor]:
-    reconstruction_loss = nn.functional.mse_loss(x_reconstructed, X)
-    yield_loss = nn.functional.mse_loss(y_pred_scaled, y_scaled)
+    reconstruction_per_example = nn.functional.mse_loss(
+        x_reconstructed,
+        X,
+        reduction="none",
+    ).mean(dim=1)
+    yield_per_example = nn.functional.mse_loss(
+        y_pred_scaled,
+        y_scaled,
+        reduction="none",
+    )
+    reconstruction_loss = _weighted_mean(
+        reconstruction_per_example,
+        reconstruction_sample_weight,
+    )
+    yield_loss = _weighted_mean(yield_per_example, yield_sample_weight)
     latent_l2 = z.pow(2).mean()
     total_loss = (
         float(config.reconstruction_weight) * reconstruction_loss
@@ -359,3 +397,26 @@ def _set_torch_seed(seed: int) -> None:
     torch.manual_seed(int(seed))
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(int(seed))
+
+
+def _weighted_mean(values: torch.Tensor, weights: torch.Tensor | None) -> torch.Tensor:
+    if weights is None:
+        return values.mean()
+    weights = weights.reshape(-1).to(device=values.device, dtype=values.dtype)
+    denominator = weights.sum().clamp_min(torch.finfo(values.dtype).eps)
+    return (values.reshape(-1) * weights).sum() / denominator
+
+
+def _validate_sample_weight(
+    values: np.ndarray | None,
+    n_rows: int,
+    name: str,
+) -> np.ndarray:
+    if values is None:
+        return np.ones(n_rows, dtype=np.float32)
+    array = np.asarray(values, dtype=np.float32).reshape(-1)
+    if len(array) != n_rows:
+        raise ValueError(f"{name} must contain one value per training row.")
+    if not np.isfinite(array).all() or (array < 0).any() or float(array.sum()) <= 0:
+        raise ValueError(f"{name} must be finite, non-negative, and have a positive sum.")
+    return np.ascontiguousarray(array)

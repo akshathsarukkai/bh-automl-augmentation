@@ -1,10 +1,10 @@
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
-
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from scipy.stats import spearmanr
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import train_test_split
 from xgboost import XGBRegressor
 
 from bh_augmentation.features.featurize import build_feature_matrix
@@ -105,11 +105,10 @@ if not full_path.exists():
     pd.DataFrame(rows).to_csv(full_path, index=False)
     print("Saved", full_path)
 
-# Read condition-transfer outputs
+# Read the matched anonymous condition-transfer outputs.
 ct_policy_parts = []
 for path in [
-    "results/condition_transfer_medium_xgboost/policy_metrics.csv",
-    "results/condition_transfer_20pct_xgboost/policy_metrics.csv",
+    "results/condition_transfer_matched_xgboost/policy_metrics.csv",
 ]:
     df = read_existing(path)
     if len(df):
@@ -117,8 +116,7 @@ for path in [
 
 ct_selected_parts = []
 for path in [
-    "results/condition_transfer_medium_xgboost/selected_policy_metrics.csv",
-    "results/condition_transfer_20pct_xgboost/selected_policy_metrics.csv",
+    "results/condition_transfer_matched_xgboost/selected_policy_metrics.csv",
 ]:
     df = read_existing(path)
     if len(df):
@@ -195,6 +193,43 @@ if ae_parts:
     )
     ae_best["method"] = "best_supervised_ae_or_interpolation"
 
+# Role-aware v2 is retained as an ablation, not substituted for anonymous transfer.
+role_aware = read_existing(
+    "results/role_aware_condition_transfer_v2_xgboost/selected_policy_metrics.csv"
+)
+role_aware_xgb = pd.DataFrame()
+if len(role_aware):
+    role_aware_xgb = wide_from_metrics(
+        role_aware[
+            (role_aware["representation"] == "role_aware_condition_transfer")
+            & (role_aware["model"] == "xgboost")
+        ],
+        ["seed", "train_fraction", "representation", "model"],
+    )
+    role_aware_xgb["method"] = "role_aware_condition_transfer_v2_ablation"
+
+# The hybrid runner reproduces its parent baselines on matched splits.
+hybrid_metrics = read_existing(
+    "results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policy_metrics.csv"
+)
+hybrid_policy_metrics = read_existing(
+    "results/condition_transfer_supervised_ae_xgboost/policy_metrics.csv"
+)
+hybrid_xgb = pd.DataFrame()
+if len(hybrid_metrics):
+    hybrid_xgb = wide_from_metrics(
+        hybrid_metrics[hybrid_metrics["downstream_model"] == "xgboost"],
+        [
+            "seed",
+            "train_fraction",
+            "representation",
+            "downstream_model",
+            "latent_dim",
+            "synthetic_example_weight",
+        ],
+    )
+    hybrid_xgb["method"] = "condition_transfer_supervised_ae_hybrid"
+
 # Full-data XGBoost summary
 full = pd.read_csv(full_path)
 full["metric"] = full["metric"].astype(str).str.strip()
@@ -204,6 +239,20 @@ full_wide = (
     .pivot_table(index=["method"], columns="metric", values="value", aggfunc="mean")
     .reset_index()
 )
+
+# Prefer the reference produced on exactly the same repository split as the hybrid.
+if len(hybrid_policy_metrics):
+    matched_full = hybrid_policy_metrics[
+        (hybrid_policy_metrics["representation"] == "full_data_original_6144")
+        & (hybrid_policy_metrics["downstream_model"] == "xgboost")
+        & (hybrid_policy_metrics["split"] == "test")
+    ]
+    if len(matched_full):
+        full_wide = (
+            matched_full.pivot_table(columns="metric", values="value", aggfunc="mean")
+            .reset_index(drop=True)
+            .assign(method="full_data_xgboost")
+        )
 
 rows = []
 
@@ -243,6 +292,30 @@ for frac in FRACTIONS:
             "rmse": r["rmse"],
             "r2": r["r2"],
             "spearman": r["spearman"],
+        })
+
+    sub = role_aware_xgb[np.isclose(role_aware_xgb["train_fraction"], frac)] if len(role_aware_xgb) else pd.DataFrame()
+    if len(sub):
+        rows.append({
+            "train_fraction": frac,
+            "method": "role_aware_condition_transfer_v2_ablation",
+            "details": "selected by valid RMSE",
+            "mae": sub["mae"].mean(),
+            "rmse": sub["rmse"].mean(),
+            "r2": sub["r2"].mean(),
+            "spearman": sub["spearman"].mean(),
+        })
+
+    sub = hybrid_xgb[np.isclose(hybrid_xgb["train_fraction"], frac)] if len(hybrid_xgb) else pd.DataFrame()
+    if len(sub):
+        rows.append({
+            "train_fraction": frac,
+            "method": "condition_transfer_supervised_ae_hybrid",
+            "details": "anonymous transfer selected first; hybrid selected by valid RMSE",
+            "mae": sub["mae"].mean(),
+            "rmse": sub["rmse"].mean(),
+            "r2": sub["r2"].mean(),
+            "spearman": sub["spearman"].mean(),
         })
 
     r = full_wide.iloc[0]
