@@ -30,6 +30,9 @@ dist/
 # Local logs and generated experiment outputs
 logs/
 results/
+!src/bh_augmentation/results/
+!src/bh_augmentation/results/__init__.py
+!src/bh_augmentation/results/status.py
 
 # Local datasets and generated data artifacts
 data/raw/*
