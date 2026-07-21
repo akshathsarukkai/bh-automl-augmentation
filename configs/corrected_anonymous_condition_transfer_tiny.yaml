@@ -1,0 +1,50 @@
+seed: 0
+seeds: [0]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions: [0.01]
+features:
+  kind: bh_role_separated
+  n_bits: 64
+  radius: 2
+  fingerprint_backend: rdkit
+models:
+  - name: xgboost
+    params:
+      n_estimators: 5
+      max_depth: 3
+      learning_rate: 0.1
+      n_jobs: -1
+      tree_method: hist
+metrics: [rmse, mae, r2, spearman]
+condition_transfer:
+  enabled: true
+  donor_strategies: [random]
+  label_strategies: [teacher_ensemble]
+  synthetic_multipliers: [0.5]
+  n_neighbors: [3]
+  min_similarities: [null]
+  max_teacher_stds: [null]
+  high_yield_threshold: 70.0
+  clip_y_min: 0.0
+  clip_y_max: 100.0
+  candidates_per_real: 2
+  teacher_models: [ridge]
+  donor_similarity_n_bits: 2048
+  donor_similarity_radius: 2
+  donor_similarity_backend: rdkit
+selection:
+  split: valid
+  metric: rmse
+  lower_is_better: true
+output:
+  directory: results/corrected_anonymous_condition_transfer_tiny

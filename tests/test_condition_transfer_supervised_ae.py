@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from bh_augmentation.features.compatibility import coordinate_feature_contract
 from bh_augmentation.representations.supervised_autoencoder import (
     SupervisedAEConfig,
     _compute_losses,
@@ -38,6 +39,7 @@ def test_combined_training_contains_real_and_synthetic_labels_and_weights() -> N
             real_example_weight=1.0,
             synthetic_example_weight=0.25,
             synthetic_reconstruction_weight=0.5,
+            **_compatibility_kwargs(4),
         )
     )
 
@@ -92,6 +94,7 @@ def test_internal_ae_validation_contains_real_rows_only() -> None:
         np.array([50.0, 60.0]),
         1.0,
         0.5,
+        **_compatibility_kwargs(4),
     )
 
     split = _make_weighted_internal_ae_split(
@@ -242,9 +245,10 @@ low_data:
   enabled: true
   train_fractions: [0.5]
 features:
-  kind: reaction_role_concat
+  kind: bh_role_separated
   n_bits: 8
   radius: 2
+  fingerprint_backend: hash
 models: [ridge]
 metrics: [rmse, mae, r2, spearman]
 condition_transfer:
@@ -273,3 +277,13 @@ evaluate_full_data_reference: false
 output:
   directory: {output_dir}
 """
+
+
+def _compatibility_kwargs(width: int) -> dict[str, object]:
+    names, metadata = coordinate_feature_contract("test_feature_space", width)
+    return {
+        "real_feature_names": names,
+        "synthetic_feature_names": names,
+        "real_feature_metadata": metadata,
+        "synthetic_feature_metadata": metadata,
+    }

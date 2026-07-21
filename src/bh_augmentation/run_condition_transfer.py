@@ -16,7 +16,12 @@ from bh_augmentation.augmentation.condition_transfer import (
 )
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.features.compatibility import assert_feature_compatibility
+from bh_augmentation.features.featurize import (
+    build_feature_matrix_with_metadata,
+    normalize_feature_config,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -36,17 +41,46 @@ from bh_augmentation.utils.seed import set_global_seed
 def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
     """Run real-only and condition-transfer augmentation policies."""
     config = load_config(config_path)
+    if config.get("corrected_revalidation", {}).get("enabled", False):
+        from bh_augmentation.corrected_condition_transfer import (
+            run_corrected_condition_transfer,
+        )
+
+        return run_corrected_condition_transfer(
+            config_path,
+            config,
+            transfer_kind="anonymous",
+            policy_factory=lambda current, seed, _role_counts: (
+                _iter_condition_transfer_policies(current, seed)
+            ),
+        )
     seeds = _resolve_seeds(config)
     metric_names = list(config.get("metrics", ["rmse", "mae", "r2", "spearman"]))
     _validate_metrics(metric_names)
 
     raw_df = load_reaction_csv(_get_dataset_path(config))
-    df = clean_buchwald_hartwig(raw_df)
+    df = ensure_reaction_role_columns(clean_buchwald_hartwig(raw_df), parse_if_missing=True)
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run condition transfer.")
 
-    feature_config = _resolve_feature_config(config.get("features", {}))
-    X, y, _ = build_feature_matrix(df, feature_config)
+    configured_features = {"kind": "bh_role_separated", **dict(config.get("features", {}))}
+    feature_config = normalize_feature_config(_resolve_feature_config(configured_features))
+    supported_kinds = {
+        "bh_role_separated",
+        "bh_role_separated_delta",
+        "reaction_section_concat",
+        "reaction_section_concat_delta",
+    }
+    if feature_config["kind"] not in supported_kinds:
+        raise ValueError(
+            "Anonymous condition transfer requires bh_role_separated features for "
+            "scientific runs, or an explicitly configured reaction_section_concat "
+            "legacy/development representation."
+        )
+    X, y, feature_names, feature_metadata = build_feature_matrix_with_metadata(
+        df,
+        feature_config,
+    )
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.float32)
     output_paths = _resolve_output_paths(config)
@@ -75,7 +109,7 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
                     seed=seed,
                     train_fraction=float(train_fraction),
                     n_real_train=n_real_train,
-                    representation="original_6144",
+                    representation=f"{feature_config['kind']}_real_only",
                     policy_metadata=_empty_policy_metadata(),
                     metric_names=metric_names,
                     policy_id=f"seed={seed}|frac={train_fraction}|real_only",
@@ -84,7 +118,15 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
 
             for policy_index, policy in enumerate(_iter_condition_transfer_policies(config, seed)):
                 policy_id = _policy_id(seed, float(train_fraction), policy_index, policy)
-                result = generate_condition_transfer_examples(train_df, X_train, y_train, policy)
+                result = generate_condition_transfer_examples(
+                    train_df,
+                    X_train,
+                    y_train,
+                    policy,
+                    feature_config=feature_config,
+                    real_feature_names=feature_names,
+                    real_feature_metadata=feature_metadata,
+                )
                 metadata = dict(result["metadata"])
                 metadata.update(
                     {
@@ -102,6 +144,14 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
                     X_augmented = X_train
                     y_augmented = y_train
                 else:
+                    assert_feature_compatibility(
+                        X_train,
+                        feature_names,
+                        result["X_synthetic"],
+                        result["feature_names"],
+                        real_metadata=feature_metadata,
+                        synthetic_metadata=result["feature_metadata"],
+                    )
                     X_synthetic = np.asarray(result["X_synthetic"], dtype=np.float32)
                     X_augmented = np.vstack([X_train, X_synthetic.astype(np.float32)])
                     y_augmented = np.concatenate([y_train, synthetic_y]).astype(float)
@@ -115,7 +165,7 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
                         seed=seed,
                         train_fraction=float(train_fraction),
                         n_real_train=n_real_train,
-                        representation="condition_transfer",
+                        representation=f"anonymous_condition_transfer_{feature_config['kind']}",
                         policy_metadata=metadata,
                         metric_names=metric_names,
                         policy_id=policy_id,
@@ -238,6 +288,11 @@ def _iter_condition_transfer_policies(
                     clip_y_max=float(transfer.get("clip_y_max", 100.0)),
                     candidates_per_real=int(transfer.get("candidates_per_real", 20)),
                     random_state=seed,
+                    donor_similarity_n_bits=int(transfer.get("donor_similarity_n_bits", 2048)),
+                    donor_similarity_radius=int(transfer.get("donor_similarity_radius", 2)),
+                    donor_similarity_backend=str(
+                        transfer.get("donor_similarity_backend", "auto")
+                    ),
                 )
             )
     return policies
@@ -249,7 +304,9 @@ def _select_policies(policy_metrics: pd.DataFrame, config: dict[str, Any]) -> pd
     metric = str(selection.get("metric", "rmse"))
     lower_is_better = bool(selection.get("lower_is_better", True))
     candidates = policy_metrics.loc[
-        (policy_metrics["representation"] == "condition_transfer")
+        policy_metrics["representation"].astype(str).str.startswith(
+            "anonymous_condition_transfer_"
+        )
         & (policy_metrics["split"] == split)
         & (policy_metrics["metric"] == metric)
     ].copy()
@@ -290,7 +347,7 @@ def _save_vs_original_rf(
     selected_test = selected_policy_metrics.loc[selected_policy_metrics["split"] == "test"].copy()
     baseline = policy_metrics.loc[
         (policy_metrics["split"] == "test")
-        & (policy_metrics["representation"] == "original_6144")
+        & policy_metrics["representation"].astype(str).str.endswith("_real_only")
         & (policy_metrics["model"] == "random_forest"),
         ["seed", "train_fraction", "metric", "value"],
     ].rename(columns={"value": "baseline_value"})
@@ -315,7 +372,7 @@ def _save_vs_real_only_same_model(
     selected_test = selected_policy_metrics.loc[selected_policy_metrics["split"] == "test"].copy()
     baseline = policy_metrics.loc[
         (policy_metrics["split"] == "test")
-        & (policy_metrics["representation"] == "original_6144"),
+        & policy_metrics["representation"].astype(str).str.endswith("_real_only"),
         ["seed", "train_fraction", "model", "metric", "value"],
     ].rename(columns={"value": "baseline_value"})
     by_seed = selected_test.merge(
@@ -348,7 +405,9 @@ def _summarize_for_reporting(
 ) -> pd.DataFrame:
     report_metrics = pd.concat(
         [
-            policy_metrics.loc[policy_metrics["representation"] == "original_6144"],
+            policy_metrics.loc[
+                policy_metrics["representation"].astype(str).str.endswith("_real_only")
+            ],
             selected_policy_metrics,
         ],
         ignore_index=True,
@@ -510,7 +569,7 @@ def _policy_id(
 
 def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
     output = config.get("output", {})
-    directory = Path(output.get("directory", "results/condition_transfer"))
+    directory = Path(output.get("directory", "results/condition_transfer_corrected"))
     return {
         "directory": directory,
         "policy_metrics_path": Path(output.get("policy_metrics_path", directory / "policy_metrics.csv")),

@@ -75,7 +75,7 @@ output:
     }
     assert set(metrics["train_fraction"]) == {1.0}
     assert set(metrics["split_method"]) == {"random"}
-    assert set(metrics["feature_kind"]) == {"reaction_role_concat"}
+    assert set(metrics["feature_kind"]) == {"reaction_section_concat"}
     assert set(metrics["n_features"]) == {48}
     assert set(metrics["split"]) == {"valid", "test"}
     assert (metrics["eval_augmented_rows"] == 0).all()

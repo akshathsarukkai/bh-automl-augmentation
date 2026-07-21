@@ -10,17 +10,28 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.data.reaction_roles import (
+    CANONICAL_ROLE_COLUMNS,
+    CANONICAL_ROLE_NAMES,
+    reaction_roles_from_row,
+)
+from bh_augmentation.features.compatibility import FeatureBlock, FeatureMetadata
+
 REACTION_FEATURE_KINDS = {
     "reaction_morgan_sum",
-    "reaction_role_concat",
-    "reaction_role_concat_delta",
-    "role_separated_conditions",
-    "role_separated_conditions_delta",
+    "reaction_section_concat",
+    "reaction_section_concat_delta",
+    "bh_role_separated",
+    "bh_role_separated_delta",
 }
 DEPRECATED_FEATURE_ALIASES = {
     "reaction_smiles": "reaction_morgan_sum",
-    "reaction_plus_components": "reaction_role_concat_delta",
-    "reaction_combined_redundant": "reaction_role_concat_delta",
+    "reaction_plus_components": "reaction_section_concat_delta",
+    "reaction_combined_redundant": "reaction_section_concat_delta",
+    "reaction_role_concat": "reaction_section_concat",
+    "reaction_role_concat_delta": "reaction_section_concat_delta",
+    "role_separated_conditions": "bh_role_separated",
+    "role_separated_conditions_delta": "bh_role_separated_delta",
 }
 REMOVED_FEATURE_KINDS = {"fp_concat", "fp_plus_conditions", "categorical_conditions"}
 
@@ -42,15 +53,7 @@ DICT_AGENT_KEYS = [
 DICT_PRODUCT_KEYS = ["product", "products"]
 _WARNED_HASH_FINGERPRINT_FALLBACK = False
 
-ROLE_SEPARATED_CONDITION_COLUMNS = [
-    "recovered_reactant_1_smiles",
-    "recovered_reactant_2_smiles",
-    "recovered_catalyst_smiles",
-    "recovered_ligand_smiles",
-    "recovered_base_smiles",
-    "recovered_solvent_or_additive_smiles",
-    "recovered_product_smiles",
-]
+ROLE_SEPARATED_CONDITION_COLUMNS = list(CANONICAL_ROLE_COLUMNS)
 
 
 def morgan_fingerprint(
@@ -58,6 +61,7 @@ def morgan_fingerprint(
     radius: int = 2,
     n_bits: int = 2048,
     warn_invalid: bool = True,
+    backend: str = "auto",
 ) -> np.ndarray:
     """Return a Morgan fingerprint bit vector for a SMILES string.
 
@@ -70,12 +74,19 @@ def morgan_fingerprint(
             warnings.warn("Invalid SMILES encountered; returning zero fingerprint.", stacklevel=2)
         return np.zeros(n_bits, dtype=np.float32)
 
+    resolved_backend = _resolve_fingerprint_backend(backend)
+    if resolved_backend == "hash":
+        if backend == "auto":
+            _warn_hash_fingerprint_fallback(warn_invalid)
+        return _hash_smiles_fingerprint(smiles, radius=radius, n_bits=n_bits)
+
     try:
         from rdkit import Chem, DataStructs
         from rdkit.Chem import AllChem
-    except ImportError:
-        _warn_hash_fingerprint_fallback(warn_invalid)
-        return _hash_smiles_fingerprint(smiles, radius=radius, n_bits=n_bits)
+    except ImportError as exc:
+        raise ImportError(
+            "The RDKit fingerprint backend was requested but RDKit is not installed."
+        ) from exc
 
     with _quiet_rdkit_errors(enabled=not warn_invalid):
         molecule = Chem.MolFromSmiles(smiles)
@@ -139,11 +150,17 @@ def reaction_smiles_fingerprint(
     radius: int = 2,
     n_bits: int = 2048,
     mode: str = "sum",
+    backend: str = "auto",
 ) -> np.ndarray:
     """Fingerprint a reaction string by splitting it into molecule SMILES."""
     parts = extract_reaction_parts(reaction_smiles)
     all_tokens = parts["reactants"] + parts["agents"] + parts["products"]
-    summed = _sum_morgan_fingerprints(all_tokens, radius=radius, n_bits=n_bits)
+    summed = _sum_morgan_fingerprints(
+        all_tokens,
+        radius=radius,
+        n_bits=n_bits,
+        backend=backend,
+    )
     if mode == "sum":
         return summed
     if mode in {"or", "binary_or"}:
@@ -228,6 +245,7 @@ def component_fingerprint_features(
     smiles_columns: Sequence[str],
     radius: int = 2,
     n_bits: int = 2048,
+    backend: str = "auto",
 ) -> np.ndarray:
     """Build legacy concatenated fingerprints for explicit component columns."""
     if not smiles_columns:
@@ -240,12 +258,23 @@ def component_fingerprint_features(
 
         if column == "reaction_smiles":
             fingerprints = [
-                reaction_smiles_fingerprint(smiles, radius=radius, n_bits=n_bits)
+                reaction_smiles_fingerprint(
+                    smiles,
+                    radius=radius,
+                    n_bits=n_bits,
+                    backend=backend,
+                )
                 for smiles in df[column].fillna("")
             ]
         else:
             fingerprints = [
-                morgan_fingerprint(smiles, radius=radius, n_bits=n_bits, warn_invalid=False)
+                morgan_fingerprint(
+                    smiles,
+                    radius=radius,
+                    n_bits=n_bits,
+                    warn_invalid=False,
+                    backend=backend,
+                )
                 for smiles in df[column].fillna("")
             ]
         column_features.append(np.vstack(fingerprints).astype(np.float32))
@@ -296,10 +325,12 @@ def build_feature_matrix(
     if "yield" not in df.columns:
         raise ValueError("Target column is required for feature matrix construction: yield")
 
-    categorical_columns = list(feature_config.get("categorical_columns", []))
-    radius = int(feature_config.get("radius", 2))
-    n_bits = int(feature_config.get("n_bits", 2048))
-    kind = canonical_feature_kind(feature_config.get("kind"))
+    resolved = normalize_feature_config(feature_config)
+    categorical_columns = list(resolved.get("categorical_columns", []))
+    radius = int(resolved["radius"])
+    n_bits = int(resolved["n_bits"])
+    kind = str(resolved["kind"])
+    backend = str(resolved["fingerprint_backend"])
 
     if kind in REACTION_FEATURE_KINDS:
         fingerprint_features, fingerprint_names = _reaction_feature_matrix(
@@ -307,6 +338,7 @@ def build_feature_matrix(
             kind=kind,
             radius=radius,
             n_bits=n_bits,
+            backend=backend,
         )
     else:
         smiles_columns = _resolve_smiles_columns(df, feature_config)
@@ -315,6 +347,7 @@ def build_feature_matrix(
             smiles_columns=smiles_columns,
             radius=radius,
             n_bits=n_bits,
+            backend=backend,
         )
         fingerprint_names = [
             f"{column}__morgan_{bit_index}"
@@ -331,6 +364,87 @@ def build_feature_matrix(
     y = pd.to_numeric(df["yield"], errors="coerce").to_numpy(dtype=np.float32)
     feature_names = fingerprint_names + condition_names
     return X, y, feature_names
+
+
+def build_feature_matrix_with_metadata(
+    df: pd.DataFrame,
+    feature_config: dict[str, Any],
+) -> tuple[np.ndarray, np.ndarray, list[str], FeatureMetadata]:
+    """Build features plus immutable scientific representation metadata."""
+    resolved = normalize_feature_config(feature_config)
+    X, y, names = build_feature_matrix(df, resolved)
+    metadata = feature_metadata(
+        resolved,
+        feature_names=names,
+        width=X.shape[1],
+    )
+    return X, y, names, metadata
+
+
+def normalize_feature_config(feature_config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize representation settings without inferring them from matrix width."""
+    resolved = dict(feature_config)
+    default_kind = "" if resolved.get("smiles_columns") else "reaction_section_concat"
+    resolved["kind"] = canonical_feature_kind(resolved.get("kind", default_kind))
+    resolved["n_bits"] = int(resolved.get("n_bits", 2048))
+    resolved["radius"] = int(resolved.get("radius", 2))
+    if resolved["n_bits"] < 1:
+        raise ValueError("features.n_bits must be at least 1.")
+    if resolved["radius"] < 0:
+        raise ValueError("features.radius must be non-negative.")
+    resolved["fingerprint_backend"] = _resolve_fingerprint_backend(
+        str(resolved.get("fingerprint_backend", "auto"))
+    )
+    resolved.setdefault("categorical_columns", [])
+    return resolved
+
+
+def feature_metadata(
+    feature_config: dict[str, Any],
+    *,
+    feature_names: Sequence[str],
+    width: int,
+) -> FeatureMetadata:
+    """Return block semantics for one already-built feature matrix."""
+    resolved = normalize_feature_config(feature_config)
+    kind = str(resolved["kind"])
+    n_bits = int(resolved["n_bits"])
+    block_names = (
+        _feature_block_names(kind)
+        if kind in REACTION_FEATURE_KINDS
+        else [f"smiles:{column}" for column in resolved.get("smiles_columns", [])]
+    )
+    blocks: tuple[FeatureBlock, ...] = tuple(
+        FeatureBlock(name=name, start=index * n_bits, stop=(index + 1) * n_bits)
+        for index, name in enumerate(block_names)
+    )
+    fingerprint_width = len(block_names) * n_bits
+    cursor = fingerprint_width
+    for column in resolved.get("categorical_columns", []):
+        prefix = f"{column}__"
+        block_width = sum(name.startswith(prefix) for name in feature_names[fingerprint_width:])
+        if block_width:
+            blocks = (*blocks, FeatureBlock(f"categorical:{column}", cursor, cursor + block_width))
+            cursor += block_width
+    if cursor != width:
+        raise ValueError(
+            "Feature metadata could not account for the complete matrix width: "
+            f"accounted={cursor}, actual={width}."
+        )
+    if len(feature_names) != width:
+        raise ValueError(
+            f"Feature-name count {len(feature_names)} does not match matrix width {width}."
+        )
+    role_ordering = CANONICAL_ROLE_NAMES if kind.startswith("bh_role_separated") else ()
+    return FeatureMetadata(
+        representation_kind=kind,
+        n_bits=n_bits,
+        radius=int(resolved["radius"]),
+        fingerprint_backend=str(resolved["fingerprint_backend"]),
+        role_ordering=tuple(role_ordering),
+        block_slices=blocks,
+        total_width=int(width),
+    )
 
 
 def canonical_feature_kind(kind: object) -> str:
@@ -358,20 +472,28 @@ def _reaction_feature_matrix(
     kind: str,
     radius: int,
     n_bits: int,
+    backend: str,
 ) -> tuple[np.ndarray, list[str]]:
-    if kind in {"role_separated_conditions", "role_separated_conditions_delta"}:
+    if kind in {"bh_role_separated", "bh_role_separated_delta"}:
         return _role_separated_condition_feature_matrix(
             df,
             kind=kind,
             radius=radius,
             n_bits=n_bits,
+            backend=backend,
         )
 
     if "reaction_smiles" not in df.columns:
         raise ValueError(f"Feature kind '{kind}' requires reaction_smiles.")
 
     rows = [
-        _reaction_feature_vector(value, kind=kind, radius=radius, n_bits=n_bits)
+        _reaction_feature_vector(
+            value,
+            kind=kind,
+            radius=radius,
+            n_bits=n_bits,
+            backend=backend,
+        )
         for value in df["reaction_smiles"].fillna("")
     ]
     width = _reaction_feature_width(kind, n_bits)
@@ -384,19 +506,20 @@ def _reaction_feature_vector(
     kind: str,
     radius: int,
     n_bits: int,
+    backend: str,
 ) -> np.ndarray:
     parts = extract_reaction_parts(value)
-    reactants = _sum_morgan_fingerprints(parts["reactants"], radius, n_bits)
-    agents = _sum_morgan_fingerprints(parts["agents"], radius, n_bits)
-    products = _sum_morgan_fingerprints(parts["products"], radius, n_bits)
+    reactants = _sum_morgan_fingerprints(parts["reactants"], radius, n_bits, backend)
+    agents = _sum_morgan_fingerprints(parts["agents"], radius, n_bits, backend)
+    products = _sum_morgan_fingerprints(parts["products"], radius, n_bits, backend)
     reaction_sum = reactants + agents + products
     delta = products - reactants
 
     if kind == "reaction_morgan_sum":
         return reaction_sum.astype(np.float32)
-    if kind == "reaction_role_concat":
+    if kind == "reaction_section_concat":
         return np.concatenate([reactants, agents, products]).astype(np.float32)
-    if kind == "reaction_role_concat_delta":
+    if kind == "reaction_section_concat_delta":
         return np.concatenate([reactants, agents, products, delta]).astype(np.float32)
     raise ValueError(f"Unknown reaction feature kind: {kind}")
 
@@ -406,10 +529,17 @@ def _role_separated_condition_feature_matrix(
     kind: str,
     radius: int,
     n_bits: int,
+    backend: str,
 ) -> tuple[np.ndarray, list[str]]:
     _validate_role_separated_condition_columns(df)
     rows = [
-        _role_separated_condition_feature_vector(row, kind=kind, radius=radius, n_bits=n_bits)
+        _role_separated_condition_feature_vector(
+            row,
+            kind=kind,
+            radius=radius,
+            n_bits=n_bits,
+            backend=backend,
+        )
         for _, row in df.iterrows()
     ]
     width = _reaction_feature_width(kind, n_bits)
@@ -422,23 +552,26 @@ def _role_separated_condition_feature_vector(
     kind: str,
     radius: int,
     n_bits: int,
+    backend: str,
 ) -> np.ndarray:
+    roles = reaction_roles_from_row(row)
     fingerprints = {
-        column: morgan_fingerprint(
-            row.get(column, ""),
+        role: morgan_fingerprint(
+            getattr(roles, role),
             radius=radius,
             n_bits=n_bits,
             warn_invalid=False,
+            backend=backend,
         )
-        for column in ROLE_SEPARATED_CONDITION_COLUMNS
+        for role in CANONICAL_ROLE_NAMES
     }
-    role_blocks = [fingerprints[column] for column in ROLE_SEPARATED_CONDITION_COLUMNS]
-    if kind == "role_separated_conditions":
+    role_blocks = [fingerprints[role] for role in CANONICAL_ROLE_NAMES]
+    if kind == "bh_role_separated":
         return np.concatenate(role_blocks).astype(np.float32)
-    if kind == "role_separated_conditions_delta":
-        product = fingerprints["recovered_product_smiles"]
-        reactant_1 = fingerprints["recovered_reactant_1_smiles"]
-        reactant_2 = fingerprints["recovered_reactant_2_smiles"]
+    if kind == "bh_role_separated_delta":
+        product = fingerprints["product"]
+        reactant_1 = fingerprints["reactant_1"]
+        reactant_2 = fingerprints["reactant_2"]
         reactant_pair = reactant_1 + reactant_2
         deltas = [
             product - reactant_1,
@@ -454,7 +587,7 @@ def _validate_role_separated_condition_columns(df: pd.DataFrame) -> None:
     if missing:
         missing_text = ", ".join(missing)
         raise ValueError(
-            "Feature kind 'role_separated_conditions' requires recovered condition "
+            "Feature kind 'bh_role_separated' requires recovered condition "
             f"columns, but these are missing: {missing_text}. Generate "
             "data/processed/bh_clean_stress_with_conditions.csv first with "
             "bh_condition_reader.py."
@@ -465,6 +598,7 @@ def _sum_morgan_fingerprints(
     smiles_tokens: Sequence[str],
     radius: int,
     n_bits: int,
+    backend: str = "auto",
 ) -> np.ndarray:
     summed = np.zeros(n_bits, dtype=np.float32)
     for smiles in smiles_tokens:
@@ -473,6 +607,7 @@ def _sum_morgan_fingerprints(
             radius=radius,
             n_bits=n_bits,
             warn_invalid=False,
+            backend=backend,
         )
     return summed
 
@@ -480,10 +615,10 @@ def _sum_morgan_fingerprints(
 def _reaction_feature_width(kind: str, n_bits: int) -> int:
     multipliers = {
         "reaction_morgan_sum": 1,
-        "reaction_role_concat": 3,
-        "reaction_role_concat_delta": 4,
-        "role_separated_conditions": 7,
-        "role_separated_conditions_delta": 10,
+        "reaction_section_concat": 3,
+        "reaction_section_concat_delta": 4,
+        "bh_role_separated": 7,
+        "bh_role_separated_delta": 10,
     }
     return multipliers[kind] * n_bits
 
@@ -491,22 +626,40 @@ def _reaction_feature_width(kind: str, n_bits: int) -> int:
 def _reaction_feature_names(kind: str, n_bits: int) -> list[str]:
     sections = {
         "reaction_morgan_sum": ["reaction_sum"],
-        "reaction_role_concat": ["reactants", "agents", "products"],
-        "reaction_role_concat_delta": [
+        "reaction_section_concat": ["reactant_section", "agent_section", "product_section"],
+        "reaction_section_concat_delta": [
             "reactants",
             "agents",
             "products",
             "delta_product_minus_reactant",
         ],
-        "role_separated_conditions": ROLE_SEPARATED_CONDITION_COLUMNS,
-        "role_separated_conditions_delta": [
-            *ROLE_SEPARATED_CONDITION_COLUMNS,
+        "bh_role_separated": list(CANONICAL_ROLE_NAMES),
+        "bh_role_separated_delta": [
+            *CANONICAL_ROLE_NAMES,
             "delta_product_minus_reactant_1",
             "delta_product_minus_reactant_2",
             "delta_product_minus_reactant_pair",
         ],
     }
-    return [f"{section}_{bit}" for section in sections[kind] for bit in range(n_bits)]
+    return [f"{section}__morgan_{bit}" for section in sections[kind] for bit in range(n_bits)]
+
+
+def _feature_block_names(kind: str) -> list[str]:
+    names = _reaction_feature_names(kind, 1)
+    return [name.removesuffix("__morgan_0") for name in names]
+
+
+def _resolve_fingerprint_backend(backend: str) -> str:
+    normalized = str(backend).strip().lower()
+    if normalized not in {"auto", "rdkit", "hash"}:
+        raise ValueError("fingerprint_backend must be one of: auto, rdkit, hash.")
+    if normalized != "auto":
+        return normalized
+    try:
+        import rdkit  # noqa: F401
+    except ImportError:
+        return "hash"
+    return "rdkit"
 
 
 def _fingerprint_width(column: str, n_bits: int) -> int:

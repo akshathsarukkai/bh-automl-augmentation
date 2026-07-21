@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Mapping, Sequence
 import ast
+from collections.abc import Mapping, Sequence
+from pathlib import Path
 
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
+
+from bh_augmentation.results.status import read_result_csv
 
 
 def save_metrics_csv(
@@ -105,7 +107,7 @@ def _discover_result_files(results_dir: Path) -> dict[str, Path]:
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
-    return pd.read_csv(path)
+    return read_result_csv(path)
 
 
 def _dataset_summary_lines(datasets: dict[str, pd.DataFrame]) -> list[str]:

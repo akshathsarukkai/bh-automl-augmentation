@@ -16,6 +16,10 @@ from bh_augmentation.augmentation.latent_interpolation import (
 )
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
+from bh_augmentation.features.compatibility import (
+    assert_feature_compatibility,
+    coordinate_feature_contract,
+)
 from bh_augmentation.features.featurize import build_feature_matrix
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
@@ -143,6 +147,18 @@ def run_supervised_ae_latent_interpolation(config_path: str | Path) -> dict[str,
                         z_augmented = z_train
                         y_augmented = y_train
                     else:
+                        latent_names, latent_metadata = coordinate_feature_contract(
+                            f"supervised_ae_latent_{latent_dim}",
+                            z_train.shape[1],
+                        )
+                        assert_feature_compatibility(
+                            z_train,
+                            latent_names,
+                            z_synthetic,
+                            latent_names,
+                            real_metadata=latent_metadata,
+                            synthetic_metadata=latent_metadata,
+                        )
                         z_augmented = np.vstack([z_train, z_synthetic]).astype(np.float32)
                         y_augmented = np.concatenate([y_train, y_synthetic]).astype(float)
 

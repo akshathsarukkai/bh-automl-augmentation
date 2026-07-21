@@ -10,24 +10,27 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from bh_augmentation.data.bh_condition_reader import (
-    parse_bh_reaction_smiles,
-    recover_condition_fields,
+from bh_augmentation.data.bh_condition_reader import recover_condition_fields
+from bh_augmentation.data.reaction_roles import (
+    CANONICAL_ROLE_COLUMNS,
+    ROLE_TO_COLUMN,
+    ReactionRoles,
+    reaction_roles_from_row,
+    reaction_roles_to_record,
 )
-from bh_augmentation.features.featurize import morgan_fingerprint
+from bh_augmentation.features.compatibility import (
+    FeatureMetadata,
+    assert_feature_compatibility,
+)
+from bh_augmentation.features.featurize import (
+    build_feature_matrix_with_metadata,
+    morgan_fingerprint,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
 
-ROLE_COLUMNS = {
-    "reactant_1": "recovered_reactant_1_smiles",
-    "reactant_2": "recovered_reactant_2_smiles",
-    "catalyst": "recovered_catalyst_smiles",
-    "ligand": "recovered_ligand_smiles",
-    "base": "recovered_base_smiles",
-    "solvent_or_additive": "recovered_solvent_or_additive_smiles",
-    "product": "recovered_product_smiles",
-}
+ROLE_COLUMNS = ROLE_TO_COLUMN
 CONDITION_ROLE_COLUMNS = [
     ROLE_COLUMNS["catalyst"],
     ROLE_COLUMNS["ligand"],
@@ -45,6 +48,7 @@ ROLE_TRANSFER_MODES = {
     "base_solvent_or_additive": ["base", "solvent_or_additive"],
     "catalyst_ligand_base": ["catalyst", "ligand", "base"],
     "ligand_base_solvent_or_additive": ["ligand", "base", "solvent_or_additive"],
+    "all_transferable_roles": ["catalyst", "ligand", "base", "solvent_or_additive"],
     "full_condition_block": ["catalyst", "ligand", "base", "solvent_or_additive"],
 }
 DONOR_STRATEGIES = {
@@ -65,7 +69,11 @@ LABEL_STRATEGIES = {
     "average_source_donor_label",
 }
 _TEACHER_MODEL_CACHE: dict[tuple[object, ...], list[Any]] = {}
-_SIMILARITY_MATRIX_CACHE: dict[tuple[object, ...], np.ndarray] = {}
+
+
+def clear_role_aware_teacher_cache() -> None:
+    """Discard fitted teachers before changing the real training subset."""
+    _TEACHER_MODEL_CACHE.clear()
 
 
 @dataclass
@@ -90,6 +98,9 @@ class RoleAwareConditionTransferConfig:
     n_unique_ligands: int = 0
     n_unique_bases: int = 0
     n_unique_solvents: int = 0
+    donor_similarity_n_bits: int = 256
+    donor_similarity_radius: int = 2
+    donor_similarity_backend: str = "auto"
 
 
 def build_role_transferred_reaction_smiles(
@@ -101,52 +112,38 @@ def build_role_transferred_reaction_smiles(
     if role_transfer_mode not in ROLE_TRANSFER_MODES:
         raise ValueError(f"Unknown role_transfer_mode: {role_transfer_mode}")
 
-    source = _row_mapping(source_row)
-    donor = _row_mapping(donor_row)
-    _validate_recovered_columns(source)
-    _validate_recovered_columns(donor)
+    source = reaction_roles_from_row(_row_mapping(source_row))
+    donor = reaction_roles_from_row(_row_mapping(donor_row))
     transferred_roles = set(ROLE_TRANSFER_MODES[role_transfer_mode])
-
-    synthetic = {
-        "synthetic_reactant_1_smiles": str(source[ROLE_COLUMNS["reactant_1"]]),
-        "synthetic_reactant_2_smiles": str(source[ROLE_COLUMNS["reactant_2"]]),
-        "synthetic_catalyst_smiles": str(
-            donor[ROLE_COLUMNS["catalyst"]]
-            if "catalyst" in transferred_roles
-            else source[ROLE_COLUMNS["catalyst"]]
-        ),
-        "synthetic_ligand_smiles": str(
-            donor[ROLE_COLUMNS["ligand"]]
-            if "ligand" in transferred_roles
-            else source[ROLE_COLUMNS["ligand"]]
-        ),
-        "synthetic_base_smiles": str(
-            donor[ROLE_COLUMNS["base"]]
-            if "base" in transferred_roles
-            else source[ROLE_COLUMNS["base"]]
-        ),
-        "synthetic_solvent_or_additive_smiles": str(
-            donor[ROLE_COLUMNS["solvent_or_additive"]]
+    roles = ReactionRoles(
+        reactant_1=source.reactant_1,
+        reactant_2=source.reactant_2,
+        catalyst=donor.catalyst if "catalyst" in transferred_roles else source.catalyst,
+        ligand=donor.ligand if "ligand" in transferred_roles else source.ligand,
+        base=donor.base if "base" in transferred_roles else source.base,
+        solvent_or_additive=(
+            donor.solvent_or_additive
             if "solvent_or_additive" in transferred_roles
-            else source[ROLE_COLUMNS["solvent_or_additive"]]
+            else source.solvent_or_additive
         ),
-        "synthetic_product_smiles": str(source[ROLE_COLUMNS["product"]]),
+        product=source.product,
+    )
+    synthetic = {
+        "synthetic_reactant_1_smiles": roles.reactant_1,
+        "synthetic_reactant_2_smiles": roles.reactant_2,
+        "synthetic_catalyst_smiles": roles.catalyst,
+        "synthetic_ligand_smiles": roles.ligand,
+        "synthetic_base_smiles": roles.base,
+        "synthetic_solvent_or_additive_smiles": roles.solvent_or_additive,
+        "synthetic_product_smiles": roles.product,
+        "synthetic_reaction_smiles": roles.reaction_smiles(),
+        "reaction_roles": roles,
+        **reaction_roles_to_record(roles),
     }
-    synthetic["synthetic_reaction_smiles"] = (
-        f"{synthetic['synthetic_reactant_1_smiles']}."
-        f"{synthetic['synthetic_reactant_2_smiles']}."
-        f"{synthetic['synthetic_catalyst_smiles']}."
-        f"{synthetic['synthetic_ligand_smiles']}."
-        f"{synthetic['synthetic_base_smiles']}."
-        f"{synthetic['synthetic_solvent_or_additive_smiles']}>>"
-        f"{synthetic['synthetic_product_smiles']}"
-    )
-    synthetic["changed_catalyst"] = synthetic["synthetic_catalyst_smiles"] != str(source[ROLE_COLUMNS["catalyst"]])
-    synthetic["changed_ligand"] = synthetic["synthetic_ligand_smiles"] != str(source[ROLE_COLUMNS["ligand"]])
-    synthetic["changed_base"] = synthetic["synthetic_base_smiles"] != str(source[ROLE_COLUMNS["base"]])
-    synthetic["changed_solvent_or_additive"] = synthetic["synthetic_solvent_or_additive_smiles"] != str(
-        source[ROLE_COLUMNS["solvent_or_additive"]]
-    )
+    synthetic["changed_catalyst"] = roles.catalyst != source.catalyst
+    synthetic["changed_ligand"] = roles.ligand != source.ligand
+    synthetic["changed_base"] = roles.base != source.base
+    synthetic["changed_solvent_or_additive"] = roles.solvent_or_additive != source.solvent_or_additive
     return synthetic
 
 
@@ -155,6 +152,10 @@ def generate_role_aware_condition_transfer_examples(
     X_train: np.ndarray,
     y_train: np.ndarray,
     config: RoleAwareConditionTransferConfig,
+    *,
+    feature_config: dict[str, Any],
+    real_feature_names: list[str],
+    real_feature_metadata: FeatureMetadata,
 ) -> dict[str, Any]:
     """Generate role-aware synthetic reactions using only training rows."""
     _validate_config(config)
@@ -170,12 +171,27 @@ def generate_role_aware_condition_transfer_examples(
     if target_count == 0 or n_real_train < 2:
         candidate_df = _empty_candidate_df()
         metadata = _metadata_from_candidates(candidate_df, train, config)
-        return _package_result(_empty_synthetic_df(), np.empty(0), metadata, candidate_df, np.empty((0, X_train_array.shape[1])))
+        return _package_result(
+            _empty_synthetic_df(), np.empty(0), metadata, candidate_df,
+            np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
+        )
 
     rng = np.random.default_rng(config.random_state)
     effective_mode = _effective_role_transfer_mode(config)
-    substrate_similarity = _role_similarity_matrix(train, ["reactant_1", "reactant_2", "product"])
-    condition_similarity = _role_similarity_matrix(train, ["catalyst", "ligand", "base", "solvent_or_additive"])
+    substrate_similarity = _role_similarity_matrix(
+        train,
+        ["reactant_1", "reactant_2", "product"],
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
+    condition_similarity = _role_similarity_matrix(
+        train,
+        ["catalyst", "ligand", "base", "solvent_or_additive"],
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
     role_values = {
         role: train[ROLE_COLUMNS[role]].astype(str).to_numpy()
         for role in ["catalyst", "ligand", "base", "solvent_or_additive"]
@@ -262,9 +278,24 @@ def generate_role_aware_condition_transfer_examples(
             n_same_context_donors_found=n_same_context_donors_found,
             n_role_changed_candidates_found=n_role_changed_candidates_found,
         )
-        return _package_result(_empty_synthetic_df(), np.empty(0), metadata, candidate_df, np.empty((0, X_train_array.shape[1])))
+        return _package_result(
+            _empty_synthetic_df(), np.empty(0), metadata, candidate_df,
+            np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
+        )
 
-    X_synthetic = _featurize_synthetic(candidate_df, X_train_array)
+    feature_frame = candidate_df.copy()
+    feature_frame["yield"] = 0.0
+    X_synthetic, _, synthetic_feature_names, synthetic_feature_metadata = (
+        build_feature_matrix_with_metadata(feature_frame, feature_config)
+    )
+    assert_feature_compatibility(
+        X_train_array,
+        real_feature_names,
+        X_synthetic,
+        synthetic_feature_names,
+        real_metadata=real_feature_metadata,
+        synthetic_metadata=synthetic_feature_metadata,
+    )
     teacher_mean, teacher_std, teachers_used = _teacher_predictions(X_train_array, y_train_array, X_synthetic, config)
     candidate_df["teacher_mean"] = teacher_mean
     candidate_df["teacher_std"] = teacher_std
@@ -298,6 +329,8 @@ def generate_role_aware_condition_transfer_examples(
         metadata,
         candidate_df,
         X_synthetic[candidate_df["kept"].to_numpy(dtype=bool)].astype(np.float32),
+        synthetic_feature_names,
+        synthetic_feature_metadata,
     )
 
 
@@ -474,29 +507,51 @@ def _filter_role_changed(
     ]
 
 
-def _role_similarity_matrix(train: pd.DataFrame, roles: list[str]) -> np.ndarray:
-    key = (
-        tuple(roles),
-        tuple(
-            tuple(train[ROLE_COLUMNS[role]].astype(str).tolist())
-            for role in roles
-        ),
-    )
-    if key in _SIMILARITY_MATRIX_CACHE:
-        return _SIMILARITY_MATRIX_CACHE[key].copy()
+def _role_similarity_matrix(
+    train: pd.DataFrame,
+    roles: list[str],
+    *,
+    n_bits: int,
+    radius: int,
+    backend: str,
+) -> np.ndarray:
+    """Preserve the legacy donor geometry: sum role fingerprints, then cosine.
 
+    This helper is intentionally separate from scientific model featurization.
+    Defaults in ``RoleAwareConditionTransferConfig`` retain the historical
+    radius-2, 256-bit summed-role donor ranking behavior.
+    """
     vectors = []
     for _, row in train.iterrows():
-        fingerprint = np.zeros(256, dtype=np.float32)
+        fingerprint = np.zeros(n_bits, dtype=np.float32)
         for role in roles:
-            fingerprint += _cached_morgan_fingerprint(str(row[ROLE_COLUMNS[role]]), 2, 256)
+            fingerprint += _cached_similarity_fingerprint(
+                str(row[ROLE_COLUMNS[role]]),
+                radius,
+                n_bits,
+                backend,
+            )
         vectors.append(fingerprint)
     matrix = np.vstack(vectors).astype(np.float32)
     norms = np.linalg.norm(matrix, axis=1, keepdims=True)
     normalized = np.divide(matrix, norms, out=np.zeros_like(matrix), where=norms > 0)
-    similarity = normalized @ normalized.T
-    _SIMILARITY_MATRIX_CACHE[key] = similarity
-    return similarity.copy()
+    return normalized @ normalized.T
+
+
+@lru_cache(maxsize=8192)
+def _cached_similarity_fingerprint(
+    smiles: str,
+    radius: int,
+    n_bits: int,
+    backend: str,
+) -> np.ndarray:
+    return morgan_fingerprint(
+        smiles,
+        radius=radius,
+        n_bits=n_bits,
+        warn_invalid=False,
+        backend=backend,
+    )
 
 
 def _context_values(train: pd.DataFrame) -> dict[str, np.ndarray]:
@@ -584,44 +639,6 @@ def _acceptance_mask(
     return accepted
 
 
-def _featurize_synthetic(candidate_df: pd.DataFrame, X_train: np.ndarray) -> np.ndarray:
-    n_bits = _infer_n_bits(X_train)
-    vectors = [
-        _reaction_role_concat_vector(str(value), n_bits=n_bits)
-        for value in candidate_df["reaction_smiles"].astype(str)
-    ]
-    return np.vstack(vectors).astype(np.float32) if vectors else np.empty((0, X_train.shape[1]), dtype=np.float32)
-
-
-def _reaction_role_concat_vector(reaction_smiles: str, n_bits: int) -> np.ndarray:
-    parsed = parse_bh_reaction_smiles(reaction_smiles)
-    if parsed is None or parsed.get("condition_parse_status") != "ok":
-        return np.zeros(3 * n_bits, dtype=np.float32)
-    reactants = (
-        _cached_morgan_fingerprint(str(parsed["parsed_reactant_1_smiles"]), 2, n_bits)
-        + _cached_morgan_fingerprint(str(parsed["parsed_reactant_2_smiles"]), 2, n_bits)
-    )
-    agents = (
-        _cached_morgan_fingerprint(str(parsed["parsed_catalyst_smiles"]), 2, n_bits)
-        + _cached_morgan_fingerprint(str(parsed["parsed_ligand_smiles"]), 2, n_bits)
-        + _cached_morgan_fingerprint(str(parsed["parsed_base_smiles"]), 2, n_bits)
-        + _cached_morgan_fingerprint(str(parsed["parsed_solvent_or_additive_smiles"]), 2, n_bits)
-    )
-    products = _cached_morgan_fingerprint(str(parsed["parsed_product_smiles"]), 2, n_bits)
-    return np.concatenate([reactants, agents, products]).astype(np.float32)
-
-
-@lru_cache(maxsize=8192)
-def _cached_morgan_fingerprint(smiles: str, radius: int, n_bits: int) -> np.ndarray:
-    return morgan_fingerprint(smiles, radius=radius, n_bits=n_bits, warn_invalid=False)
-
-
-def _infer_n_bits(X_train: np.ndarray) -> int:
-    if X_train.shape[1] % 3 != 0:
-        raise ValueError("Role-aware condition transfer currently expects reaction_role_concat features.")
-    return int(X_train.shape[1] // 3)
-
-
 def _metadata_from_candidates(
     candidate_df: pd.DataFrame,
     train: pd.DataFrame,
@@ -692,6 +709,8 @@ def _package_result(
     metadata: dict[str, Any],
     candidate_df: pd.DataFrame,
     X_synthetic: np.ndarray,
+    feature_names: list[str],
+    feature_metadata: FeatureMetadata,
 ) -> dict[str, Any]:
     return {
         "synthetic_df": synthetic_df,
@@ -699,6 +718,8 @@ def _package_result(
         "metadata": metadata,
         "candidate_df": candidate_df,
         "X_synthetic": X_synthetic,
+        "feature_names": list(feature_names),
+        "feature_metadata": feature_metadata,
     }
 
 
@@ -725,6 +746,7 @@ def _synthetic_columns() -> list[str]:
         "changed_ligand",
         "changed_base",
         "changed_solvent_or_additive",
+        *CANONICAL_ROLE_COLUMNS,
     ]
 
 
@@ -751,12 +773,6 @@ def _validate_training_frame(df: pd.DataFrame) -> None:
     missing = [column for column in [*ROLE_COLUMNS.values(), "reaction_smiles"] if column not in df.columns]
     if missing:
         raise ValueError(f"Missing recovered role columns for role-aware condition transfer: {missing}")
-
-
-def _validate_recovered_columns(row: dict[str, Any]) -> None:
-    missing = [column for column in ROLE_COLUMNS.values() if column not in row]
-    if missing:
-        raise ValueError(f"Missing recovered role columns for role-aware transfer: {missing}")
 
 
 def _row_mapping(row: pd.Series | dict[str, Any]) -> dict[str, Any]:

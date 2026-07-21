@@ -10,11 +10,37 @@ import pandas as pd
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     build_condition_transfer_reaction,
-    generate_condition_transfer_examples,
     parse_condition_transfer_reaction,
 )
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.augmentation.condition_transfer import (
+    generate_condition_transfer_examples as _generate_condition_transfer_examples,
+)
+from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.features.featurize import (
+    build_feature_matrix as _build_feature_matrix,
+)
+from bh_augmentation.features.featurize import (
+    build_feature_matrix_with_metadata,
+)
 from bh_augmentation.run_condition_transfer import run_condition_transfer
+
+
+def build_feature_matrix(df: pd.DataFrame, config: dict[str, object]):
+    return _build_feature_matrix(ensure_reaction_role_columns(df), config)
+
+
+def generate_condition_transfer_examples(df, X, y, config):
+    enriched = ensure_reaction_role_columns(df)
+    _, _, names, metadata = build_feature_matrix_with_metadata(enriched, _feature_config())
+    return _generate_condition_transfer_examples(
+        enriched,
+        X,
+        y,
+        config,
+        feature_config=_feature_config(),
+        real_feature_names=names,
+        real_feature_metadata=metadata,
+    )
 
 
 def test_parse_condition_transfer_reaction_sections() -> None:
@@ -159,7 +185,7 @@ def test_condition_transfer_filtering_clips_and_removes_existing_duplicates() ->
     train = pd.DataFrame(
         {
             "reaction_id": ["r1", "r2"],
-            "reaction_smiles": ["A.B.C>>P", "A.B.D>>P"],
+            "reaction_smiles": ["A.B.C.D.E.F>>P", "A.B.G.H.I.J>>P"],
             "yield": [-20.0, 140.0],
         }
     )
@@ -203,9 +229,10 @@ low_data:
   enabled: true
   train_fractions: [0.5]
 features:
-  kind: reaction_role_concat
+  kind: bh_role_separated
   n_bits: 8
   radius: 2
+  fingerprint_backend: hash
 models:
   - ridge
   - name: random_forest
@@ -255,8 +282,10 @@ output:
     audit = pd.read_csv(paths["synthetic_audit_path"])
     assert paths["selected_policies_path"].exists()
     assert paths["summary_path"].exists()
-    assert "original_6144" in set(policy_metrics["representation"])
-    assert "condition_transfer" in set(policy_metrics["representation"])
+    assert "bh_role_separated_real_only" in set(policy_metrics["representation"])
+    assert "anonymous_condition_transfer_bh_role_separated" in set(
+        policy_metrics["representation"]
+    )
     assert set(policy_metrics["split"]) == {"valid", "test"}
     assert set(selected["split"]) == {"valid", "test"}
     assert not audit["used_validation_or_test_parents"].any()
@@ -264,7 +293,7 @@ output:
 
 
 def _feature_config() -> dict[str, object]:
-    return {"kind": "reaction_role_concat", "n_bits": 8, "radius": 2}
+    return {"kind": "bh_role_separated", "n_bits": 8, "radius": 2, "fingerprint_backend": "hash"}
 
 
 def _config(
@@ -293,12 +322,12 @@ def _config(
 
 def _tiny_train_df(n_rows: int = 6) -> pd.DataFrame:
     base = [
-        ("r1", "CCBr.N.O.Cl>>CCN", 20.0),
-        ("r2", "CCCl.N.Br.C>>CCN", 85.0),
-        ("r3", "CCCBr.N.O.C>>CCCN", 75.0),
-        ("r4", "CCCCl.N.Br.O>>CCCN", 35.0),
-        ("r5", "CCBr.CN.O.C>>CCNC", 90.0),
-        ("r6", "CCCl.CN.Br.Cl>>CCNC", 45.0),
+        ("r1", "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN", 20.0),
+        ("r2", "CCCl.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCN", 85.0),
+        ("r3", "CCCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCOC>>CCCN", 75.0),
+        ("r4", "CCCCl.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCO>>CCCN", 35.0),
+        ("r5", "CCBr.CN.[Pd].P(C)(C)C.N1CCCCC1.CCCO>>CCNC", 90.0),
+        ("r6", "CCCl.CN.[Pd].P(CC)(CC)CC.N(C)(C)C.CCOC>>CCNC", 45.0),
     ]
     rows = [base[index % len(base)] for index in range(n_rows)]
     return pd.DataFrame(
@@ -308,4 +337,3 @@ def _tiny_train_df(n_rows: int = 6) -> pd.DataFrame:
             "yield": [float((yield_value + index) % 101) for index, (_, _, yield_value) in enumerate(rows)],
         }
     )
-

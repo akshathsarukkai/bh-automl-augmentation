@@ -18,10 +18,16 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
 from bh_augmentation.data.bh_condition_reader import RECOVERED_COLUMNS, augment_bh_dataframe
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.features.compatibility import assert_feature_compatibility
+from bh_augmentation.features.featurize import (
+    build_feature_matrix_with_metadata,
+    normalize_feature_config,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
+from bh_augmentation.results.status import assert_result_directory_allowed
 from bh_augmentation.run_supervised_ae_latent_baseline import (
     _compute_metric,
     _create_split_variants,
@@ -37,10 +43,22 @@ from bh_augmentation.utils.seed import set_global_seed
 def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path]:
     """Run role-aware condition-transfer policies and save reports."""
     config = load_config(config_path)
+    if config.get("corrected_revalidation", {}).get("enabled", False):
+        from bh_augmentation.corrected_condition_transfer import (
+            run_corrected_condition_transfer,
+        )
+
+        return run_corrected_condition_transfer(
+            config_path,
+            config,
+            transfer_kind="role_aware",
+            policy_factory=_iter_role_transfer_policies,
+        )
     seeds = _resolve_seeds(config)
     metric_names = list(config.get("metrics", ["rmse", "mae", "r2", "spearman"]))
     _validate_metrics(metric_names)
     output_paths = _resolve_output_paths(config)
+    assert_result_directory_allowed(output_paths["directory"])
     output_paths["directory"].mkdir(parents=True, exist_ok=True)
 
     raw_df = load_reaction_csv(_get_dataset_path(config))
@@ -58,9 +76,18 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
     if invariant_roles:
         print(f"Invariant roles excluded by default: {', '.join(sorted(invariant_roles))}")
 
-    feature_config = {"kind": "reaction_role_concat", **dict(config.get("features", {}))}
-    feature_config["kind"] = "reaction_role_concat"
-    X, y, _ = build_feature_matrix(df, feature_config)
+    feature_config = normalize_feature_config(
+        {"kind": "bh_role_separated", **dict(config.get("features", {}))}
+    )
+    if feature_config["kind"] not in {"bh_role_separated", "bh_role_separated_delta"}:
+        raise ValueError(
+            "Corrected role-aware condition transfer requires bh_role_separated "
+            "features; a three-section representation is not role-aware."
+        )
+    X, y, feature_names, feature_metadata = build_feature_matrix_with_metadata(
+        df,
+        feature_config,
+    )
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.float32)
 
@@ -87,7 +114,7 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
                     seed=seed,
                     train_fraction=float(train_fraction),
                     n_real_train=n_real_train,
-                    representation="original_6144",
+                    representation="bh_role_separated_real_only",
                     policy_metadata=_empty_policy_metadata(),
                     metric_names=metric_names,
                     policy_id=f"seed={seed}|frac={train_fraction}|real_only",
@@ -96,7 +123,15 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
 
             for policy_index, policy in enumerate(_iter_role_transfer_policies(config, seed, role_value_counts)):
                 policy_id = _policy_id(seed, float(train_fraction), policy_index, policy)
-                result = generate_role_aware_condition_transfer_examples(train_df, X_train, y_train, policy)
+                result = generate_role_aware_condition_transfer_examples(
+                    train_df,
+                    X_train,
+                    y_train,
+                    policy,
+                    feature_config=feature_config,
+                    real_feature_names=feature_names,
+                    real_feature_metadata=feature_metadata,
+                )
                 metadata = dict(result["metadata"])
                 metadata.update(
                     {
@@ -113,6 +148,14 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
                     X_augmented = X_train
                     y_augmented = y_train
                 else:
+                    assert_feature_compatibility(
+                        X_train,
+                        feature_names,
+                        result["X_synthetic"],
+                        result["feature_names"],
+                        real_metadata=feature_metadata,
+                        synthetic_metadata=result["feature_metadata"],
+                    )
                     X_augmented = np.vstack([X_train, np.asarray(result["X_synthetic"], dtype=np.float32)])
                     y_augmented = np.concatenate([y_train, np.asarray(result["synthetic_y"], dtype=float)])
 
@@ -125,7 +168,7 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
                         seed=seed,
                         train_fraction=float(train_fraction),
                         n_real_train=n_real_train,
-                        representation="role_aware_condition_transfer",
+                        representation="bh_role_separated_condition_transfer",
                         policy_metadata=metadata,
                         metric_names=metric_names,
                         policy_id=policy_id,
@@ -168,7 +211,10 @@ def _prepare_condition_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     excluded = int((~mask).sum())
     if excluded:
         print(f"Excluded {excluded} rows with invalid condition-role parsing.")
-    return df.loc[mask].reset_index(drop=True)
+    return ensure_reaction_role_columns(
+        df.loc[mask].reset_index(drop=True),
+        parse_if_missing=False,
+    )
 
 
 def _role_value_counts(df: pd.DataFrame) -> pd.DataFrame:
@@ -283,6 +329,11 @@ def _iter_role_transfer_policies(
                     n_unique_ligands=int(role_count_map.get("ligand", 0)),
                     n_unique_bases=int(role_count_map.get("base", 0)),
                     n_unique_solvents=int(role_count_map.get("solvent_or_additive", 0)),
+                    donor_similarity_n_bits=int(transfer.get("donor_similarity_n_bits", 256)),
+                    donor_similarity_radius=int(transfer.get("donor_similarity_radius", 2)),
+                    donor_similarity_backend=str(
+                        transfer.get("donor_similarity_backend", "auto")
+                    ),
                 )
             )
     max_policies = transfer.get("max_policies")
@@ -331,7 +382,7 @@ def _select_policies(policy_metrics: pd.DataFrame, config: dict[str, Any]) -> pd
         )
     )
     candidates = policy_metrics.loc[
-        (policy_metrics["representation"] == "role_aware_condition_transfer")
+        (policy_metrics["representation"] == "bh_role_separated_condition_transfer")
         & (policy_metrics["split"] == split)
         & (policy_metrics["metric"] == metric)
     ].copy()
@@ -341,7 +392,7 @@ def _select_policies(policy_metrics: pd.DataFrame, config: dict[str, Any]) -> pd
     selected = candidates.groupby(["seed", "train_fraction", "model"], dropna=False, as_index=False).head(1)
 
     baseline = policy_metrics.loc[
-        (policy_metrics["representation"] == "original_6144")
+        (policy_metrics["representation"] == "bh_role_separated_real_only")
         & (policy_metrics["split"] == split)
         & (policy_metrics["metric"] == metric)
     ].copy()
@@ -384,7 +435,9 @@ def _mark_selected_policy_metrics(policy_metrics: pd.DataFrame, selected_policie
 def _summarize(policy_metrics: pd.DataFrame, selected_policy_metrics: pd.DataFrame) -> pd.DataFrame:
     report_metrics = pd.concat(
         [
-            policy_metrics.loc[policy_metrics["representation"] == "original_6144"],
+            policy_metrics.loc[
+                policy_metrics["representation"] == "bh_role_separated_real_only"
+            ],
             selected_policy_metrics,
         ],
         ignore_index=True,
@@ -410,7 +463,8 @@ def _save_vs_real_only_same_model(
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     selected_test = selected_policy_metrics.loc[selected_policy_metrics["split"] == "test"].copy()
     baseline = policy_metrics.loc[
-        (policy_metrics["split"] == "test") & (policy_metrics["representation"] == "original_6144"),
+        (policy_metrics["split"] == "test")
+        & (policy_metrics["representation"] == "bh_role_separated_real_only"),
         ["seed", "train_fraction", "model", "metric", "value"],
     ].rename(columns={"value": "baseline_value"})
     by_seed = selected_test.merge(baseline, on=["seed", "train_fraction", "model", "metric"], how="left")
@@ -430,7 +484,7 @@ def _save_vs_original_rf(
     selected_test = selected_policy_metrics.loc[selected_policy_metrics["split"] == "test"].copy()
     baseline = policy_metrics.loc[
         (policy_metrics["split"] == "test")
-        & (policy_metrics["representation"] == "original_6144")
+        & (policy_metrics["representation"] == "bh_role_separated_real_only")
         & (policy_metrics["model"] == "random_forest"),
         ["seed", "train_fraction", "metric", "value"],
     ].rename(columns={"value": "baseline_value"})
@@ -587,7 +641,9 @@ def _policy_id(seed: int, train_fraction: float, policy_index: int, policy: Role
 
 def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
     output = config.get("output", {})
-    directory = Path(output.get("directory", "results/role_aware_condition_transfer"))
+    directory = Path(
+        output.get("directory", "results/bh_role_separated_condition_transfer_corrected")
+    )
     return {
         "directory": directory,
         "policy_metrics_path": Path(output.get("policy_metrics_path", directory / "policy_metrics.csv")),

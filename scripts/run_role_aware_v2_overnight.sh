@@ -6,6 +6,18 @@ cd "$(dirname "$0")/.."
 STAMP="$(date +%Y%m%d_%H%M%S)"
 OUT="results/role_aware_condition_transfer_v2_xgboost"
 CONFIG="configs/role_aware_condition_transfer_v2_xgboost.yaml"
+ALLOW_INVALID_RESULTS="${ALLOW_INVALID_RESULTS:-false}"
+
+python - "$OUT" "$ALLOW_INVALID_RESULTS" <<'PY'
+import sys
+
+from bh_augmentation.results.status import assert_result_directory_allowed
+
+assert_result_directory_allowed(
+    sys.argv[1],
+    allow_invalid=sys.argv[2].lower() == "true",
+)
+PY
 
 echo "============================================================"
 echo "ROLE-AWARE CONDITION TRANSFER V2 OVERNIGHT RUN"

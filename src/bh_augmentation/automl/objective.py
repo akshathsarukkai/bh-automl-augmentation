@@ -5,14 +5,13 @@ from __future__ import annotations
 import warnings
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from bh_augmentation.augmentation.order_permutation import permute_reaction_components
 from bh_augmentation.augmentation.smiles_randomization import augment_randomized_smiles
 from bh_augmentation.evaluation.metrics import rmse
 from bh_augmentation.evaluation.topk import top_k_hit_rate
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.features.featurize import build_feature_matrix, canonical_feature_kind
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -20,8 +19,8 @@ from bh_augmentation.run_baseline import _resolve_feature_config
 
 SUPPORTED_FEATURE_SETS = [
     "reaction_morgan_sum",
-    "reaction_role_concat",
-    "reaction_role_concat_delta",
+    "reaction_section_concat",
+    "reaction_section_concat_delta",
 ]
 
 MODEL_NAME_MAP = {
@@ -182,10 +181,14 @@ def resolve_trial_feature_config(
     df: pd.DataFrame,
 ) -> dict[str, Any]:
     """Resolve a compact feature-set name to an implemented feature config."""
-    if feature_set not in SUPPORTED_FEATURE_SETS:
+    resolved_feature_set = canonical_feature_kind(feature_set)
+    if resolved_feature_set not in SUPPORTED_FEATURE_SETS:
         supported = ", ".join(SUPPORTED_FEATURE_SETS)
         raise ValueError(f"Unknown feature set: {feature_set}. Supported feature sets: {supported}.")
-    return _resolve_feature_config({**base_feature_config, "kind": feature_set}, df)
+    return _resolve_feature_config(
+        {**base_feature_config, "kind": resolved_feature_set},
+        df,
+    )
 
 
 def _suggest_float(trial: Any, name: str, low: float, high: float, log: bool = False) -> float:

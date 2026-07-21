@@ -9,7 +9,18 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from bh_augmentation.features.featurize import morgan_fingerprint
+from bh_augmentation.data.reaction_roles import (
+    CANONICAL_ROLE_COLUMNS,
+    ReactionRoles,
+    ensure_reaction_role_columns,
+    reaction_roles_from_row,
+    reaction_roles_to_record,
+)
+from bh_augmentation.features.compatibility import FeatureMetadata, assert_feature_compatibility
+from bh_augmentation.features.featurize import (
+    build_feature_matrix_with_metadata,
+    morgan_fingerprint,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -54,6 +65,9 @@ class ConditionTransferConfig:
     clip_y_max: float
     candidates_per_real: int
     random_state: int
+    donor_similarity_n_bits: int = 2048
+    donor_similarity_radius: int = 2
+    donor_similarity_backend: str = "auto"
 
 
 def parse_condition_transfer_reaction(value: object) -> ParsedReaction | None:
@@ -87,18 +101,41 @@ def build_condition_transfer_reaction(
     return f"{source.substrate_block}.{donor.condition_block}>>{source.product}"
 
 
+def build_anonymous_condition_transfer_roles(
+    source_row: pd.Series | dict[str, Any],
+    donor_row: pd.Series | dict[str, Any],
+) -> ReactionRoles:
+    """Transfer all four typed donor conditions while preserving source chemistry."""
+    source = reaction_roles_from_row(source_row)
+    donor = reaction_roles_from_row(donor_row)
+    return ReactionRoles(
+        reactant_1=source.reactant_1,
+        reactant_2=source.reactant_2,
+        catalyst=donor.catalyst,
+        ligand=donor.ligand,
+        base=donor.base,
+        solvent_or_additive=donor.solvent_or_additive,
+        product=source.product,
+    )
+
+
 def generate_condition_transfer_examples(
     df_train: pd.DataFrame,
     X_train: np.ndarray,
     y_train: np.ndarray,
     config: ConditionTransferConfig,
+    *,
+    feature_config: dict[str, Any],
+    real_feature_names: list[str],
+    real_feature_metadata: FeatureMetadata,
 ) -> dict[str, Any]:
     """Generate condition-transfer examples using only low-data training rows."""
     _validate_config(config)
     if "reaction_smiles" not in df_train.columns:
         raise ValueError("condition transfer requires a reaction_smiles column.")
 
-    train = df_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
+    role_train = ensure_reaction_role_columns(df_train, parse_if_missing=True)
+    train = role_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
     X_train_array = np.asarray(X_train, dtype=np.float32)
     y_train_array = np.asarray(y_train, dtype=np.float32).reshape(-1)
     if len(train) != len(X_train_array) or len(train) != len(y_train_array):
@@ -121,12 +158,26 @@ def generate_condition_transfer_examples(
             existing_real_duplicate_count=0,
             high_yield_fallback_count=0,
         )
-        return _package_result(_empty_synthetic_df(), np.empty(0), metadata, _empty_candidate_df(), np.empty((0, X_train_array.shape[1])))
+        return _package_result(
+            _empty_synthetic_df(), np.empty(0), metadata, _empty_candidate_df(),
+            np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
+        )
 
     rng = np.random.default_rng(int(config.random_state))
-    reaction_similarity = _cosine_similarity_matrix(X_train_array)
+    similarity_config = {
+        **feature_config,
+        "kind": "reaction_section_concat",
+        "categorical_columns": [],
+    }
+    reaction_features, _, _, _ = build_feature_matrix_with_metadata(train, similarity_config)
+    reaction_similarity = _cosine_similarity_matrix(reaction_features)
     np.fill_diagonal(reaction_similarity, -np.inf)
-    substrate_similarity = _substrate_similarity_matrix(parsed)
+    substrate_similarity = _substrate_similarity_matrix(
+        parsed,
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
     np.fill_diagonal(substrate_similarity, -np.inf)
 
     rows: list[dict[str, Any]] = []
@@ -151,7 +202,12 @@ def generate_condition_transfer_examples(
         donor = parsed[donor_position]
         if source is None or donor is None:
             continue
-        synthetic_reaction = build_condition_transfer_reaction(source, donor)
+        synthetic_roles = build_anonymous_condition_transfer_roles(
+            train.loc[source_position],
+            train.loc[donor_position],
+        )
+        synthetic_record = reaction_roles_to_record(synthetic_roles)
+        synthetic_reaction = synthetic_roles.reaction_smiles()
         rows.append(
             {
                 "candidate_id": candidate_id,
@@ -177,6 +233,8 @@ def generate_condition_transfer_examples(
                 "existing_real_duplicate": False,
                 "accepted": False,
                 "kept": False,
+                "reaction_roles": synthetic_roles,
+                **synthetic_record,
             }
         )
         if len(rows) >= n_candidates:
@@ -194,13 +252,26 @@ def generate_condition_transfer_examples(
             existing_real_duplicate_count=0,
             high_yield_fallback_count=high_yield_fallback_count,
         )
-        return _package_result(_empty_synthetic_df(), np.empty(0), metadata, candidate_df, np.empty((0, X_train_array.shape[1])))
+        return _package_result(
+            _empty_synthetic_df(), np.empty(0), metadata, candidate_df,
+            np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
+        )
 
     candidate_df = _mark_duplicates(candidate_df, set(train["reaction_smiles"].astype(str)))
-    X_synthetic, invalid_featurization_count = _featurize_candidates(
-        candidate_df,
-        n_bits=_infer_reaction_role_n_bits(X_train_array),
+    feature_frame = candidate_df.copy()
+    feature_frame["yield"] = 0.0
+    X_synthetic, _, synthetic_feature_names, synthetic_feature_metadata = (
+        build_feature_matrix_with_metadata(feature_frame, feature_config)
     )
+    assert_feature_compatibility(
+        X_train_array,
+        real_feature_names,
+        X_synthetic,
+        synthetic_feature_names,
+        real_metadata=real_feature_metadata,
+        synthetic_metadata=synthetic_feature_metadata,
+    )
+    invalid_featurization_count = 0
     teacher_mean, teacher_std, teachers_used = _teacher_predictions(
         X_train_array,
         y_train_array,
@@ -243,6 +314,8 @@ def generate_condition_transfer_examples(
         metadata,
         candidate_df,
         X_synthetic[candidate_df["kept"].to_numpy(dtype=bool)].astype(np.float32),
+        synthetic_feature_names,
+        synthetic_feature_metadata,
     )
 
 
@@ -392,51 +465,28 @@ def _mark_duplicates(candidate_df: pd.DataFrame, real_reactions: set[str]) -> pd
     return result
 
 
-def _featurize_candidates(candidate_df: pd.DataFrame, n_bits: int) -> tuple[np.ndarray, int]:
-    cache: dict[str, np.ndarray] = {}
-    rows: list[np.ndarray] = []
-    for row in candidate_df.itertuples():
-        reactants = np.zeros(n_bits, dtype=np.float32)
-        for block in [row.source_substrate_block, row.donor_condition_block]:
-            for token in str(block).split("."):
-                token = token.strip()
-                if token:
-                    reactants += _cached_fingerprint(token, n_bits, cache)
-        agents = np.zeros(n_bits, dtype=np.float32)
-        products = _cached_fingerprint(str(row.source_product), n_bits, cache)
-        rows.append(np.concatenate([reactants, agents, products]).astype(np.float32))
-    X = np.vstack(rows).astype(np.float32) if rows else np.empty((0, 3 * n_bits), dtype=np.float32)
-    invalid = ~np.isfinite(X).all(axis=1)
-    return np.asarray(X, dtype=np.float32), int(invalid.sum())
-
-
-def _cached_fingerprint(
-    token: str,
+def _substrate_similarity_matrix(
+    parsed: list[ParsedReaction | None],
+    *,
     n_bits: int,
-    cache: dict[str, np.ndarray],
+    radius: int,
+    backend: str,
 ) -> np.ndarray:
-    key = f"{n_bits}:{token}"
-    if key not in cache:
-        cache[key] = morgan_fingerprint(token, n_bits=n_bits, warn_invalid=False)
-    return cache[key]
-
-
-def _infer_reaction_role_n_bits(X_train: np.ndarray) -> int:
-    width = int(X_train.shape[1])
-    if width >= 3 and width % 3 == 0:
-        return max(1, width // 3)
-    return 2048
-
-
-def _substrate_similarity_matrix(parsed: list[ParsedReaction | None]) -> np.ndarray:
+    """Preserve the legacy summed-substrate cosine geometry explicitly."""
     fingerprints: list[np.ndarray] = []
     for item in parsed:
         if item is None:
-            fingerprints.append(np.zeros(2048, dtype=np.float32))
+            fingerprints.append(np.zeros(n_bits, dtype=np.float32))
             continue
-        summed = np.zeros(2048, dtype=np.float32)
+        summed = np.zeros(n_bits, dtype=np.float32)
         for token in item.substrates:
-            summed += morgan_fingerprint(token, warn_invalid=False)
+            summed += morgan_fingerprint(
+                token,
+                radius=radius,
+                n_bits=n_bits,
+                warn_invalid=False,
+                backend=backend,
+            )
         fingerprints.append(summed)
     return _cosine_similarity_matrix(np.vstack(fingerprints).astype(np.float32))
 
@@ -522,6 +572,7 @@ def _synthetic_columns() -> list[str]:
         "source_substrate_block",
         "donor_condition_block",
         "synthetic_was_duplicate",
+        *CANONICAL_ROLE_COLUMNS,
     ]
 
 
@@ -550,6 +601,8 @@ def _package_result(
     metadata: dict[str, Any],
     candidate_df: pd.DataFrame,
     X_synthetic: np.ndarray,
+    feature_names: list[str],
+    feature_metadata: FeatureMetadata,
 ) -> dict[str, Any]:
     return {
         "synthetic_df": synthetic_df,
@@ -557,6 +610,8 @@ def _package_result(
         "X_synthetic": np.asarray(X_synthetic, dtype=np.float32),
         "metadata": dict(metadata),
         "candidate_df": candidate_df,
+        "feature_names": list(feature_names),
+        "feature_metadata": feature_metadata,
     }
 
 

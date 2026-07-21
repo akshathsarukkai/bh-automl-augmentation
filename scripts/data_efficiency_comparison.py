@@ -1,338 +1,134 @@
+#!/usr/bin/env python
+"""Build a status-aware data-efficiency table without test-set model selection."""
+
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from scipy.stats import spearmanr
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import train_test_split
-from xgboost import XGBRegressor
 
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.results.status import read_result_csv
+from bh_augmentation.utils.corrected_runs import (
+    CORRECTED_STATUS,
+    prepare_fresh_output_directory,
+)
 
-OUT = Path("results/data_efficiency_comparison")
-OUT.mkdir(parents=True, exist_ok=True)
 
-FRACTIONS = [0.01, 0.05, 0.10, 0.20]
-SEEDS = [0, 1, 2, 3, 4]
-
-def metrics(y, pred):
-    return {
-        "mae": float(mean_absolute_error(y, pred)),
-        "rmse": float(np.sqrt(mean_squared_error(y, pred))),
-        "r2": float(r2_score(y, pred)),
-        "spearman": float(spearmanr(y, pred).correlation),
-    }
-
-def make_xgb(seed):
-    return XGBRegressor(
-        n_estimators=300,
-        max_depth=4,
-        learning_rate=0.05,
-        subsample=0.9,
-        colsample_bytree=0.9,
-        reg_lambda=1.0,
-        objective="reg:squarederror",
-        random_state=seed,
-        n_jobs=-1,
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--include-development-evidence",
+        action="store_true",
+        help="Include AE/hybrid development evidence in a separately labeled status.",
     )
+    parser.add_argument(
+        "--output-dir",
+        default="results/corrected_data_efficiency_comparison",
+    )
+    args = parser.parse_args()
+    output = prepare_fresh_output_directory(args.output_dir)
 
-def read_existing(path):
-    path = Path(path)
+    tables: list[pd.DataFrame] = []
+    representation_path = Path(
+        "results/corrected_representation_baselines_xgboost/policy_metrics.csv"
+    )
+    representation = _read_if_present(representation_path)
+    if not representation.empty:
+        rows = representation.loc[representation["split"].eq("test")].copy()
+        rows["method"] = "corrected_real_only__" + rows["representation"].astype(str)
+        rows["details"] = rows["representation"].astype(str) + "; no test selection"
+        rows["result_status"] = CORRECTED_STATUS
+        tables.append(rows)
+
+    for method, path in (
+        (
+            "corrected_anonymous_condition_transfer",
+            Path(
+                "results/corrected_anonymous_condition_transfer_xgboost/selected_policy_metrics.csv"
+            ),
+        ),
+        (
+            "corrected_role_aware_condition_transfer",
+            Path(
+                "results/corrected_role_aware_condition_transfer_xgboost/selected_policy_metrics.csv"
+            ),
+        ),
+    ):
+        selected = _read_if_present(path)
+        if not selected.empty:
+            rows = selected.loc[
+                selected["split"].eq("test")
+                & selected["selected_policy"].fillna(False).astype(bool)
+            ].copy()
+            rows["method"] = method
+            rows["details"] = "policy selected by validation RMSE"
+            rows["result_status"] = CORRECTED_STATUS
+            tables.append(rows)
+
+    if args.include_development_evidence:
+        tables.extend(_development_tables())
+
+    if not tables:
+        raise FileNotFoundError(
+            "No corrected result files were found. Run corrected revalidation first."
+        )
+    long = pd.concat(tables, ignore_index=True, sort=False)
+    summary = (
+        long.groupby(
+            ["train_fraction", "method", "details", "result_status", "metric"],
+            dropna=False,
+        )["value"]
+        .agg(mean="mean", std="std", count="count")
+        .reset_index()
+    )
+    table = summary.pivot_table(
+        index=["train_fraction", "method", "details", "result_status"],
+        columns="metric",
+        values="mean",
+        aggfunc="first",
+    ).reset_index()
+    table.to_csv(output / "data_efficiency_comparison.csv", index=False)
+    long.to_csv(output / "data_efficiency_long.csv", index=False)
+    print("\nCORRECTED DATA EFFICIENCY COMPARISON")
+    print(table.to_string(index=False))
+    print(f"\nSaved: {output / 'data_efficiency_comparison.csv'}")
+
+
+def _read_if_present(path: Path) -> pd.DataFrame:
     if not path.exists():
-        print(f"Missing: {path}")
+        print(f"Missing corrected evidence: {path}")
         return pd.DataFrame()
-    return pd.read_csv(path)
+    return read_result_csv(path)
 
-def wide_from_metrics(df, id_cols):
-    df = df.copy()
-    df["metric"] = df["metric"].astype(str).str.strip()
-    return (
-        df[df["split"] == "test"]
-        .pivot_table(index=id_cols, columns="metric", values="value")
-        .reset_index()
-    )
 
-# Full-data XGBoost baseline
-full_path = OUT / "full_data_xgboost_metrics.csv"
+def _development_tables() -> list[pd.DataFrame]:
+    tables: list[pd.DataFrame] = []
+    for method, path in (
+        (
+            "development_supervised_ae",
+            Path(
+                "results/supervised_ae_latent_interpolation_confirm_xgboost/selected_policy_metrics.csv"
+            ),
+        ),
+        (
+            "development_condition_transfer_supervised_ae_hybrid",
+            Path(
+                "results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policy_metrics.csv"
+            ),
+        ),
+    ):
+        if not path.exists():
+            continue
+        rows = read_result_csv(path)
+        if "split" in rows:
+            rows = rows.loc[rows["split"].eq("test")].copy()
+        rows["method"] = method
+        rows["details"] = "explicitly included development evidence"
+        rows["result_status"] = "development_evidence"
+        tables.append(rows)
+    return tables
 
-if not full_path.exists():
-    df = pd.read_csv("data/processed/bh_clean_stress.csv")
-    X_all, y_all, _ = build_feature_matrix(
-        df,
-        {"kind": "reaction_role_concat", "n_bits": 2048, "radius": 2},
-    )
 
-    if hasattr(X_all, "toarray"):
-        X_all = X_all.toarray()
-
-    X_all = np.asarray(X_all, dtype=np.float32)
-    y_all = np.asarray(y_all, dtype=np.float32)
-
-    rows = []
-
-    for seed in SEEDS:
-        idx = np.arange(len(df))
-
-        train_idx, temp_idx = train_test_split(
-            idx,
-            train_size=0.8,
-            random_state=seed,
-            shuffle=True,
-        )
-
-        valid_idx, test_idx = train_test_split(
-            temp_idx,
-            train_size=0.5,
-            random_state=seed,
-            shuffle=True,
-        )
-
-        model = make_xgb(seed)
-        model.fit(X_all[train_idx], y_all[train_idx])
-
-        for split_name, split_idx in [("valid", valid_idx), ("test", test_idx)]:
-            pred = model.predict(X_all[split_idx])
-            for metric, value in metrics(y_all[split_idx], pred).items():
-                rows.append({
-                    "seed": seed,
-                    "train_fraction": 1.0,
-                    "method": "full_data_xgboost",
-                    "split": split_name,
-                    "metric": metric,
-                    "value": value,
-                })
-
-    pd.DataFrame(rows).to_csv(full_path, index=False)
-    print("Saved", full_path)
-
-# Read the matched anonymous condition-transfer outputs.
-ct_policy_parts = []
-for path in [
-    "results/condition_transfer_matched_xgboost/policy_metrics.csv",
-]:
-    df = read_existing(path)
-    if len(df):
-        ct_policy_parts.append(df)
-
-ct_selected_parts = []
-for path in [
-    "results/condition_transfer_matched_xgboost/selected_policy_metrics.csv",
-]:
-    df = read_existing(path)
-    if len(df):
-        ct_selected_parts.append(df)
-
-ct_policy = pd.concat(ct_policy_parts, ignore_index=True) if ct_policy_parts else pd.DataFrame()
-ct_selected = pd.concat(ct_selected_parts, ignore_index=True) if ct_selected_parts else pd.DataFrame()
-
-real_xgb = pd.DataFrame()
-ct_xgb = pd.DataFrame()
-
-if len(ct_policy):
-    real_xgb = wide_from_metrics(
-        ct_policy[
-            (ct_policy["representation"] == "original_6144")
-            & (ct_policy["model"] == "xgboost")
-        ],
-        ["seed", "train_fraction", "representation", "model"],
-    )
-    real_xgb["method"] = "real_only_xgboost"
-
-if len(ct_selected):
-    ct_xgb = wide_from_metrics(
-        ct_selected[
-            (ct_selected["representation"] == "condition_transfer")
-            & (ct_selected["model"] == "xgboost")
-        ],
-        [
-            "seed",
-            "train_fraction",
-            "representation",
-            "model",
-            "donor_strategy",
-            "label_strategy",
-            "synthetic_multiplier",
-        ],
-    )
-    ct_xgb["method"] = "condition_transfer_xgboost"
-
-# Read supervised AE/interpolation summaries
-ae_parts = []
-for path in [
-    "results/supervised_ae_latent_interpolation_1pct_xgboost/summary.csv",
-    "results/supervised_ae_latent_interpolation_confirm_xgboost/summary.csv",
-]:
-    df = read_existing(path)
-    if len(df):
-        ae_parts.append(df)
-
-ae_best = pd.DataFrame()
-
-if ae_parts:
-    ae_summary = pd.concat(ae_parts, ignore_index=True)
-    ae_summary["metric"] = ae_summary["metric"].astype(str).str.strip()
-
-    ae_wide = (
-        ae_summary[
-            (ae_summary["split"] == "test")
-            & (ae_summary["representation"].astype(str).str.contains("supervised_ae", na=False))
-        ]
-        .pivot_table(
-            index=["train_fraction", "representation", "model"],
-            columns="metric",
-            values="mean",
-        )
-        .reset_index()
-    )
-
-    ae_best = (
-        ae_wide.sort_values(["train_fraction", "rmse"])
-        .groupby("train_fraction")
-        .head(1)
-        .copy()
-    )
-    ae_best["method"] = "best_supervised_ae_or_interpolation"
-
-# Role-aware v2 is retained as an ablation, not substituted for anonymous transfer.
-role_aware = read_existing(
-    "results/role_aware_condition_transfer_v2_xgboost/selected_policy_metrics.csv"
-)
-role_aware_xgb = pd.DataFrame()
-if len(role_aware):
-    role_aware_xgb = wide_from_metrics(
-        role_aware[
-            (role_aware["representation"] == "role_aware_condition_transfer")
-            & (role_aware["model"] == "xgboost")
-        ],
-        ["seed", "train_fraction", "representation", "model"],
-    )
-    role_aware_xgb["method"] = "role_aware_condition_transfer_v2_ablation"
-
-# The hybrid runner reproduces its parent baselines on matched splits.
-hybrid_metrics = read_existing(
-    "results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policy_metrics.csv"
-)
-hybrid_policy_metrics = read_existing(
-    "results/condition_transfer_supervised_ae_xgboost/policy_metrics.csv"
-)
-hybrid_xgb = pd.DataFrame()
-if len(hybrid_metrics):
-    hybrid_xgb = wide_from_metrics(
-        hybrid_metrics[hybrid_metrics["downstream_model"] == "xgboost"],
-        [
-            "seed",
-            "train_fraction",
-            "representation",
-            "downstream_model",
-            "latent_dim",
-            "synthetic_example_weight",
-        ],
-    )
-    hybrid_xgb["method"] = "condition_transfer_supervised_ae_hybrid"
-
-# Full-data XGBoost summary
-full = pd.read_csv(full_path)
-full["metric"] = full["metric"].astype(str).str.strip()
-
-full_wide = (
-    full[full["split"] == "test"]
-    .pivot_table(index=["method"], columns="metric", values="value", aggfunc="mean")
-    .reset_index()
-)
-
-# Prefer the reference produced on exactly the same repository split as the hybrid.
-if len(hybrid_policy_metrics):
-    matched_full = hybrid_policy_metrics[
-        (hybrid_policy_metrics["representation"] == "full_data_original_6144")
-        & (hybrid_policy_metrics["downstream_model"] == "xgboost")
-        & (hybrid_policy_metrics["split"] == "test")
-    ]
-    if len(matched_full):
-        full_wide = (
-            matched_full.pivot_table(columns="metric", values="value", aggfunc="mean")
-            .reset_index(drop=True)
-            .assign(method="full_data_xgboost")
-        )
-
-rows = []
-
-for frac in FRACTIONS:
-    sub = real_xgb[np.isclose(real_xgb["train_fraction"], frac)] if len(real_xgb) else pd.DataFrame()
-    if len(sub):
-        rows.append({
-            "train_fraction": frac,
-            "method": "real_only_xgboost",
-            "details": "original_6144 + xgboost",
-            "mae": sub["mae"].mean(),
-            "rmse": sub["rmse"].mean(),
-            "r2": sub["r2"].mean(),
-            "spearman": sub["spearman"].mean(),
-        })
-
-    sub = ct_xgb[np.isclose(ct_xgb["train_fraction"], frac)] if len(ct_xgb) else pd.DataFrame()
-    if len(sub):
-        rows.append({
-            "train_fraction": frac,
-            "method": "condition_transfer_xgboost",
-            "details": "selected by valid RMSE",
-            "mae": sub["mae"].mean(),
-            "rmse": sub["rmse"].mean(),
-            "r2": sub["r2"].mean(),
-            "spearman": sub["spearman"].mean(),
-        })
-
-    sub = ae_best[np.isclose(ae_best["train_fraction"], frac)] if len(ae_best) else pd.DataFrame()
-    if len(sub):
-        r = sub.iloc[0]
-        rows.append({
-            "train_fraction": frac,
-            "method": "best_supervised_ae_or_interpolation",
-            "details": f"{r['representation']} + {r['model']}",
-            "mae": r["mae"],
-            "rmse": r["rmse"],
-            "r2": r["r2"],
-            "spearman": r["spearman"],
-        })
-
-    sub = role_aware_xgb[np.isclose(role_aware_xgb["train_fraction"], frac)] if len(role_aware_xgb) else pd.DataFrame()
-    if len(sub):
-        rows.append({
-            "train_fraction": frac,
-            "method": "role_aware_condition_transfer_v2_ablation",
-            "details": "selected by valid RMSE",
-            "mae": sub["mae"].mean(),
-            "rmse": sub["rmse"].mean(),
-            "r2": sub["r2"].mean(),
-            "spearman": sub["spearman"].mean(),
-        })
-
-    sub = hybrid_xgb[np.isclose(hybrid_xgb["train_fraction"], frac)] if len(hybrid_xgb) else pd.DataFrame()
-    if len(sub):
-        rows.append({
-            "train_fraction": frac,
-            "method": "condition_transfer_supervised_ae_hybrid",
-            "details": "anonymous transfer selected first; hybrid selected by valid RMSE",
-            "mae": sub["mae"].mean(),
-            "rmse": sub["rmse"].mean(),
-            "r2": sub["r2"].mean(),
-            "spearman": sub["spearman"].mean(),
-        })
-
-    r = full_wide.iloc[0]
-    rows.append({
-        "train_fraction": frac,
-        "method": "full_data_xgboost_reference",
-        "details": "100% train split, original_6144 + xgboost",
-        "mae": r["mae"],
-        "rmse": r["rmse"],
-        "r2": r["r2"],
-        "spearman": r["spearman"],
-    })
-
-table = pd.DataFrame(rows)
-table = table.sort_values(["train_fraction", "rmse"])
-table.to_csv(OUT / "data_efficiency_comparison.csv", index=False)
-
-print("\nDATA EFFICIENCY COMPARISON")
-print(table.to_string(index=False))
-print("\nSaved:", OUT / "data_efficiency_comparison.csv")
+if __name__ == "__main__":
+    main()

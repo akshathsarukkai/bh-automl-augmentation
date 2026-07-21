@@ -18,7 +18,12 @@ from bh_augmentation.augmentation.condition_transfer import (
 )
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.features.compatibility import FeatureMetadata, assert_feature_compatibility
+from bh_augmentation.features.featurize import (
+    build_feature_matrix_with_metadata,
+    normalize_feature_config,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -51,12 +56,22 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     metric_names = list(config.get("metrics", ["rmse", "mae", "r2", "spearman"]))
     _validate_metrics(metric_names)
     raw_df = load_reaction_csv(_get_dataset_path(config))
-    df = clean_buchwald_hartwig(raw_df)
+    df = ensure_reaction_role_columns(clean_buchwald_hartwig(raw_df), parse_if_missing=True)
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run the hybrid experiment.")
 
-    feature_config = _resolve_feature_config(config.get("features", {}))
-    X, y, _ = build_feature_matrix(df, feature_config)
+    configured_features = {"kind": "bh_role_separated", **dict(config.get("features", {}))}
+    feature_config = normalize_feature_config(_resolve_feature_config(configured_features))
+    if feature_config["kind"] not in {"bh_role_separated", "bh_role_separated_delta"}:
+        raise ValueError(
+            "Corrected condition-transfer + supervised-AE runs require "
+            "bh_role_separated features; chemical block semantics are not inferred "
+            "from neural-network input width."
+        )
+    X, y, feature_names, feature_metadata = build_feature_matrix_with_metadata(
+        df,
+        feature_config,
+    )
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.float32).reshape(-1)
     paths = _resolve_output_paths(config)
@@ -128,6 +143,9 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
                 metric_names=metric_names,
                 valid_indices=valid_indices,
                 test_indices=test_indices,
+                feature_config=feature_config,
+                feature_names=feature_names,
+                feature_metadata=feature_metadata,
             )
             for candidate in condition_candidates:
                 metrics.extend(candidate["metric_records"])
@@ -170,6 +188,8 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
                     train_fraction=float(train_fraction),
                     metric_names=metric_names,
                     representation=f"supervised_ae_{latent_dim}_real_only",
+                    feature_names=feature_names,
+                    feature_metadata=feature_metadata,
                 )
                 ae_audit.append(real_candidate["audit"])
                 metrics.extend(real_candidate["metric_records"])
@@ -196,6 +216,8 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
                         train_fraction=float(train_fraction),
                         metric_names=metric_names,
                         representation=f"supervised_ae_{latent_dim}_condition_transfer",
+                        feature_names=feature_names,
+                        feature_metadata=feature_metadata,
                     )
                     ae_audit.append(hybrid_candidate["audit"])
                     metrics.extend(hybrid_candidate["metric_records"])
@@ -271,6 +293,11 @@ def combine_real_and_synthetic_training_data(
     real_example_weight: float,
     synthetic_example_weight: float,
     synthetic_reconstruction_weight: float = 1.0,
+    *,
+    real_feature_names: list[str] | None = None,
+    synthetic_feature_names: list[str] | None = None,
+    real_feature_metadata: FeatureMetadata | None = None,
+    synthetic_feature_metadata: FeatureMetadata | None = None,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Combine training-only rows and return labels, weights, and origin markers."""
     X_real_array = np.asarray(X_real, dtype=np.float32)
@@ -290,6 +317,14 @@ def combine_real_and_synthetic_training_data(
     y_synth_array = np.asarray(y_synthetic, dtype=np.float32).reshape(-1)
     if X_synth_array.shape[1] != X_real_array.shape[1] or len(X_synth_array) != len(y_synth_array):
         raise ValueError("Synthetic features and labels must align with the real feature matrix.")
+    assert_feature_compatibility(
+        X_real_array,
+        real_feature_names or [],
+        X_synth_array,
+        synthetic_feature_names or [],
+        real_metadata=real_feature_metadata,
+        synthetic_metadata=synthetic_feature_metadata,
+    )
     return (
         np.vstack([X_real_array, X_synth_array]).astype(np.float32),
         np.concatenate([y_real_array, y_synth_array]).astype(np.float32),
@@ -364,11 +399,22 @@ def _evaluate_condition_transfer_candidates(
     metric_names: list[str],
     valid_indices: np.ndarray,
     test_indices: np.ndarray,
+    feature_config: dict[str, Any],
+    feature_names: list[str],
+    feature_metadata: FeatureMetadata,
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     train_index_set = set(train_df.index.tolist())
     for policy_index, policy in enumerate(_anonymous_policies(config, seed)):
-        result = generate_condition_transfer_examples(train_df, X_train, y_train, policy)
+        result = generate_condition_transfer_examples(
+            train_df,
+            X_train,
+            y_train,
+            policy,
+            feature_config=feature_config,
+            real_feature_names=feature_names,
+            real_feature_metadata=feature_metadata,
+        )
         metadata = dict(result["metadata"])
         policy_id = _condition_policy_id(policy_index, policy)
         synthetic_df = result["synthetic_df"]
@@ -399,6 +445,10 @@ def _evaluate_condition_transfer_candidates(
             result["synthetic_y"],
             1.0,
             1.0,
+            real_feature_names=feature_names,
+            synthetic_feature_names=result["feature_names"],
+            real_feature_metadata=feature_metadata,
+            synthetic_feature_metadata=result["feature_metadata"],
         )
         model_name, model_kwargs = _condition_selection_model(config)
         model = train_model(get_model(model_name, seed=seed, **model_kwargs), X_aug, y_aug)
@@ -408,7 +458,7 @@ def _evaluate_condition_transfer_candidates(
             train_fraction=train_fraction,
             n_real_train=len(X_train),
             n_synthetic_train=n_synthetic,
-            representation="anonymous_condition_transfer",
+            representation="anonymous_condition_transfer_bh_role_separated",
             downstream_model=model_name,
             condition_transfer_policy_id=policy_id,
             policy=policy,
@@ -456,6 +506,8 @@ def _fit_ae_candidate(
     train_fraction: float,
     metric_names: list[str],
     representation: str,
+    feature_names: list[str],
+    feature_metadata: FeatureMetadata,
 ) -> dict[str, Any]:
     ae_config = config.get("supervised_autoencoder", {})
     real_weight = float(ae_config.get("real_example_weight", 1.0))
@@ -469,6 +521,18 @@ def _fit_ae_candidate(
             real_weight,
             synthetic_example_weight,
             reconstruction_weight,
+            real_feature_names=feature_names,
+            synthetic_feature_names=(
+                condition_candidate["generation_result"]["feature_names"]
+                if condition_candidate is not None
+                else None
+            ),
+            real_feature_metadata=feature_metadata,
+            synthetic_feature_metadata=(
+                condition_candidate["generation_result"]["feature_metadata"]
+                if condition_candidate is not None
+                else None
+            ),
         )
     )
     policy_object = None
@@ -710,7 +774,7 @@ def _evaluate_original_baselines(
             train_fraction=train_fraction,
             n_real_train=len(X_train),
             n_synthetic_train=0,
-            representation="original_6144_real_only",
+            representation="bh_role_separated_real_only",
             downstream_model=model_name,
         )
         records.extend(_evaluate_fitted_model(model, X_valid, y_valid, metric_names, base, "valid"))
@@ -735,7 +799,7 @@ def _append_full_data_reference(
         train_fraction=1.0,
         n_real_train=len(train_idx),
         n_synthetic_train=0,
-        representation="full_data_original_6144",
+        representation="full_data_bh_role_separated",
         downstream_model=model_name,
     )
     for split_name in ["valid", "test"]:
@@ -808,7 +872,9 @@ def _record_base(
         "ae_best_internal_valid_loss": np.nan,
         "ae_training_status": "not_applicable",
         "ae_only_selected": False,
-        "condition_transfer_selected": representation == "anonymous_condition_transfer",
+        "condition_transfer_selected": representation.startswith(
+            "anonymous_condition_transfer_"
+        ),
         "selected_policy": False,
     }
 
@@ -881,12 +947,14 @@ def _build_all_comparisons(
     ].copy()
     parents = {
         "real_only": metrics.loc[
-            (metrics["representation"] == "original_6144_real_only")
+            (metrics["representation"] == "bh_role_separated_real_only")
             & (metrics["downstream_model"] == "xgboost")
             & (metrics["split"] == "test")
         ],
         "anonymous_transfer": metrics.loc[
-            (metrics["representation"] == "anonymous_condition_transfer")
+            metrics["representation"].astype(str).str.startswith(
+                "anonymous_condition_transfer_"
+            )
             & metrics["condition_transfer_selected"].astype(bool)
             & (metrics["split"] == "test")
         ],
@@ -1045,13 +1113,13 @@ def _print_completion_summary(
     ]
     print("\nMATCHED HYBRID TEST RMSE")
     for representation in [
-        "original_6144_real_only",
-        "anonymous_condition_transfer",
+        "bh_role_separated_real_only",
+        "anonymous_condition_transfer_bh_role_separated",
         "supervised_ae_16_real_only",
         "supervised_ae_64_real_only",
         "supervised_ae_16_condition_transfer",
         "supervised_ae_64_condition_transfer",
-        "full_data_original_6144",
+        "full_data_bh_role_separated",
     ]:
         rows = test.loc[test["representation"] == representation]
         if not rows.empty:

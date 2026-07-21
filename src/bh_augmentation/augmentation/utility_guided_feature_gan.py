@@ -11,6 +11,10 @@ from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 
 from bh_augmentation.evaluation.metrics import rmse
+from bh_augmentation.features.compatibility import (
+    assert_feature_compatibility,
+    coordinate_feature_contract,
+)
 from bh_augmentation.features.featurize import build_feature_matrix
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
@@ -182,6 +186,18 @@ def run_utility_guided_feature_gan_augmentation(
     final = best_batch.head(target_synthetic).reset_index(drop=True)
     X_synthetic = np.vstack(final["feature_vector"].to_numpy()).astype(np.float32)
     y_synthetic = final["yield"].to_numpy(dtype=np.float32)
+    feature_names, feature_metadata = coordinate_feature_contract(
+        "utility_guided_gan_feature_space",
+        X_student_real.shape[1],
+    )
+    assert_feature_compatibility(
+        X_student_real,
+        feature_names,
+        X_synthetic,
+        feature_names,
+        real_metadata=feature_metadata,
+        synthetic_metadata=feature_metadata,
+    )
     X_aug = np.vstack([X_student_real, X_synthetic]).astype(np.float32)
     y_aug = np.concatenate([y_real, y_synthetic]).astype(np.float32)
     sample_weight = np.ones(len(y_aug), dtype=np.float32)
@@ -410,6 +426,18 @@ def compute_batch_reward(
         return 0.0
     X_synth = np.vstack(synthetic_batch["feature_vector"].to_numpy()).astype(np.float32)
     y_synth = synthetic_batch["yield"].to_numpy(dtype=np.float32)
+    feature_names, feature_metadata = coordinate_feature_contract(
+        "utility_guided_gan_feature_space",
+        X_train.shape[1],
+    )
+    assert_feature_compatibility(
+        X_train,
+        feature_names,
+        X_synth,
+        feature_names,
+        real_metadata=feature_metadata,
+        synthetic_metadata=feature_metadata,
+    )
     X_aug = np.vstack([X_train, X_synth])
     y_aug = np.concatenate([y_train, y_synth])
     model = train_model(get_model("ridge"), X_aug, y_aug)

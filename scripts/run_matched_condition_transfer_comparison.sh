@@ -8,6 +8,17 @@ ANON_CONFIG="configs/condition_transfer_matched_xgboost.yaml"
 ANON_OUT="results/condition_transfer_matched_xgboost"
 ROLE_OUT="results/role_aware_condition_transfer_v2_xgboost"
 COMPARE_OUT="results/condition_transfer_matched_comparison"
+ALLOW_INVALID_RESULTS="${ALLOW_INVALID_RESULTS:-false}"
+
+python - "$ROLE_OUT" "$COMPARE_OUT" "$ALLOW_INVALID_RESULTS" <<'PY'
+import sys
+
+from bh_augmentation.results.status import assert_result_directory_allowed
+
+allow_invalid = sys.argv[3].lower() == "true"
+assert_result_directory_allowed(sys.argv[1], allow_invalid=allow_invalid)
+assert_result_directory_allowed(sys.argv[2], allow_invalid=allow_invalid)
+PY
 
 mkdir -p "$COMPARE_OUT"
 

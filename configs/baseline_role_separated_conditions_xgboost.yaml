@@ -11,13 +11,13 @@ low_data:
   enabled: false
 features:
   compare:
-    - kind: reaction_role_concat
+    - kind: reaction_section_concat
       n_bits: 2048
       radius: 2
-    - kind: role_separated_conditions
+    - kind: bh_role_separated
       n_bits: 2048
       radius: 2
-    - kind: role_separated_conditions_delta
+    - kind: bh_role_separated_delta
       n_bits: 2048
       radius: 2
 models:

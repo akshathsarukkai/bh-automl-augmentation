@@ -1,0 +1,66 @@
+seed: 42
+seeds: [0, 1, 2, 3, 4]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions: [0.01, 0.05, 0.10, 0.20]
+features:
+  kind: bh_role_separated
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+models:
+  - name: xgboost
+    params:
+      n_estimators: 300
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.9
+      colsample_bytree: 0.9
+      reg_lambda: 1.0
+      objective: reg:squarederror
+      n_jobs: -1
+      tree_method: hist
+metrics: [rmse, mae, r2, spearman]
+role_aware_condition_transfer:
+  enabled: true
+  exclude_invariant_roles: true
+  allow_zero_synthetic_policy_selection: false
+  role_transfer_modes:
+    - ligand_only
+    - base_only
+    - solvent_or_additive_only
+    - ligand_base
+    - ligand_solvent_or_additive
+    - base_solvent_or_additive
+    - ligand_base_solvent_or_additive
+  donor_strategies:
+    - same_nontransferred_roles
+    - matched_product_or_reactant_key
+    - high_yield_same_context
+  label_strategies: [teacher_ensemble, uncertainty_filtered_teacher]
+  synthetic_multipliers: [0.5, 1.0]
+  max_candidates_per_source: 5
+  max_teacher_stds: [10.0, 15.0]
+  min_similarities: [0.0]
+  clip_y_min: 0.0
+  clip_y_max: 100.0
+  max_resample_attempts: 10
+  teacher_models: [ridge, random_forest]
+  donor_similarity_n_bits: 256
+  donor_similarity_radius: 2
+  donor_similarity_backend: rdkit
+selection:
+  split: valid
+  metric: rmse
+  lower_is_better: true
+output:
+  directory: results/corrected_role_aware_condition_transfer_xgboost

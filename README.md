@@ -205,15 +205,22 @@ The supported named feature modes are:
 
 - `reaction_morgan_sum`: sums fingerprints for all reaction molecules. It is
   compact but loses reactant/agent/product role information.
-- `reaction_role_concat`: concatenates summed reactant, agent, and product
-  fingerprints.
-- `reaction_role_concat_delta`: adds the numeric product-minus-reactant
+- `reaction_section_concat`: concatenates summed reactant-section,
+  agent-section, and product-section fingerprints. It does not resolve
+  individual chemical roles.
+- `reaction_section_concat_delta`: adds the numeric product-minus-reactant
   fingerprint difference.
+- `bh_role_separated`: concatenates seven dataset-specific molecular roles in
+  the fixed order reactant 1, reactant 2, catalyst, ligand, base,
+  solvent/additive, and product.
+- `bh_role_separated_delta`: appends product-minus-reactant-1,
+  product-minus-reactant-2, and product-minus-reactant-pair blocks to the seven
+  role blocks.
 
 Product features are acceptable for this reaction-yield task because the
 intended product structure is known. Results require more careful
 interpretation for prospective settings where product identity is uncertain.
-`reaction_role_concat_delta` is the default MVP representation. Component
+`reaction_section_concat_delta` is the default MVP representation. Component
 columns such as ligand, base, and additive may remain `UNKNOWN` in TDC and
 should not be primary features. The metrics CSV records `feature_kind` and
 `n_features` for each ablation.
@@ -223,11 +230,20 @@ Migration from older configs:
 - `features.kind: reaction_smiles` is deprecated and maps to
   `reaction_morgan_sum`.
 - `features.kind: reaction_plus_components` is deprecated and maps to
-  `reaction_role_concat_delta`.
+  `reaction_section_concat_delta`.
+- `reaction_role_concat` and `reaction_role_concat_delta` are deprecated aliases
+  for the corresponding `reaction_section_*` representations.
+- `role_separated_conditions` and `role_separated_conditions_delta` are
+  deprecated aliases for `bh_role_separated` and `bh_role_separated_delta`.
 - `fp_concat`, `fp_plus_conditions`, and `categorical_conditions` are removed
   named modes. Use one of the three supported reaction modes instead.
 - `reaction_combined_redundant` is deprecated and maps to
-  `reaction_role_concat_delta`.
+  `reaction_section_concat_delta`.
+
+Equal feature widths do not establish compatibility. Any measured/synthetic
+stack must also match canonical feature names, radius, bit count, resolved
+fingerprint backend, role ordering, and exact half-open block slices. See
+`RESULT_STATUS.md` for invalid historical outputs produced before this check.
 
 ## Augmentation Run
 
@@ -355,7 +371,7 @@ fractions and seeds, and do not use test differences to revise policy selection.
 
 `utility_guided_feature_gan` is not a plain GAN and it does not generate raw
 reaction SMILES. It learns feature-space candidates from the train-only
-`reaction_role_concat` representation, optionally through train-only
+`reaction_section_concat` representation, optionally through train-only
 TruncatedSVD. A WGAN-GP-style generator and critic encourage realistic feature
 points, while an inner reward-validation split scores whether candidate batches
 improve downstream yield prediction.
@@ -576,6 +592,25 @@ This repository therefore follows the rule:
 
 This rule is especially important for low-data and recommendation-style
 experiments, where a small amount of leakage can dominate the apparent benefit.
+
+## Corrected Revalidation
+
+Corrected condition-transfer experiments use the explicit RDKit-backed
+`bh_role_separated` representation for both measured and synthetic rows. They
+refuse to overwrite non-empty output directories, select policies using
+validation RMSE, and evaluate test data only for matched baselines and selected
+policies. The corrected representation baseline reports every canonical
+representation rather than selecting one by test performance.
+
+Run the complete corrected workflow manually with:
+
+```bash
+caffeinate -dimsu bash scripts/run_corrected_revalidation.sh \
+  2>&1 | tee results/corrected_revalidation_run.log
+```
+
+Historical role-aware v2 and matched-comparison outputs remain invalid. See
+`RESULT_STATUS.md` for the evidence registry.
 
 ## Suggested Experiment Order
 

@@ -12,19 +12,37 @@ import bh_augmentation.augmentation.role_aware_condition_transfer as role_transf
 from bh_augmentation.augmentation.role_aware_condition_transfer import (
     RoleAwareConditionTransferConfig,
     build_role_transferred_reaction_smiles,
-    generate_role_aware_condition_transfer_examples,
+)
+from bh_augmentation.augmentation.role_aware_condition_transfer import (
+    generate_role_aware_condition_transfer_examples as _generate_role_aware_examples,
 )
 from bh_augmentation.data.bh_condition_reader import (
     parse_bh_reaction_smiles,
     recover_condition_fields,
 )
-from bh_augmentation.features.featurize import build_feature_matrix
+from bh_augmentation.features.featurize import (
+    build_feature_matrix,
+    build_feature_matrix_with_metadata,
+)
 from bh_augmentation.run_role_aware_condition_transfer import (
     _iter_role_transfer_policies,
     _role_value_counts,
     _select_policies,
     run_role_aware_condition_transfer,
 )
+
+
+def generate_role_aware_condition_transfer_examples(df, X, y, config):
+    _, _, names, metadata = build_feature_matrix_with_metadata(df, _feature_config())
+    return _generate_role_aware_examples(
+        df,
+        X,
+        y,
+        config,
+        feature_config=_feature_config(),
+        real_feature_names=names,
+        real_feature_metadata=metadata,
+    )
 
 
 def test_role_transfer_construction_preserves_source_reactants_and_product() -> None:
@@ -239,7 +257,14 @@ def test_zero_synthetic_policies_are_not_eligible_for_selection() -> None:
             _metric_row("zero", "test", "rmse", 1.0, n_synthetic_train=0),
             _metric_row("nonzero", "valid", "rmse", 5.0, n_synthetic_train=3),
             _metric_row("nonzero", "test", "rmse", 5.0, n_synthetic_train=3),
-            _metric_row("real", "valid", "rmse", 10.0, representation="original_6144", n_synthetic_train=0),
+            _metric_row(
+                "real",
+                "valid",
+                "rmse",
+                10.0,
+                representation="bh_role_separated_real_only",
+                n_synthetic_train=0,
+            ),
         ]
     )
 
@@ -344,9 +369,10 @@ low_data:
   enabled: true
   train_fractions: [0.5]
 features:
-  kind: reaction_role_concat
+  kind: bh_role_separated
   n_bits: 16
   radius: 2
+  fingerprint_backend: hash
 models:
   - name: xgboost
     params:
@@ -393,8 +419,10 @@ output:
     assert "role_transfer_mode" in policy_metrics.columns
     assert "role_transfer_mode" in audit.columns
     assert paths["role_value_counts_path"].exists()
-    assert "original_6144" in set(policy_metrics["representation"])
-    assert "role_aware_condition_transfer" in set(policy_metrics["representation"])
+    assert "bh_role_separated_real_only" in set(policy_metrics["representation"])
+    assert "bh_role_separated_condition_transfer" in set(
+        policy_metrics["representation"]
+    )
     assert set(policy_metrics["split"]) == {"valid", "test"}
     assert set(selected_metrics["split"]) == {"valid", "test"}
     assert {"changed_ligand_fraction", "changed_base_fraction"} <= set(audit.columns)
@@ -405,7 +433,7 @@ def _metric_row(
     split: str,
     metric: str,
     value: float,
-    representation: str = "role_aware_condition_transfer",
+    representation: str = "bh_role_separated_condition_transfer",
     n_synthetic_train: int = 1,
 ) -> dict[str, object]:
     return {
@@ -442,7 +470,12 @@ def _config(**overrides: object) -> RoleAwareConditionTransferConfig:
 
 
 def _feature_config() -> dict[str, object]:
-    return {"kind": "reaction_role_concat", "n_bits": 16, "radius": 2}
+    return {
+        "kind": "bh_role_separated",
+        "n_bits": 16,
+        "radius": 2,
+        "fingerprint_backend": "hash",
+    }
 
 
 def _train_df(n: int = 6) -> pd.DataFrame:

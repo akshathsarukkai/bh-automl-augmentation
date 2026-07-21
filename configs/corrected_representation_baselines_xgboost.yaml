@@ -1,0 +1,38 @@
+seed: 42
+seeds: [0, 1, 2, 3, 4]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: data/processed/bh_clean_stress.csv
+splits:
+  method: random
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+low_data:
+  enabled: true
+  train_fractions: [0.01, 0.05, 0.10, 0.20, 1.00]
+features:
+  representations:
+    - reaction_section_concat
+    - reaction_section_concat_delta
+    - bh_role_separated
+    - bh_role_separated_delta
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+models:
+  - name: xgboost
+    params:
+      n_estimators: 300
+      max_depth: 4
+      learning_rate: 0.05
+      subsample: 0.9
+      colsample_bytree: 0.9
+      reg_lambda: 1.0
+      objective: reg:squarederror
+      n_jobs: -1
+      tree_method: hist
+metrics: [rmse, mae, r2, spearman]
+output:
+  directory: results/corrected_representation_baselines_xgboost

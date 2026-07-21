@@ -589,12 +589,12 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
 
 def _resolve_feature_config(feature_config: dict[str, Any]) -> dict[str, Any]:
     resolved = dict(feature_config)
-    kind = canonical_feature_kind(resolved.get("kind", "reaction_role_concat"))
-    resolved["kind"] = kind or "reaction_role_concat"
+    kind = canonical_feature_kind(resolved.get("kind", "reaction_section_concat"))
+    resolved["kind"] = kind or "reaction_section_concat"
     resolved.setdefault("n_bits", 2048)
     resolved.setdefault("radius", 2)
     resolved.pop("compare", None)
-    if resolved["kind"].startswith("reaction_"):
+    if resolved["kind"].startswith(("reaction_", "bh_role_")):
         resolved["categorical_columns"] = []
     return resolved
 

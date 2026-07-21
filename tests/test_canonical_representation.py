@@ -12,17 +12,20 @@ from bh_augmentation.data.clean_data import (
 )
 from bh_augmentation.features.featurize import build_feature_matrix
 
-
 CONFIG_DIR = Path(__file__).parents[1] / "configs"
 ACTIVE_FEATURE_KINDS = {
     "reaction_morgan_sum",
     "reaction_role_concat",
     "reaction_role_concat_delta",
+    "reaction_section_concat",
+    "reaction_section_concat_delta",
 }
 CONFIG_FEATURE_KINDS = {
     *ACTIVE_FEATURE_KINDS,
     "role_separated_conditions",
     "role_separated_conditions_delta",
+    "bh_role_separated",
+    "bh_role_separated_delta",
 }
 
 

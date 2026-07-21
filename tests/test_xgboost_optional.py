@@ -33,9 +33,10 @@ low_data:
   enabled: true
   train_fractions: [0.5]
 features:
-  kind: reaction_role_concat
+  kind: bh_role_separated
   n_bits: 8
   radius: 2
+  fingerprint_backend: hash
 models:
   - xgboost
 metrics:
@@ -77,7 +78,10 @@ output:
 
     metrics = pd.read_csv(paths["policy_metrics_path"])
     assert set(metrics["model"]) == {"xgboost"}
-    assert {"original_6144", "condition_transfer"} <= set(metrics["representation"])
+    assert {
+        "bh_role_separated_real_only",
+        "anonymous_condition_transfer_bh_role_separated",
+    } <= set(metrics["representation"])
     assert set(metrics["split"]) == {"valid", "test"}
 
 
@@ -86,7 +90,8 @@ def _tiny_reactions(n_rows: int) -> pd.DataFrame:
         {
             "reaction_id": [f"rxn_{index:03d}" for index in range(n_rows)],
             "reaction_smiles": [
-                f"CC{'C' * (index % 4)}Br.N.O.Cl>>CC{'C' * (index % 4)}N"
+                f"CC{'C' * (index % 4)}Br.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>"
+                f"CC{'C' * (index % 4)}N"
                 for index in range(n_rows)
             ],
             "yield": [float((index * 11) % 101) for index in range(n_rows)],

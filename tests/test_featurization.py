@@ -380,6 +380,7 @@ def test_reaction_plus_components_alias_does_not_pass_full_dict_to_morgan(
         radius: int = 2,
         n_bits: int = 2048,
         warn_invalid: bool = True,
+        backend: str = "auto",
     ) -> np.ndarray:
         calls.append(smiles)
         fingerprint = np.zeros(n_bits, dtype=np.float32)
@@ -389,7 +390,7 @@ def test_reaction_plus_components_alias_does_not_pass_full_dict_to_morgan(
 
     monkeypatch.setattr(featurize_module, "morgan_fingerprint", fake_morgan)
 
-    with pytest.warns(DeprecationWarning, match="reaction_role_concat_delta"):
+    with pytest.warns(DeprecationWarning, match="reaction_section_concat_delta"):
         X, _, names = build_feature_matrix(
             df,
             {"kind": "reaction_plus_components", "n_bits": 8},
@@ -482,10 +483,7 @@ def test_role_separated_conditions_feature_width() -> None:
 
     assert X.shape == (2, 56)
     assert len(feature_names) == 56
-    assert feature_names[:2] == [
-        "recovered_reactant_1_smiles_0",
-        "recovered_reactant_1_smiles_1",
-    ]
+    assert feature_names[:2] == ["reactant_1__morgan_0", "reactant_1__morgan_1"]
     np.testing.assert_array_equal(y, np.array([70.0, 80.0], dtype=np.float32))
 
 
@@ -501,7 +499,7 @@ def test_role_separated_conditions_delta_feature_width() -> None:
 
     assert X.shape == (2, 80)
     assert len(feature_names) == 80
-    assert feature_names[-8] == "delta_product_minus_reactant_pair_0"
+    assert feature_names[-8] == "delta_product_minus_reactant_pair__morgan_0"
 
 
 def test_role_separated_conditions_missing_columns_raise_clear_error() -> None:

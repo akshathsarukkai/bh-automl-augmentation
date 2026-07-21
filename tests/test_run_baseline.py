@@ -127,12 +127,12 @@ output:
 
     assert set(metrics["feature_kind"]) == {
         "reaction_morgan_sum",
-        "reaction_role_concat",
-        "reaction_role_concat_delta",
+        "reaction_section_concat",
+        "reaction_section_concat_delta",
     }
-    assert set(zip(metrics["feature_kind"], metrics["n_features"])) == {
+    assert set(zip(metrics["feature_kind"], metrics["n_features"], strict=False)) == {
         ("reaction_morgan_sum", 8),
-        ("reaction_role_concat", 24),
-        ("reaction_role_concat_delta", 32),
+        ("reaction_section_concat", 24),
+        ("reaction_section_concat_delta", 32),
     }
     assert len(metrics) == 6

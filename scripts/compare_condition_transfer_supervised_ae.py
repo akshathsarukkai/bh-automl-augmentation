@@ -9,6 +9,11 @@ import numpy as np
 import pandas as pd
 from scipy.stats import ttest_rel, wilcoxon
 
+from bh_augmentation.results.status import (
+    assert_result_directory_allowed,
+    read_result_csv,
+)
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -17,8 +22,14 @@ def main() -> None:
         default="results/condition_transfer_supervised_ae_xgboost",
         help="Hybrid result directory.",
     )
+    parser.add_argument(
+        "--allow-invalid-results",
+        action="store_true",
+        help="Allow explicit historical inspection of invalid result directories.",
+    )
     args = parser.parse_args()
     directory = Path(args.directory)
+    assert_result_directory_allowed(directory, allow_invalid=args.allow_invalid_results)
     metrics_path = directory / "policy_metrics.csv"
     selected_path = directory / "selected_hybrid_policies.csv"
     if not metrics_path.exists() or not selected_path.exists():
@@ -26,10 +37,10 @@ def main() -> None:
             f"Missing hybrid outputs under {directory}. Run the hybrid experiment first."
         )
 
-    metrics = pd.read_csv(metrics_path)
-    selected = pd.read_csv(selected_path)
+    metrics = read_result_csv(metrics_path, allow_invalid=args.allow_invalid_results)
+    selected = read_result_csv(selected_path, allow_invalid=args.allow_invalid_results)
     table = _rmse_table(metrics)
-    stats = _paired_stats(directory)
+    stats = _paired_stats(directory, allow_invalid=args.allow_invalid_results)
     report_path = directory / "comparison_report.csv"
     table.to_csv(report_path, index=False)
 
@@ -80,13 +91,13 @@ def _rmse_table(metrics: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def _paired_stats(directory: Path) -> pd.DataFrame:
+def _paired_stats(directory: Path, *, allow_invalid: bool = False) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
     for parent in ["real_only", "anonymous_transfer", "ae_only", "best_parent"]:
         path = directory / f"hybrid_vs_{parent}_by_seed.csv"
         if not path.exists():
             continue
-        frame = pd.read_csv(path)
+        frame = read_result_csv(path, allow_invalid=allow_invalid)
         for fraction, group in frame.loc[frame["metric"] == "rmse"].groupby("train_fraction"):
             hybrid = group["hybrid_value"].to_numpy(dtype=float)
             baseline = group["parent_value"].to_numpy(dtype=float)
