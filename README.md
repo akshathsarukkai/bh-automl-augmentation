@@ -32,10 +32,11 @@ its normalized `aryl_halide_smiles`, `amine_smiles`, `ligand_smiles`,
 `base_smiles`, and `additive_smiles` columns are fully `UNKNOWN`. These legacy
 columns are not required and are dropped when they contain no information.
 
-`reaction_smiles` is the canonical chemistry representation for current models
-and benchmarks. Feature builders split it into reactant/agent/product tokens
-before RDKit fingerprinting. The active modes are `reaction_morgan_sum`,
-`reaction_role_concat`, and `reaction_role_concat_delta`.
+The original `reaction_smiles` string remains preserved source data. Batch 3
+adds a versioned RDKit-canonical identity for each of the seven recovered
+Buchwald-Hartwig roles without rewriting the source strings. Future corrected
+benchmarks should use the saved canonical group assignments rather than
+row-level random splits.
 
 Component-column augmentation is disabled. The active augmentation recombines
 condition tokens parsed from `reaction_smiles`. Stress-test `product_key` and
@@ -244,6 +245,48 @@ Equal feature widths do not establish compatibility. Any measured/synthetic
 stack must also match canonical feature names, radius, bit count, resolved
 fingerprint backend, role ordering, and exact half-open block slices. See
 `RESULT_STATUS.md` for invalid historical outputs produced before this check.
+
+### Canonical Data Audit And Grouped Splits
+
+Canonicalize and audit the seven molecular roles:
+
+```bash
+python -m bh_augmentation.data.audit_canonical_dataset \
+  --config configs/canonical_data_audit.yaml
+```
+
+The source CSV is not modified. The command preserves each raw role string,
+adds isomeric RDKit canonical SMILES, constructs a schema-versioned reaction
+key, and reports invalid structures, duplicate rows, experimental replicates,
+yield conflicts, and feature-vector equality separately. It performs no
+tautomer standardization, neutralization, salt stripping, fragment removal, or
+protonation normalization.
+
+Build deterministic canonical-group-safe splits:
+
+```bash
+python -m bh_augmentation.data.canonical_splits \
+  --config configs/canonical_grouped_splits.yaml
+```
+
+All rows with one canonical seven-role reaction identity remain in one outer
+split. The 1%, 5%, 10%, and 20% training sets are cumulative complete-group
+prefixes of the same outer training pool.
+
+These audit concepts are intentionally distinct:
+
+- **Canonical molecular equivalence** means RDKit maps role strings to the same
+  molecular graph identity under the documented canonicalization settings.
+- **Feature-vector equality** means the selected finite fingerprint vectors are
+  equal; collisions do not prove chemical equivalence.
+- **Experimental replication** means multiple measured rows share one canonical
+  seven-role reaction identity.
+- **Yield conflict** means replicates of one canonical reaction report differing
+  measured yields.
+
+Canonicalization preserves stereochemistry, isotopes, formal charges,
+aromaticity, disconnected fragments, and reactant-role order. It does not prove
+that role assignment or measured metadata is scientifically correct.
 
 ## Augmentation Run
 

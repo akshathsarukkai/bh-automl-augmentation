@@ -1,0 +1,24 @@
+scientific_run: true
+allow_hash_fingerprint_fallback: false
+invalid_smiles_policy: audit_then_error_for_scientific_dataset
+
+canonicalization:
+  backend: rdkit
+  isomeric_smiles: true
+  preserve_role_order: true
+
+dataset:
+  source_path: data/processed/bh_clean_stress.csv
+  path: data/processed/bh_canonical_roles_v1_tiny.csv
+  nrows: 50
+
+splits:
+  group_column: canonical_reaction_key
+  seeds: [0]
+  train_size: 0.8
+  valid_size: 0.1
+  test_size: 0.1
+  train_fractions: [0.01, 0.05, 0.10, 0.20, 1.0]
+
+output:
+  directory: results/corrected_canonical_splits_tiny

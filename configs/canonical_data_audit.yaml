@@ -1,0 +1,25 @@
+scientific_run: true
+allow_hash_fingerprint_fallback: false
+invalid_smiles_policy: audit_then_error_for_scientific_dataset
+
+dataset:
+  path: data/processed/bh_clean_stress.csv
+
+canonicalization:
+  backend: rdkit
+  isomeric_smiles: true
+  preserve_role_order: true
+
+duplicate_audit:
+  yield_conflict_reporting_threshold: 10.0
+  exclusion_policy: none
+
+features:
+  kind: bh_role_separated
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+
+output:
+  canonical_dataset_path: data/processed/bh_canonical_roles_v1.csv
+  directory: results/corrected_canonical_data_audit

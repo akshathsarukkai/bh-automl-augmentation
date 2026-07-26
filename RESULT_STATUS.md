@@ -18,6 +18,9 @@ path. Corrected experiments must use fresh output directories after review.
 | Corrected anonymous condition transfer | Corrected revalidation |
 | Corrected role-aware condition transfer | Corrected revalidation |
 | Corrected anonymous-versus-role-aware comparison | Corrected revalidation |
+| Batch 2 corrected random-split outputs | Development evidence |
+| Canonical seven-role data audit | Data-quality evidence |
+| Canonical grouped split assignments | Required for future benchmark evidence |
 
 ## Why role-aware v2 is invalid
 
@@ -49,3 +52,20 @@ a `run_manifest.json` with `historical_results_loaded=false`, and row-level
 `result_status=corrected_revalidation`. A corrected name alone is insufficient:
 comparison scripts validate manifests, feature hashes, split hashes, dataset
 hashes, and matched real-only metrics.
+
+## Canonical identity and future benchmarks
+
+Batch 2 corrected the measured/synthetic feature-semantics mismatch. Its
+random-split outputs remain valid development evidence, but they are not final
+benchmark evidence because canonical molecular duplicates and experimental
+replicates had not yet been audited when those splits were constructed.
+
+Batch 3 preserves Batch 2 outputs and introduces versioned RDKit canonical
+identities plus group-safe split assignments. Future corrected benchmark runs
+should use the canonical grouped assignments so rows representing the same
+seven-role canonical reaction cannot cross train, validation, and test.
+
+Canonicalization completing successfully does not establish that the dataset is
+clean. The duplicate, replicate, yield-conflict, invalid-structure, and
+fingerprint-collision reports require separate scientific review. Batch 3 does
+not generate new model results.
