@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -10,6 +11,7 @@ import pandas as pd
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 
+from bh_augmentation.augmentation.synthetic_identity import configured_feature_hash
 from bh_augmentation.evaluation.metrics import rmse
 from bh_augmentation.features.compatibility import (
     assert_feature_compatibility,
@@ -108,6 +110,9 @@ def run_utility_guided_feature_gan_augmentation(
     generated_total = 0
     accepted_total = 0
     reward_records: list[dict[str, Any]] = []
+    candidate_audits: list[pd.DataFrame] = []
+    generated_feature_hashes: set[str] = set()
+    generator_source_ids = _row_ids(train_df.iloc[gen_idx])
 
     for round_index in range(n_rounds):
         generated = generate_feature_candidates(
@@ -120,12 +125,22 @@ def run_utility_guided_feature_gan_augmentation(
             rng=rng,
             return_latent=train_student_in_latent_space,
         )
-        scored = score_and_filter_feature_candidates(
+        scored, round_audit = score_and_filter_feature_candidates(
             generated,
             X_gen_student,
             teachers,
             config,
+            source_row_ids=generator_source_ids,
+            seen_feature_hashes=generated_feature_hashes,
+            return_audit=True,
         )
+        round_audit["generation_round"] = round_index
+        round_audit["candidate_id"] = np.arange(
+            generated_total,
+            generated_total + len(round_audit),
+            dtype=int,
+        )
+        candidate_audits.append(round_audit)
         generated_total += len(generated)
         accepted_total += len(scored)
         if scored.empty:
@@ -181,6 +196,7 @@ def run_utility_guided_feature_gan_augmentation(
             metadata,
             transform,
             train_student_in_latent_space,
+            candidate_audit=_concat_audits(candidate_audits),
         ), metadata
 
     final = best_batch.head(target_synthetic).reset_index(drop=True)
@@ -224,6 +240,7 @@ def run_utility_guided_feature_gan_augmentation(
         metadata,
         transform,
         train_student_in_latent_space,
+        candidate_audit=_concat_audits(candidate_audits),
     ), metadata
 
 
@@ -381,10 +398,20 @@ def score_and_filter_feature_candidates(
     X_real: np.ndarray,
     teachers: list[Any],
     config: dict[str, Any],
-) -> pd.DataFrame:
-    """Pseudo-label, score, and filter generated feature vectors."""
+    *,
+    source_row_ids: Sequence[str] | None = None,
+    seen_feature_hashes: set[str] | None = None,
+    return_audit: bool = False,
+) -> pd.DataFrame | tuple[pd.DataFrame, pd.DataFrame]:
+    """Pseudo-label, score, filter, and identity-audit generated coordinates.
+
+    Generated feature vectors are development controls, not molecular records.
+    Their exact coordinate hashes are deduplicated separately while chemical
+    identity fields remain explicitly unavailable.
+    """
     if candidates.empty:
-        return candidates.copy()
+        empty = candidates.copy()
+        return (empty, empty.copy()) if return_audit else empty
     X_candidates = np.vstack(candidates["feature_vector"].to_numpy()).astype(np.float32)
     teacher_predictions = np.vstack([predict_model(model, X_candidates) for model in teachers])
     scored = candidates.copy()
@@ -398,19 +425,92 @@ def score_and_filter_feature_candidates(
     nearest_similarity, nearest_index = _nearest_cosine_similarity(X_candidates, X_real)
     scored["nearest_train_similarity"] = nearest_similarity
     scored["nearest_real_index"] = nearest_index
+    parent_ids = _normalize_source_ids(source_row_ids, len(X_real))
+    scored["source_row_id"] = [parent_ids[index] for index in nearest_index]
+    scored["donor_row_id"] = None
+    scored["canonical_reaction_key"] = None
+    scored["canonical_reaction_hash"] = None
+    scored["feature_hash"] = [
+        configured_feature_hash(vector) for vector in X_candidates
+    ]
+    scored["source_identical"] = pd.array([pd.NA] * len(scored), dtype="boolean")
+    scored["already_measured"] = pd.array([pd.NA] * len(scored), dtype="boolean")
+    scored["duplicate_synthetic"] = pd.array([pd.NA] * len(scored), dtype="boolean")
+    scored["chemical_parse_valid"] = False
+    scored["identity_classification"] = "feature_space_nonchemical"
+    scored["chemical_identity_available"] = False
+    scored["scientific_candidate_eligible"] = False
+    scored["development_control_only"] = True
+    scored["source_id_semantics"] = "nearest_training_support_not_generator_parent"
+    scored["donor_id_semantics"] = "not_applicable"
+    scored["chemical_identity_limitation"] = (
+        "generated_coordinate_has_no_seven_role_reaction_identity"
+    )
+
+    scored["feature_duplicate_synthetic"] = False
+    scored["rejection_reason"] = None
+    invalid_features = scored["feature_hash"].isna()
+    scored.loc[invalid_features, "rejection_reason"] = "invalid_feature_vector"
+    scored.loc[
+        scored["feature_duplicate_synthetic"] & scored["rejection_reason"].isna(),
+        "rejection_reason",
+    ] = "feature_duplicate_synthetic"
+
     filters = config.get("filters", {})
-    if not filters.get("enabled", True):
-        return scored.reset_index(drop=True)
-    keep = scored["nearest_train_similarity"].ge(float(filters.get("min_nearest_similarity", 0.6)))
-    if filters.get("remove_near_duplicates", True):
-        keep &= scored["nearest_train_similarity"].le(float(filters.get("max_nearest_similarity", 0.995)))
-    keep &= scored["teacher_std_prediction"].le(float(filters.get("max_teacher_std", 12.0)))
-    keep &= scored["teacher_prediction_range"].le(float(filters.get("max_prediction_range", 35.0)))
+    keep = scored["rejection_reason"].isna()
+    if filters.get("enabled", True):
+        threshold_keep = scored["nearest_train_similarity"].ge(
+            float(filters.get("min_nearest_similarity", 0.6))
+        )
+        if filters.get("remove_near_duplicates", True):
+            threshold_keep &= scored["nearest_train_similarity"].le(
+                float(filters.get("max_nearest_similarity", 0.995))
+            )
+        threshold_keep &= scored["teacher_std_prediction"].le(
+            float(filters.get("max_teacher_std", 12.0))
+        )
+        threshold_keep &= scored["teacher_prediction_range"].le(
+            float(filters.get("max_prediction_range", 35.0))
+        )
+        scored.loc[
+            ~threshold_keep & scored["rejection_reason"].isna(),
+            "rejection_reason",
+        ] = "candidate_filter_rejected"
+        keep &= threshold_keep
+
+    # Only candidates surviving their individual filters participate in the
+    # accepted-generated feature set. A rejected vector cannot shadow a later,
+    # otherwise valid candidate with the same coordinates.
+    known_hashes = set(seen_feature_hashes or ())
+    for index in scored.index[keep]:
+        feature_hash = scored.at[index, "feature_hash"]
+        if feature_hash in known_hashes:
+            scored.at[index, "feature_duplicate_synthetic"] = True
+            scored.at[index, "rejection_reason"] = "feature_duplicate_synthetic"
+            keep.at[index] = False
+        else:
+            known_hashes.add(feature_hash)
+
+    scored["accepted"] = keep
     filtered = scored.loc[keep].copy()
     cap = int(config.get("diversity", {}).get("max_synthetic_per_nearest_real", 5))
     if cap > 0 and not filtered.empty:
-        filtered = filtered.groupby("nearest_real_index", group_keys=False).head(cap)
-    return filtered.reset_index(drop=True)
+        capped_indices = filtered.groupby(
+            "nearest_real_index", group_keys=False, sort=False
+        ).head(cap).index
+        cap_rejected = keep & ~scored.index.isin(capped_indices)
+        scored.loc[cap_rejected, "accepted"] = False
+        scored.loc[cap_rejected, "rejection_reason"] = "per_source_cap"
+        filtered = scored.loc[scored["accepted"]].copy()
+    if seen_feature_hashes is not None:
+        seen_feature_hashes.update(
+            str(value)
+            for value in scored.loc[scored["accepted"], "feature_hash"]
+            if isinstance(value, str)
+        )
+    filtered = filtered.reset_index(drop=True)
+    audit = scored.reset_index(drop=True)
+    return (filtered, audit) if return_audit else filtered
 
 
 def compute_batch_reward(
@@ -596,6 +696,10 @@ def _metadata(
         "original_n_features": int(original_n_features),
         "student_n_features": int(student_n_features),
         "synthetic_multiplier": float(config.get("synthetic_multiplier", 1.0)),
+        "identity_classification": "feature_space_nonchemical",
+        "chemical_identity_available": False,
+        "scientific_candidate_eligible": False,
+        "development_control_only": True,
         "mean_teacher_std": _mean_or_nan(synthetic.get("teacher_std_prediction")),
         "mean_prediction_range": _mean_or_nan(synthetic.get("teacher_prediction_range")),
         "mean_nearest_similarity": _mean_or_nan(synthetic.get("nearest_train_similarity")),
@@ -612,12 +716,18 @@ def _package_result(
     metadata: dict[str, Any],
     feature_transform: FeatureTransform,
     train_student_in_latent_space: bool,
+    candidate_audit: pd.DataFrame | None = None,
 ) -> dict[str, Any]:
     return {
         "X_train_augmented": X_aug.astype(np.float32),
         "y_train_augmented": y_aug.astype(np.float32),
         "sample_weight": sample_weight,
         "synthetic_metadata": synthetic_metadata.reset_index(drop=True),
+        "candidate_audit": (
+            candidate_audit.reset_index(drop=True)
+            if candidate_audit is not None
+            else pd.DataFrame()
+        ),
         "metadata": metadata,
         "feature_transform": feature_transform,
         "train_student_in_latent_space": train_student_in_latent_space,
@@ -651,6 +761,10 @@ def _empty_result(
         "latent_dim": int(X_real.shape[1]),
         "original_n_features": int(X_real.shape[1]),
         "student_n_features": int(X_real.shape[1]),
+        "identity_classification": "feature_space_nonchemical",
+        "chemical_identity_available": False,
+        "scientific_candidate_eligible": False,
+        "development_control_only": True,
         "empty_reason": reason,
     }
     return _package_result(
@@ -668,6 +782,33 @@ def _mean_or_nan(values: pd.Series | None) -> float:
     if values is None or values.empty:
         return float("nan")
     return float(pd.to_numeric(values, errors="coerce").mean())
+
+
+def _row_ids(frame: pd.DataFrame) -> list[str]:
+    for column in ("source_row_id", "reaction_id"):
+        if column in frame:
+            return [str(value) for value in frame[column]]
+    return [f"train_position:{index}" for index in frame.index]
+
+
+def _normalize_source_ids(
+    source_row_ids: Sequence[str] | None,
+    n_rows: int,
+) -> list[str]:
+    if source_row_ids is None:
+        return [f"train_position:{index}" for index in range(n_rows)]
+    if len(source_row_ids) != n_rows:
+        raise ValueError("source_row_ids must contain one identifier per real row.")
+    normalized = [str(value) for value in source_row_ids]
+    if any(not value for value in normalized):
+        raise ValueError("source_row_ids must not contain empty identifiers.")
+    return normalized
+
+
+def _concat_audits(audits: list[pd.DataFrame]) -> pd.DataFrame:
+    if not audits:
+        return pd.DataFrame()
+    return pd.concat(audits, ignore_index=True)
 
 
 def _std_or_nan(values: pd.Series | None) -> float:

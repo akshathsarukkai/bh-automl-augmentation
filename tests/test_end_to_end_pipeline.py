@@ -88,10 +88,18 @@ def _expand_cleaned_fixture(df: pd.DataFrame, repeats: int) -> pd.DataFrame:
     for repeat in range(repeats):
         copy = df[["reaction_id", "reaction_smiles", "yield"]].copy()
         copy["reaction_id"] = copy["reaction_id"].astype(str) + f"_copy_{repeat}"
-        condition_a = "O" if repeat % 2 else "Cl"
-        condition_b = "C" if repeat < 2 else "P"
+        copy["reaction_smiles"] = (
+            copy["reaction_smiles"]
+            .str.replace("NH2Et", "CCN", regex=False)
+            .str.replace("NH2C", "CN", regex=False)
+            .str.replace("NHMe", "CN", regex=False)
+        )
+        condition_a = "N1CCCCC1" if repeat % 2 else "N(C)(C)C"
+        condition_b = "CCCO" if repeat < 2 else "CCO"
         copy["reaction_smiles"] = copy["reaction_smiles"].str.replace(
-            ">>", f".{condition_a}.{condition_b}>>", regex=False
+            ">>",
+            f".[Pd].P(C)(C)C.{condition_a}.{condition_b}>>",
+            regex=False,
         )
         copy["product_key"] = copy["reaction_smiles"].str.split(">>").str[-1]
         copy["reactant_key"] = copy["reaction_smiles"].str.split(">>").str[0]

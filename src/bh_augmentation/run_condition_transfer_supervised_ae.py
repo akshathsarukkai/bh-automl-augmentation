@@ -16,6 +16,7 @@ from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
@@ -47,6 +48,10 @@ from bh_augmentation.run_supervised_ae_latent_baseline import (
 )
 from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.seed import set_global_seed
+from bh_augmentation.utils.synthetic_audits import (
+    build_candidate_audit_frame,
+    combine_candidate_audit_frames,
+)
 
 
 def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, Path]:
@@ -59,6 +64,7 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     df = ensure_reaction_role_columns(clean_buchwald_hartwig(raw_df), parse_if_missing=True)
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run the hybrid experiment.")
+    complete_measured_identity_keys = measured_canonical_keys(df)
 
     configured_features = {"kind": "bh_role_separated", **dict(config.get("features", {}))}
     feature_config = normalize_feature_config(_resolve_feature_config(configured_features))
@@ -86,6 +92,7 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     selected_rows: list[dict[str, object]] = []
     ae_audit: list[dict[str, object]] = []
     synthetic_audit: list[dict[str, object]] = []
+    candidate_audit_frames: list[pd.DataFrame] = []
 
     for seed in seeds:
         set_global_seed(seed)
@@ -146,10 +153,12 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
                 feature_config=feature_config,
                 feature_names=feature_names,
                 feature_metadata=feature_metadata,
+                complete_measured_identity_keys=complete_measured_identity_keys,
             )
             for candidate in condition_candidates:
                 metrics.extend(candidate["metric_records"])
                 synthetic_audit.append(candidate["audit"])
+                candidate_audit_frames.append(candidate["candidate_audit"])
             selected_condition = _select_condition_transfer_candidate(condition_candidates)
             if selected_condition is not None:
                 selected_condition["audit"]["selected_condition_transfer_policy"] = True
@@ -269,6 +278,7 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     summary = _summarize(policy_metrics)
     ae_audit_df = pd.DataFrame(ae_audit)
     synthetic_audit_df = pd.DataFrame(synthetic_audit)
+    candidate_audit_df = combine_candidate_audit_frames(candidate_audit_frames)
 
     comparisons = _build_all_comparisons(policy_metrics, selected_policy_metrics)
     _write_outputs(
@@ -277,6 +287,7 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
         selected_policy_metrics,
         ae_audit_df,
         synthetic_audit_df,
+        candidate_audit_df,
         summary,
         comparisons,
         paths,
@@ -402,6 +413,7 @@ def _evaluate_condition_transfer_candidates(
     feature_config: dict[str, Any],
     feature_names: list[str],
     feature_metadata: FeatureMetadata,
+    complete_measured_identity_keys: set[str],
 ) -> list[dict[str, Any]]:
     candidates: list[dict[str, Any]] = []
     train_index_set = set(train_df.index.tolist())
@@ -414,6 +426,7 @@ def _evaluate_condition_transfer_candidates(
             feature_config=feature_config,
             real_feature_names=feature_names,
             real_feature_metadata=feature_metadata,
+            measured_identity_keys=complete_measured_identity_keys,
         )
         metadata = dict(result["metadata"])
         policy_id = _condition_policy_id(policy_index, policy)
@@ -434,9 +447,23 @@ def _evaluate_condition_transfer_candidates(
             ),
             "selected_condition_transfer_policy": False,
         }
+        candidate_audit = build_candidate_audit_frame(
+            result["candidate_df"],
+            transfer_kind="anonymous_supervised_ae",
+            seed=seed,
+            train_fraction=train_fraction,
+            policy_id=policy_id,
+        )
         if n_synthetic == 0:
             audit["selection_eligible"] = False
-            candidates.append({"audit": audit, "metric_records": [], "generation_result": result})
+            candidates.append(
+                {
+                    "audit": audit,
+                    "candidate_audit": candidate_audit,
+                    "metric_records": [],
+                    "generation_result": result,
+                }
+            )
             continue
         X_aug, y_aug, _, _, _ = combine_real_and_synthetic_training_data(
             X_train,
@@ -469,6 +496,7 @@ def _evaluate_condition_transfer_candidates(
         candidates.append(
             {
                 "audit": audit,
+                "candidate_audit": candidate_audit,
                 "metric_records": records,
                 "generation_result": result,
                 "model": model,
@@ -1061,6 +1089,7 @@ def _write_outputs(
     selected_metrics: pd.DataFrame,
     ae_audit: pd.DataFrame,
     synthetic_audit: pd.DataFrame,
+    candidate_audit: pd.DataFrame,
     summary: pd.DataFrame,
     comparisons: dict[str, tuple[pd.DataFrame, pd.DataFrame]],
     paths: dict[str, Path],
@@ -1071,6 +1100,7 @@ def _write_outputs(
         "selected_hybrid_policy_metrics_path": selected_metrics,
         "ae_training_audit_path": ae_audit,
         "synthetic_training_audit_path": synthetic_audit,
+        "synthetic_candidate_audit_path": candidate_audit,
         "summary_path": summary,
     }
     for name, (by_seed, comparison_summary) in comparisons.items():
@@ -1090,6 +1120,7 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
         "selected_hybrid_policy_metrics_path": "selected_hybrid_policy_metrics.csv",
         "ae_training_audit_path": "ae_training_audit.csv",
         "synthetic_training_audit_path": "synthetic_training_audit.csv",
+        "synthetic_candidate_audit_path": "synthetic_candidate_audit.csv",
         "summary_path": "summary.csv",
     }
     for parent in ["real_only", "anonymous_transfer", "ae_only", "best_parent"]:

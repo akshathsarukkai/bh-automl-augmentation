@@ -13,8 +13,9 @@ def _write_fixture_csv(path: Path, n_rows: int = 20) -> None:
         {
             "reaction_id": [f"rxn_{index:03d}" for index in range(n_rows)],
             "reaction_smiles": [
-                f"CC{'C' * (index % 4)}Br.N."
-                f"{'O' if index % 2 else 'Cl'}.{'C' if index % 3 else 'P'}"
+                f"CC{'C' * (index % 4)}Br.N.[Pd].P(C)(C)C."
+                f"{'N1CCCCC1' if index % 2 else 'N(C)(C)C'}."
+                f"{'CCO' if index % 3 else 'CCCO'}"
                 f">>CC{'C' * (index % 4)}N"
                 for index in range(n_rows)
             ],

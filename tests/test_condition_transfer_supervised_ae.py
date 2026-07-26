@@ -8,6 +8,9 @@ import numpy as np
 import pandas as pd
 import torch
 
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+)
 from bh_augmentation.features.compatibility import coordinate_feature_contract
 from bh_augmentation.representations.supervised_autoencoder import (
     SupervisedAEConfig,
@@ -179,6 +182,7 @@ def test_hybrid_runner_tiny_writes_outputs_and_leakage_audits(tmp_path: Path) ->
     selected = pd.read_csv(paths["selected_hybrid_policy_metrics_path"])
     ae_audit = pd.read_csv(paths["ae_training_audit_path"])
     synthetic_audit = pd.read_csv(paths["synthetic_training_audit_path"])
+    candidate_audit = pd.read_csv(paths["synthetic_candidate_audit_path"])
     assert {"seed", "train_fraction"} <= set(metrics.columns)
     assert {"valid", "test"} <= set(metrics["split"])
     assert any(metrics["representation"].astype(str).str.endswith("_condition_transfer"))
@@ -188,6 +192,8 @@ def test_hybrid_runner_tiny_writes_outputs_and_leakage_audits(tmp_path: Path) ->
     assert (ae_audit["n_synthetic_in_internal_valid"].fillna(0) == 0).all()
     assert synthetic_audit["source_and_donor_indices_train_only"].all()
     assert not synthetic_audit["used_validation_or_test_parents"].any()
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidate_audit)
+    assert not candidate_audit[["source_row_id", "donor_row_id"]].isna().any().any()
     for required in [
         "selected_hybrid_policies_path",
         "summary_path",

@@ -15,6 +15,7 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
     RoleAwareConditionTransferConfig,
     generate_role_aware_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.bh_condition_reader import RECOVERED_COLUMNS, augment_bh_dataframe
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
@@ -38,6 +39,10 @@ from bh_augmentation.run_supervised_ae_latent_baseline import (
 )
 from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.seed import set_global_seed
+from bh_augmentation.utils.synthetic_audits import (
+    build_candidate_audit_frame,
+    combine_candidate_audit_frames,
+)
 
 
 def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path]:
@@ -65,6 +70,7 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
     df = _prepare_condition_dataframe(clean_buchwald_hartwig(raw_df))
     if df.empty:
         raise ValueError("No rows remain after condition-role parsing.")
+    complete_measured_identity_keys = measured_canonical_keys(df)
     print(f"Rows used after condition-role parsing: {len(df)}")
     print("Role validation status counts:")
     print(df["role_validation_status"].value_counts(dropna=False).to_string())
@@ -93,6 +99,7 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
 
     metric_records: list[dict[str, object]] = []
     audit_records: list[dict[str, object]] = []
+    candidate_audit_frames: list[pd.DataFrame] = []
     for seed in seeds:
         set_global_seed(seed)
         for train_fraction, splits in _create_split_variants(df, config, seed):
@@ -131,6 +138,7 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
                     feature_config=feature_config,
                     real_feature_names=feature_names,
                     real_feature_metadata=feature_metadata,
+                    measured_identity_keys=complete_measured_identity_keys,
                 )
                 metadata = dict(result["metadata"])
                 metadata.update(
@@ -142,6 +150,15 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
                     }
                 )
                 audit_records.append(metadata)
+                candidate_audit_frames.append(
+                    build_candidate_audit_frame(
+                        result["candidate_df"],
+                        transfer_kind="role_aware",
+                        seed=seed,
+                        train_fraction=float(train_fraction),
+                        policy_id=policy_id,
+                    )
+                )
 
                 synthetic_df = result["synthetic_df"]
                 if len(synthetic_df) == 0:
@@ -185,7 +202,16 @@ def run_role_aware_condition_transfer(config_path: str | Path) -> dict[str, Path
     same_model_delta, same_model_summary = _save_vs_real_only_same_model(policy_metrics, selected_policy_metrics, output_paths)
     original_rf_delta, original_rf_summary = _save_vs_original_rf(policy_metrics, selected_policy_metrics, output_paths)
 
-    _write_outputs(policy_metrics, selected_policies, selected_policy_metrics, summary, audit, output_paths)
+    candidate_audit = combine_candidate_audit_frames(candidate_audit_frames)
+    _write_outputs(
+        policy_metrics,
+        selected_policies,
+        selected_policy_metrics,
+        summary,
+        audit,
+        candidate_audit,
+        output_paths,
+    )
     _print_test_summary(summary)
     _print_selected_policy_table(selected_policies, selected_policy_metrics)
     _print_delta_summary("ROLE-AWARE CONDITION TRANSFER DELTAS VS REAL-ONLY SAME MODEL", same_model_summary)
@@ -510,6 +536,7 @@ def _write_outputs(
     selected_policy_metrics: pd.DataFrame,
     summary: pd.DataFrame,
     audit: pd.DataFrame,
+    candidate_audit: pd.DataFrame,
     output_paths: dict[str, Path],
 ) -> None:
     for key in [
@@ -518,6 +545,7 @@ def _write_outputs(
         "selected_policy_metrics_path",
         "summary_path",
         "role_transfer_audit_path",
+        "role_transfer_candidate_audit_path",
     ]:
         output_paths[key].parent.mkdir(parents=True, exist_ok=True)
     policy_metrics.to_csv(output_paths["policy_metrics_path"], index=False)
@@ -525,6 +553,9 @@ def _write_outputs(
     selected_policy_metrics.to_csv(output_paths["selected_policy_metrics_path"], index=False)
     summary.to_csv(output_paths["summary_path"], index=False)
     audit.to_csv(output_paths["role_transfer_audit_path"], index=False)
+    candidate_audit.to_csv(
+        output_paths["role_transfer_candidate_audit_path"], index=False
+    )
 
 
 def _print_test_summary(summary: pd.DataFrame) -> None:
@@ -651,6 +682,12 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
         "selected_policy_metrics_path": Path(output.get("selected_policy_metrics_path", directory / "selected_policy_metrics.csv")),
         "summary_path": Path(output.get("summary_path", directory / "summary.csv")),
         "role_transfer_audit_path": Path(output.get("role_transfer_audit_path", directory / "role_transfer_audit.csv")),
+        "role_transfer_candidate_audit_path": Path(
+            output.get(
+                "role_transfer_candidate_audit_path",
+                directory / "role_transfer_candidate_audit.csv",
+            )
+        ),
         "role_value_counts_path": Path(output.get("role_value_counts_path", directory / "role_value_counts.csv")),
         "role_transfer_vs_real_only_same_model_by_seed_path": Path(output.get("role_transfer_vs_real_only_same_model_by_seed_path", directory / "role_transfer_vs_real_only_same_model_by_seed.csv")),
         "role_transfer_vs_real_only_same_model_summary_path": Path(output.get("role_transfer_vs_real_only_same_model_summary_path", directory / "role_transfer_vs_real_only_same_model_summary.csv")),

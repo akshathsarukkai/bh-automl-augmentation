@@ -18,8 +18,9 @@ def _write_group_fixture(path: Path) -> None:
                 {
                     "reaction_id": f"rxn_{row_index:03d}",
                     "reaction_smiles": (
-                        f"CC{'C' * product_index}Br.N."
-                        f"{'O' if repeat % 2 else 'Cl'}.{'C' if repeat < 2 else 'P'}"
+                        f"CC{'C' * product_index}Br.N.[Pd].P(C)(C)C."
+                        f"{'N1CCCCC1' if repeat % 2 else 'N(C)(C)C'}."
+                        f"{'CCO' if repeat < 2 else 'CCCO'}"
                         f">>CC{'C' * product_index}N"
                     ),
                     "product_key": product_key,

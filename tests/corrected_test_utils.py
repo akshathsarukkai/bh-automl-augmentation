@@ -13,7 +13,7 @@ def corrected_dataset(n_rows: int = 72) -> pd.DataFrame:
     reactant_1 = ["Brc1ccccc1", "Clc1ccccc1", "Brc1ccncc1", "Ic1ccccc1"]
     reactant_2 = ["CN", "CCN", "Nc1ccccc1"]
     ligands = ["P(C)(C)C", "P(CC)(CC)CC", "P(c1ccccc1)(c1ccccc1)c1ccccc1"]
-    bases = ["K3PO4", "K2CO3", "CN(C)C(=NC(C)(C)C)N(C)C"]
+    bases = ["O=P(O)(O)O", "O=C(O)O", "CN(C)C(=NC(C)(C)C)N(C)C"]
     solvents = ["CCO", "CCCO", "O1CCOCC1"]
     products = ["c1ccccc1NC", "c1ccccc1NCC", "c1ccncc1NC"]
     rows: list[dict[str, Any]] = []

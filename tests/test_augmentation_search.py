@@ -160,7 +160,8 @@ def test_policy_search_runner_writes_validation_selected_outputs(tmp_path: Path)
         {
             "reaction_id": [f"r{index}" for index in range(24)],
             "reaction_smiles": [
-                f"{'C' * (index + 2)}Br.N.{'O' if index % 2 else 'Cl'}.C"
+                f"{'C' * (index + 2)}Br.N.[Pd].P(C)(C)C."
+                f"{'N1CCCCC1' if index % 2 else 'N(C)(C)C'}.CCO"
                 f">>{'C' * (index + 2)}N"
                 for index in range(24)
             ],
@@ -241,7 +242,8 @@ def test_ensemble_policy_search_runner_writes_selected_outputs(tmp_path: Path) -
         {
             "reaction_id": [f"r{index}" for index in range(20)],
             "reaction_smiles": [
-                f"{'C' * (index + 2)}Br.N.{'O' if index % 2 else 'Cl'}.C"
+                f"{'C' * (index + 2)}Br.N.[Pd].P(C)(C)C."
+                f"{'N1CCCCC1' if index % 2 else 'N(C)(C)C'}.CCO"
                 f">>{'C' * (index + 2)}N"
                 for index in range(20)
             ],

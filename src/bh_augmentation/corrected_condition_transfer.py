@@ -20,6 +20,7 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
     clear_role_aware_teacher_cache,
     generate_role_aware_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.bh_condition_reader import parse_bh_reaction_smiles
 from bh_augmentation.features.compatibility import assert_feature_compatibility
 from bh_augmentation.features.featurize import build_feature_matrix_with_metadata
@@ -49,6 +50,10 @@ from bh_augmentation.utils.corrected_runs import (
     write_json,
 )
 from bh_augmentation.utils.seed import set_global_seed
+from bh_augmentation.utils.synthetic_audits import (
+    build_candidate_audit_frame,
+    combine_candidate_audit_frames,
+)
 
 Policy = ConditionTransferConfig | RoleAwareConditionTransferConfig
 PolicyFactory = Callable[[dict[str, Any], int, pd.DataFrame], list[Policy]]
@@ -74,6 +79,7 @@ def run_corrected_condition_transfer(
     dataset_path = Path(_dataset_path(config))
     dataset_hash = sha256_file(dataset_path)
     frame = load_corrected_bh_dataframe(dataset_path)
+    complete_measured_identity_keys = measured_canonical_keys(frame)
     output_dir = prepare_fresh_output_directory(config["output"]["directory"])
     paths = _output_paths(output_dir, transfer_kind)
 
@@ -89,6 +95,7 @@ def run_corrected_condition_transfer(
     metric_rows: list[dict[str, Any]] = []
     selected_rows: list[dict[str, Any]] = []
     audit_rows: list[dict[str, Any]] = []
+    candidate_audit_frames: list[pd.DataFrame] = []
     compatibility_rows: list[dict[str, Any]] = []
     split_rows: list[dict[str, Any]] = []
     split_hashes: dict[str, str] = {}
@@ -154,6 +161,16 @@ def run_corrected_condition_transfer(
                     feature_config,
                     feature_names,
                     feature_metadata,
+                    complete_measured_identity_keys,
+                )
+                candidate_audit_frames.append(
+                    build_candidate_audit_frame(
+                        result["candidate_df"],
+                        transfer_kind=transfer_kind,
+                        seed=seed,
+                        train_fraction=fraction,
+                        policy_id=policy_id,
+                    )
                 )
                 assert_training_only_parents(result["candidate_df"], splits)
                 assert_feature_compatibility(
@@ -304,6 +321,9 @@ def run_corrected_condition_transfer(
     pd.DataFrame(compatibility_rows).to_csv(paths["feature_compatibility_audit"], index=False)
     summary.to_csv(paths["summary"], index=False)
     pd.DataFrame(split_rows).to_csv(paths["split_audit"], index=False)
+    combine_candidate_audit_frames(candidate_audit_frames).to_csv(
+        paths["candidate_audit"], index=False
+    )
     if transfer_kind == "role_aware":
         role_counts.to_csv(paths["role_value_counts"], index=False)
     manifest = build_run_manifest(
@@ -349,11 +369,13 @@ def _generate(
     feature_config: dict[str, Any],
     feature_names: list[str],
     feature_metadata: Any,
+    complete_measured_identity_keys: set[str],
 ) -> dict[str, Any]:
     kwargs = {
         "feature_config": feature_config,
         "real_feature_names": feature_names,
         "real_feature_metadata": feature_metadata,
+        "measured_identity_keys": complete_measured_identity_keys,
     }
     if transfer_kind == "anonymous":
         if not isinstance(policy, ConditionTransferConfig):
@@ -611,12 +633,18 @@ def _policy_id(
 
 def _output_paths(directory: Path, kind: str) -> dict[str, Path]:
     audit_name = "synthetic_audit.csv" if kind == "anonymous" else "role_transfer_audit.csv"
+    candidate_audit_name = (
+        "synthetic_candidate_audit.csv"
+        if kind == "anonymous"
+        else "role_transfer_candidate_audit.csv"
+    )
     paths = {
         "directory": directory,
         "policy_metrics": directory / "policy_metrics.csv",
         "selected_policies": directory / "selected_policies.csv",
         "selected_policy_metrics": directory / "selected_policy_metrics.csv",
         "audit": directory / audit_name,
+        "candidate_audit": directory / candidate_audit_name,
         "feature_compatibility_audit": directory / "feature_compatibility_audit.csv",
         "summary": directory / "summary.csv",
         "split_audit": directory / "split_audit.csv",
@@ -631,6 +659,9 @@ def _output_paths(directory: Path, kind: str) -> dict[str, Path]:
             "summary_path": paths["summary"],
             "synthetic_audit_path": paths["audit"],
             "role_transfer_audit_path": paths["audit"],
+            "candidate_audit_path": paths["candidate_audit"],
+            "synthetic_candidate_audit_path": paths["candidate_audit"],
+            "role_transfer_candidate_audit_path": paths["candidate_audit"],
             "role_value_counts_path": paths["role_value_counts"],
         }
     )

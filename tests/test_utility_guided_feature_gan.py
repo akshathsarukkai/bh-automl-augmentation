@@ -13,6 +13,7 @@ from bh_augmentation.augmentation.utility_guided_feature_gan import (
     compute_batch_reward,
     fit_feature_transform,
     run_utility_guided_feature_gan_augmentation,
+    score_and_filter_feature_candidates,
     select_elite_batches,
     update_yield_bin_policy,
 )
@@ -54,6 +55,56 @@ def test_transform_and_generated_output_shapes_with_clipped_labels() -> None:
     assert result["y_train_augmented"].max() <= 100.0
     assert metadata["n_generator_train"] + metadata["n_reward_valid"] == len(df)
     assert metadata["n_synthetic_train"] > 0
+    audit = result["candidate_audit"]
+    assert len(audit) == metadata["n_candidates_generated"]
+    assert audit["identity_classification"].eq("feature_space_nonchemical").all()
+    assert audit["source_id_semantics"].eq(
+        "nearest_training_support_not_generator_parent"
+    ).all()
+    assert not audit["chemical_parse_valid"].any()
+    assert audit.loc[audit["accepted"], "feature_hash"].is_unique
+    assert metadata["development_control_only"] is True
+
+
+def test_feature_candidate_audit_deduplicates_without_claiming_chemistry() -> None:
+    X_real = np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32)
+    y_real = np.array([20.0, 80.0], dtype=np.float32)
+    teacher = train_model(get_model("ridge"), X_real, y_real)
+    candidates = pd.DataFrame(
+        {
+            "feature_vector": [
+                np.array([0.4, 0.6], dtype=np.float32),
+                np.array([0.4, 0.6], dtype=np.float32),
+                np.array([0.7, 0.3], dtype=np.float32),
+            ],
+            "yield_bin": [0, 0, 1],
+        }
+    )
+
+    accepted, audit = score_and_filter_feature_candidates(
+        candidates,
+        X_real,
+        [teacher],
+        {"filters": {"enabled": False}},
+        source_row_ids=["row-a", "row-b"],
+        return_audit=True,
+    )
+
+    assert len(accepted) == 2
+    assert audit["feature_duplicate_synthetic"].tolist() == [False, True, False]
+    assert audit["rejection_reason"].tolist() == [
+        None,
+        "feature_duplicate_synthetic",
+        None,
+    ]
+    assert audit["source_row_id"].isin(["row-a", "row-b"]).all()
+    assert audit["donor_row_id"].isna().all()
+    assert audit["canonical_reaction_key"].isna().all()
+    assert audit["canonical_reaction_hash"].isna().all()
+    assert not audit["chemical_parse_valid"].any()
+    assert audit["identity_classification"].eq("feature_space_nonchemical").all()
+    assert not audit["scientific_candidate_eligible"].any()
+    assert accepted["feature_hash"].is_unique
 
 
 def test_latent_mode_trains_student_on_generated_latent_vectors() -> None:

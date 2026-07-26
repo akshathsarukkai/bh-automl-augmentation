@@ -38,6 +38,40 @@ def test_latent_interpolation_shapes_and_train_parent_scope() -> None:
     assert kept["parent_j"].between(0, len(z_train) - 1).all()
 
 
+def test_latent_candidates_have_deterministic_nonchemical_identity_audit() -> None:
+    z_train, y_train = _latent_data()
+    row_ids = [f"canonical-row-{index}" for index in range(len(z_train))]
+
+    first = generate_latent_interpolations(
+        z_train,
+        y_train,
+        _ae_artifacts(latent_dim=z_train.shape[1]),
+        _config(label_strategy="mixup_label", synthetic_multiplier=0.5),
+        source_row_ids=row_ids,
+    )
+    second = generate_latent_interpolations(
+        z_train.copy(),
+        y_train.copy(),
+        _ae_artifacts(latent_dim=z_train.shape[1]),
+        _config(label_strategy="mixup_label", synthetic_multiplier=0.5),
+        source_row_ids=row_ids,
+    )
+
+    audited = first["candidate_df"]
+    assert audited["source_row_id"].isin(row_ids).all()
+    assert audited["donor_row_id"].isin(row_ids).all()
+    assert audited["canonical_reaction_key"].isna().all()
+    assert audited["canonical_reaction_hash"].isna().all()
+    assert not audited["chemical_parse_valid"].any()
+    assert audited["identity_classification"].eq("feature_space_nonchemical").all()
+    assert not audited["scientific_candidate_eligible"].any()
+    assert audited["feature_hash"].notna().all()
+    assert not audited.loc[audited["accepted"], "feature_hash"].duplicated().any()
+    assert audited["feature_hash"].tolist() == second["candidate_df"][
+        "feature_hash"
+    ].tolist()
+
+
 def test_mixup_label_is_between_parent_labels() -> None:
     z_train, y_train = _latent_data()
     result = generate_latent_interpolations(
@@ -257,4 +291,3 @@ def _tiny_reactions(n_rows: int) -> pd.DataFrame:
             "yield": [float((index * 9) % 101) for index in range(n_rows)],
         }
     )
-

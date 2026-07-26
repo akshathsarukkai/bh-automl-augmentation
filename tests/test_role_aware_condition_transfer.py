@@ -16,6 +16,9 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
 from bh_augmentation.augmentation.role_aware_condition_transfer import (
     generate_role_aware_condition_transfer_examples as _generate_role_aware_examples,
 )
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+)
 from bh_augmentation.data.bh_condition_reader import (
     parse_bh_reaction_smiles,
     recover_condition_fields,
@@ -416,6 +419,7 @@ output:
     policy_metrics = pd.read_csv(paths["policy_metrics_path"])
     selected_metrics = pd.read_csv(paths["selected_policy_metrics_path"])
     audit = pd.read_csv(paths["role_transfer_audit_path"])
+    candidate_audit = pd.read_csv(paths["role_transfer_candidate_audit_path"])
     assert "role_transfer_mode" in policy_metrics.columns
     assert "role_transfer_mode" in audit.columns
     assert paths["role_value_counts_path"].exists()
@@ -426,6 +430,8 @@ output:
     assert set(policy_metrics["split"]) == {"valid", "test"}
     assert set(selected_metrics["split"]) == {"valid", "test"}
     assert {"changed_ligand_fraction", "changed_base_fraction"} <= set(audit.columns)
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidate_audit)
+    assert not candidate_audit[["source_row_id", "donor_row_id"]].isna().any().any()
 
 
 def _metric_row(
@@ -501,18 +507,28 @@ def _invariant_catalyst_df() -> pd.DataFrame:
 def _same_context_df() -> pd.DataFrame:
     catalyst = "Cl[Pd]Cl"
     product = "c1ccc(Nc2ccccc2)cc1"
+    reactants = [
+        "Brc1ccccc1",
+        "Brc1ccc(C)cc1",
+        "Brc1ccc(F)cc1",
+        "Brc1ccc(Cl)cc1",
+        "Brc1ccc(OC)cc1",
+        "Brc1ccc(C#N)cc1",
+        "Brc1ccncc1",
+        "Brc1ccc(C(F)(F)F)cc1",
+    ]
     values = [
         (ligand, base, solvent, float(index * 10 + 10))
         for index, (ligand, base, solvent) in enumerate(
             (ligand, base, solvent)
-            for ligand in ["LigA", "LigB"]
-            for base in ["BaseA", "BaseB"]
-            for solvent in ["SolvA", "SolvB"]
+            for ligand in ["P(C)(C)C", "P(CC)(CC)CC"]
+            for base in ["N(C)(C)C", "N1CCCCC1"]
+            for solvent in ["CCO", "CCCO"]
         )
     ]
     rows = []
     for index, (ligand, base, solvent, y_value) in enumerate(values):
-        r1 = f"Brc1ccccc1C{index}"
+        r1 = reactants[index]
         r2 = "Nc1ccccc1"
         rows.append(
             {
@@ -538,10 +554,10 @@ def _same_context_df() -> pd.DataFrame:
 def _row(index: int) -> dict[str, object]:
     values = [
         ("Brc1ccccc1", "Nc1ccccc1", "Cl[Pd]Cl", "P(c1ccccc1)(c1ccccc1)c1ccccc1", "CCN=P(N(C)C)(N(C)C)", "O1CCOCC1", "c1ccc(Nc2ccccc2)cc1", 10.0),
-        ("Clc1ccccc1", "Nc1ccccc1", "O[Pd]1ccccc1", "CC(C)c1cc(P(C2CCCCC2)C2CCCCC2)ccc1", "CN(C)C(=NC(C)(C)C)N(C)C", "c1ccc(-c2ccno2)cc1", "CCNc1ccccc1", 80.0),
+        ("Clc1ccccc1", "Nc1ccccc1", "[Pd]", "CC(C)c1cc(P(C2CCCCC2)C2CCCCC2)ccc1", "CN(C)C(=NC(C)(C)C)N(C)C", "CCCO", "CCNc1ccccc1", 80.0),
         ("Brc1ccccc1", "Nc1ccccc1", "Cl[Pd]Cl", "P(c1ccccc1)(c1ccccc1)c1ccccc1", "CCN=P(N(C)C)(N(C)C)", "O1CCOCC1", "c1ccc(Nc2ccccc2)cc1", 50.0),
-        ("Ic1ccccc1", "Nc1ccccc1", "Cl[Pd]Cl", "CC(C)c1cc(P(C2CCCCC2)C2CCCCC2)ccc1", "K3PO4", "c1ccccc1", "c1ccc(Nc2ccccc2)cc1", 70.0),
-        ("Brc1ccncc1", "Cc1ccc(N)cc1", "O[Pd]1ccccc1", "P(C)(C)C", "K2CO3", "COC", "Cc1ccc(Nc2ccncc2)cc1", 30.0),
+        ("Ic1ccccc1", "Nc1ccccc1", "Cl[Pd]Cl", "CC(C)c1cc(P(C2CCCCC2)C2CCCCC2)ccc1", "O=P(O)(O)O", "c1ccccc1", "c1ccc(Nc2ccccc2)cc1", 70.0),
+        ("Brc1ccncc1", "Cc1ccc(N)cc1", "[Pd]", "P(C)(C)C", "O=C(O)O", "COC", "Cc1ccc(Nc2ccncc2)cc1", 30.0),
         ("Clc1ccncc1", "Cc1ccc(N)cc1", "Cl[Pd]Cl", "P(c1ccccc1)(c1ccccc1)c1ccccc1", "CN(C)C(=NC(C)(C)C)N(C)C", "CCO", "Cc1ccc(Nc2ccncc2)cc1", 90.0),
     ][index]
     r1, r2, catalyst, ligand, base, solvent, product, y_value = values

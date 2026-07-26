@@ -2,16 +2,32 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    apply_filter_rejection,
+    assert_accepted_identity_invariants,
+    audit_candidate_identities,
+    canonical_candidate_record,
+    measured_canonical_keys,
+)
+from bh_augmentation.data.reaction_roles import (
+    ReactionRoles,
+    ensure_reaction_role_columns,
+    reaction_roles_from_row,
+)
 from bh_augmentation.features.featurize import build_feature_matrix
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
+
+CANDIDATE_AUDIT_ATTR = "synthetic_candidate_audit"
 
 
 def parse_reaction_smiles(rxn: str) -> dict[str, Any]:
@@ -48,14 +64,41 @@ def build_reaction_smiles(
     return f"{left}>>{product}"
 
 
+def build_condition_recombined_roles(
+    source_row: pd.Series | dict[str, Any],
+    donor_row: pd.Series | dict[str, Any],
+) -> ReactionRoles:
+    """Preserve source reactants/product and transfer all four donor conditions."""
+    source = reaction_roles_from_row(source_row)
+    donor = reaction_roles_from_row(donor_row)
+    return ReactionRoles(
+        reactant_1=source.reactant_1,
+        reactant_2=source.reactant_2,
+        catalyst=donor.catalyst,
+        ligand=donor.ligand,
+        base=donor.base,
+        solvent_or_additive=donor.solvent_or_additive,
+        product=source.product,
+    )
+
+
 def generate_condition_recombined_candidates(
     train_df: pd.DataFrame,
     synthetic_multiplier: float = 1.0,
     max_synthetic_rows: int | None = 3000,
     random_state: int = 42,
     min_condition_tokens: int = 1,
+    *,
+    feature_config: dict[str, Any] | None = None,
+    measured_identity_keys: Iterable[str] = (),
 ) -> pd.DataFrame:
-    """Generate unique reaction candidates by replacing source conditions with donor conditions."""
+    """Generate canonical candidates by transferring all typed donor conditions.
+
+    Supplying ``feature_config`` enables the complete scientific identity gate.
+    The returned rows are accepted candidates only; all attempted candidates,
+    including rejected ones, remain available in ``DataFrame.attrs`` under
+    :data:`CANDIDATE_AUDIT_ATTR`.
+    """
     if synthetic_multiplier < 0:
         raise ValueError("synthetic_multiplier must be non-negative.")
     if max_synthetic_rows is not None and max_synthetic_rows < 0:
@@ -65,13 +108,23 @@ def generate_condition_recombined_candidates(
     if "reaction_smiles" not in train_df.columns:
         raise ValueError("condition recombination requires reaction_smiles.")
 
+    role_train = ensure_reaction_role_columns(train_df, parse_if_missing=True)
+    role_train = role_train.reset_index(drop=False).rename(
+        columns={"index": "_source_dataframe_index"}
+    )
+    if "source_row_id" not in role_train.columns:
+        role_train["source_row_id"] = [
+            _reaction_id(role_train.iloc[position], position)
+            for position in range(len(role_train))
+        ]
+
     target = int(synthetic_multiplier * len(train_df))
     if max_synthetic_rows is not None:
         target = min(target, max_synthetic_rows)
     if target <= 0 or train_df.empty:
-        return _empty_candidates(train_df)
+        return _empty_candidates(role_train)
 
-    parsed = [parse_reaction_smiles(value) for value in train_df["reaction_smiles"]]
+    parsed = [parse_reaction_smiles(value) for value in role_train["reaction_smiles"]]
     source_positions = [index for index, item in enumerate(parsed) if item["valid"]]
     donor_positions = [
         index
@@ -79,37 +132,55 @@ def generate_condition_recombined_candidates(
         if item["valid"] and len(item["condition_tokens"]) >= min_condition_tokens
     ]
     if not source_positions or not donor_positions:
-        return _empty_candidates(train_df)
+        return _empty_candidates(role_train)
 
     rng = np.random.default_rng(random_state)
-    original_reactions = set(train_df["reaction_smiles"].astype(str))
-    generated: set[str] = set()
+    measured_keys = measured_canonical_keys(
+        role_train,
+        additional_keys=measured_identity_keys,
+    )
+    provisional_generated_keys: set[str] = set()
     rows: list[pd.Series] = []
     max_attempts = max(100, target * 30)
 
-    for _ in range(max_attempts):
-        if len(rows) >= target:
+    for attempt in range(max_attempts):
+        if feature_config is None and len(rows) >= target:
+            break
+        if (
+            feature_config is not None
+            and len(provisional_generated_keys) >= max(1, target * 2)
+        ):
             break
         source_position = int(rng.choice(source_positions))
         donor_position = int(rng.choice(donor_positions))
         if source_position == donor_position and len(donor_positions) > 1:
             continue
-        source_parts = parsed[source_position]
-        donor_parts = parsed[donor_position]
-        reaction = build_reaction_smiles(
-            source_parts["substrate_tokens"],
-            donor_parts["condition_tokens"],
-            source_parts["product"],
+        synthetic_roles = build_condition_recombined_roles(
+            role_train.iloc[source_position],
+            role_train.iloc[donor_position],
         )
-        source_reaction = str(train_df.iloc[source_position]["reaction_smiles"])
-        if reaction == source_reaction or reaction in original_reactions or reaction in generated:
+        synthetic_record = canonical_candidate_record(synthetic_roles)
+        key = synthetic_record["canonical_reaction_key"]
+        if feature_config is None and (
+            key is None
+            or key in measured_keys
+            or key in provisional_generated_keys
+        ):
             continue
 
-        source_row = train_df.iloc[source_position].copy()
-        source_id = _reaction_id(train_df.iloc[source_position], source_position)
-        donor_id = _reaction_id(train_df.iloc[donor_position], donor_position)
-        source_row["reaction_id"] = f"synthetic_{len(rows) + 1:06d}"
-        source_row["reaction_smiles"] = reaction
+        source_row = role_train.iloc[source_position].copy()
+        source_id = _reaction_id(role_train.iloc[source_position], source_position)
+        donor_id = _reaction_id(role_train.iloc[donor_position], donor_position)
+        source_row["candidate_id"] = int(attempt)
+        source_row["source_position"] = int(source_position)
+        source_row["donor_position"] = int(donor_position)
+        source_row["source_index"] = role_train.iloc[source_position][
+            "_source_dataframe_index"
+        ]
+        source_row["donor_index"] = role_train.iloc[donor_position][
+            "_source_dataframe_index"
+        ]
+        source_row["reaction_id"] = f"synthetic_{attempt + 1:06d}"
         source_row["yield"] = np.nan
         source_row["is_synthetic"] = True
         source_row["is_augmented"] = True
@@ -118,12 +189,42 @@ def generate_condition_recombined_candidates(
         source_row["source_reaction_id"] = source_id
         source_row["donor_reaction_id"] = donor_id
         source_row["pseudo_label"] = True
+        for column, value in synthetic_record.items():
+            source_row[column] = value
         rows.append(source_row)
-        generated.add(reaction)
+        if (
+            isinstance(key, str)
+            and key
+            and key not in measured_keys
+        ):
+            provisional_generated_keys.add(key)
 
     if not rows:
-        return _empty_candidates(train_df)
-    return pd.DataFrame(rows).reset_index(drop=True)
+        return _empty_candidates(role_train)
+
+    candidates = pd.DataFrame(rows).reset_index(drop=True)
+    if feature_config is None:
+        return candidates
+
+    features = _features_only(candidates, feature_config)
+    audited = audit_candidate_identities(
+        candidates,
+        features,
+        measured_keys=measured_keys,
+        source_rows=role_train.to_dict(orient="records"),
+    )
+    accepted_positions = np.flatnonzero(audited["rejection_reason"].isna().to_numpy())
+    over_budget = np.ones(len(audited), dtype=bool)
+    over_budget[accepted_positions[:target]] = False
+    audited = apply_filter_rejection(
+        audited,
+        over_budget & audited["rejection_reason"].isna().to_numpy(),
+        "candidate_budget_exceeded",
+    )
+    audited["accepted"] = audited["rejection_reason"].isna()
+    assert_accepted_identity_invariants(audited)
+    accepted = audited.loc[audited["accepted"]].reset_index(drop=True)
+    return _with_candidate_audit(accepted, audited)
 
 
 def filter_candidates_by_nearest_neighbor_similarity(
@@ -138,6 +239,10 @@ def filter_candidates_by_nearest_neighbor_similarity(
     if candidate_df.empty:
         result = candidate_df.copy()
         result["nearest_train_similarity"] = pd.Series(dtype=float)
+        if CANDIDATE_AUDIT_ATTR in candidate_df.attrs:
+            result.attrs[CANDIDATE_AUDIT_ATTR] = candidate_df.attrs[
+                CANDIDATE_AUDIT_ATTR
+            ].copy()
         return result
 
     train_x = _features_only(train_df, feature_config)
@@ -162,7 +267,20 @@ def filter_candidates_by_nearest_neighbor_similarity(
 
     result = candidate_df.copy()
     result["nearest_train_similarity"] = similarities
-    return result.loc[result["nearest_train_similarity"] >= min_similarity].reset_index(drop=True)
+    similarity_rejected = result["nearest_train_similarity"].lt(min_similarity)
+    if "rejection_reason" not in result.columns:
+        return result.loc[~similarity_rejected].reset_index(drop=True)
+
+    result = apply_filter_rejection(
+        result,
+        similarity_rejected.to_numpy(dtype=bool),
+        "nearest_train_similarity_below_threshold",
+    )
+    result["accepted"] = result["rejection_reason"].isna()
+    assert_accepted_identity_invariants(result)
+    audit = _updated_candidate_audit(result)
+    accepted = result.loc[result["accepted"]].reset_index(drop=True)
+    return _with_candidate_audit(accepted, audit)
 
 
 def pseudo_label_candidates(
@@ -176,6 +294,10 @@ def pseudo_label_candidates(
     if candidate_df.empty:
         result = candidate_df.copy()
         result["pseudo_label_model"] = pd.Series(dtype=object)
+        if CANDIDATE_AUDIT_ATTR in candidate_df.attrs:
+            result.attrs[CANDIDATE_AUDIT_ATTR] = candidate_df.attrs[
+                CANDIDATE_AUDIT_ATTR
+            ].copy()
         return result
 
     train_x, train_y, _ = build_feature_matrix(train_df, feature_config)
@@ -191,6 +313,10 @@ def pseudo_label_candidates(
     result["yield"] = predictions
     result["pseudo_label_model"] = teacher_model_name
     result["pseudo_label"] = True
+    if CANDIDATE_AUDIT_ATTR in candidate_df.attrs:
+        result.attrs[CANDIDATE_AUDIT_ATTR] = candidate_df.attrs[
+            CANDIDATE_AUDIT_ATTR
+        ].copy()
     return result
 
 
@@ -202,9 +328,12 @@ def condition_recombine_pseudolabel(
     teacher_model: str = "random_forest",
     min_neighbor_similarity: float = 0.3,
     random_state: int = 42,
+    *,
+    measured_identity_keys: Iterable[str] = (),
 ) -> pd.DataFrame:
     """Return real training rows plus filtered, teacher-labeled recombined reactions."""
-    real = train_df.copy()
+    role_train = ensure_reaction_role_columns(train_df, parse_if_missing=True)
+    real = role_train.copy()
     real["is_synthetic"] = False
     real["is_augmented"] = False
     real["augmentation_method"] = "none"
@@ -216,25 +345,44 @@ def condition_recombine_pseudolabel(
         ).astype(str)
 
     candidates = generate_condition_recombined_candidates(
-        train_df,
+        role_train,
         synthetic_multiplier=synthetic_multiplier,
         max_synthetic_rows=max_synthetic_rows,
         random_state=random_state,
+        feature_config=feature_config,
+        measured_identity_keys=measured_identity_keys,
     )
     candidates = filter_candidates_by_nearest_neighbor_similarity(
-        train_df,
+        role_train,
         candidates,
         feature_config,
         min_similarity=min_neighbor_similarity,
     )
     candidates = pseudo_label_candidates(
-        train_df,
+        role_train,
         candidates,
         feature_config,
         teacher_model_name=teacher_model,
         random_state=random_state,
     )
-    return pd.concat([real, candidates], ignore_index=True, sort=False)
+    audit = candidates.attrs.get(CANDIDATE_AUDIT_ATTR, pd.DataFrame()).copy()
+    combined = pd.concat([real, candidates], ignore_index=True, sort=False)
+    combined.attrs[CANDIDATE_AUDIT_ATTR] = audit
+    combined.attrs["augmentation_metadata"] = {
+        "n_candidates_attempted": int(len(audit)),
+        "n_candidates_accepted": int(len(candidates)),
+        "rejection_reason_counts": {
+            str(reason): int(count)
+            for reason, count in audit["rejection_reason"]
+            .fillna("accepted")
+            .value_counts()
+            .sort_index()
+            .items()
+        }
+        if "rejection_reason" in audit
+        else {},
+    }
+    return combined
 
 
 def assign_synthetic_sample_weights(
@@ -284,6 +432,32 @@ def _reaction_id(row: pd.Series, position: int) -> str:
     return str(value) if pd.notna(value) else str(position)
 
 
+def _with_candidate_audit(result: pd.DataFrame, audit: pd.DataFrame) -> pd.DataFrame:
+    result.attrs[CANDIDATE_AUDIT_ATTR] = audit.reset_index(drop=True).copy()
+    return result
+
+
+def _updated_candidate_audit(candidate_df: pd.DataFrame) -> pd.DataFrame:
+    """Merge later filter fields into the complete generation audit."""
+    prior = candidate_df.attrs.get(CANDIDATE_AUDIT_ATTR)
+    if not isinstance(prior, pd.DataFrame) or prior.empty:
+        return candidate_df.reset_index(drop=True).copy()
+    if "candidate_id" not in prior.columns or "candidate_id" not in candidate_df.columns:
+        return prior.copy()
+
+    updated = prior.set_index("candidate_id", drop=False).copy()
+    current = candidate_df.set_index("candidate_id", drop=False)
+    shared_ids = updated.index.intersection(current.index)
+    for column in current.columns:
+        if column not in updated.columns:
+            updated[column] = pd.Series(
+                index=updated.index,
+                dtype=current[column].dtype,
+            )
+        updated.loc[shared_ids, column] = current.loc[shared_ids, column]
+    return updated.reset_index(drop=True)
+
+
 def _empty_candidates(train_df: pd.DataFrame) -> pd.DataFrame:
     result = train_df.iloc[0:0].copy()
     for column, dtype in {
@@ -293,6 +467,16 @@ def _empty_candidates(train_df: pd.DataFrame) -> pd.DataFrame:
         "source_reaction_id": object,
         "donor_reaction_id": object,
         "pseudo_label": bool,
+        "candidate_id": int,
+        "source_position": int,
+        "donor_position": int,
+        "source_index": object,
+        "donor_index": object,
+        "accepted": bool,
     }.items():
         result[column] = pd.Series(dtype=dtype)
+    for column in REQUIRED_SYNTHETIC_AUDIT_FIELDS:
+        if column not in result.columns:
+            result[column] = pd.Series(dtype=object)
+    result.attrs[CANDIDATE_AUDIT_ATTR] = result.copy()
     return result

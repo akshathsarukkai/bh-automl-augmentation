@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.synthetic_identity import configured_feature_hash
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -48,8 +50,14 @@ def generate_latent_interpolations(
     y_train: np.ndarray,
     ae_artifacts: dict[str, Any],
     config: LatentInterpolationConfig,
+    source_row_ids: Sequence[str] | None = None,
 ) -> dict[str, Any]:
-    """Generate synthetic latent vectors from train-only nearest-neighbor interpolation."""
+    """Generate train-only latent interpolations as an explicit non-chemical control.
+
+    A latent coordinate does not define a seven-role reaction. Consequently these
+    candidates receive deterministic feature identities, but never fabricated
+    canonical reaction identities or claims of valid molecular parsing.
+    """
     _validate_config(config)
     z_train_array = np.asarray(z_train, dtype=np.float32)
     y_train_array = np.asarray(y_train, dtype=np.float32).reshape(-1)
@@ -59,6 +67,7 @@ def generate_latent_interpolations(
         raise ValueError("z_train and y_train must contain the same number of rows.")
 
     n_real_train, latent_dim = z_train_array.shape
+    parent_row_ids = _normalize_parent_row_ids(source_row_ids, n_real_train)
     target_count = int(math.ceil(max(0.0, float(config.synthetic_multiplier)) * n_real_train))
     if n_real_train < 2 or target_count == 0:
         candidate_df = _empty_candidate_df()
@@ -100,6 +109,8 @@ def generate_latent_interpolations(
             "candidate_id": np.arange(n_candidates, dtype=int),
             "parent_i": parent_i.astype(int),
             "parent_j": parent_j.astype(int),
+            "source_row_id": [parent_row_ids[index] for index in parent_i],
+            "donor_row_id": [parent_row_ids[index] for index in parent_j],
             "alpha": alpha.astype(float),
             "parent_similarity": parent_similarity,
             "nearest_train_similarity": nearest_train_similarity.astype(float),
@@ -110,8 +121,12 @@ def generate_latent_interpolations(
         }
     )
     accepted_mask = _acceptance_mask(candidate_df, z_candidates, config)
-    accepted_mask = _deduplicate_mask(z_candidates, accepted_mask)
-    candidate_df["accepted"] = accepted_mask
+    candidate_df = _audit_nonchemical_candidates(
+        candidate_df,
+        z_candidates,
+        accepted_mask,
+    )
+    accepted_mask = candidate_df["accepted"].to_numpy(dtype=bool)
     candidate_df["label_strategy"] = config.label_strategy
     candidate_df["teacher_models_used"] = ",".join(teachers_used)
     candidate_df["neighbor_metric"] = "cosine"
@@ -208,18 +223,74 @@ def _acceptance_mask(
     return accepted
 
 
-def _deduplicate_mask(z_candidates: np.ndarray, accepted_mask: np.ndarray) -> np.ndarray:
-    deduped = np.array(accepted_mask, copy=True)
-    seen: set[tuple[float, ...]] = set()
-    for index, row in enumerate(np.round(z_candidates, decimals=6)):
-        if not deduped[index]:
+def _audit_nonchemical_candidates(
+    candidate_df: pd.DataFrame,
+    z_candidates: np.ndarray,
+    initial_acceptance: np.ndarray,
+) -> pd.DataFrame:
+    """Attach exact coordinate identities without implying chemical identity."""
+    result = candidate_df.copy()
+    initially_accepted = np.asarray(initial_acceptance, dtype=bool)
+    if len(result) != len(initially_accepted):
+        raise ValueError("initial_acceptance must contain one value per candidate.")
+
+    feature_hashes = [configured_feature_hash(row) for row in z_candidates]
+    duplicate_flags = np.zeros(len(result), dtype=bool)
+    accepted = initially_accepted.copy()
+    rejection_reasons: list[str | None] = [
+        None if value else "candidate_filter_rejected" for value in initially_accepted
+    ]
+    seen: set[str] = set()
+    for position, feature_hash in enumerate(feature_hashes):
+        if feature_hash is None:
+            accepted[position] = False
+            rejection_reasons[position] = "invalid_feature_vector"
             continue
-        key = tuple(float(value) for value in row)
-        if key in seen:
-            deduped[index] = False
-        else:
-            seen.add(key)
-    return deduped
+        if not initially_accepted[position]:
+            continue
+        if feature_hash in seen:
+            duplicate_flags[position] = True
+            accepted[position] = False
+            rejection_reasons[position] = "feature_duplicate_synthetic"
+            continue
+        seen.add(feature_hash)
+
+    # Chemical duplicate questions are not false; they are not evaluable from a
+    # latent vector. Nullable fields preserve that distinction in serialized audits.
+    result["canonical_reaction_key"] = None
+    result["canonical_reaction_hash"] = None
+    result["feature_hash"] = feature_hashes
+    result["source_identical"] = pd.array([pd.NA] * len(result), dtype="boolean")
+    result["already_measured"] = pd.array([pd.NA] * len(result), dtype="boolean")
+    result["duplicate_synthetic"] = pd.array([pd.NA] * len(result), dtype="boolean")
+    result["feature_duplicate_synthetic"] = duplicate_flags
+    result["chemical_parse_valid"] = False
+    result["identity_classification"] = "feature_space_nonchemical"
+    result["chemical_identity_available"] = False
+    result["scientific_candidate_eligible"] = False
+    result["development_control_only"] = True
+    result["source_id_semantics"] = "interpolation_parent"
+    result["donor_id_semantics"] = "interpolation_neighbor_parent"
+    result["chemical_identity_limitation"] = (
+        "latent_coordinate_has_no_seven_role_reaction_identity"
+    )
+    result["rejection_reason"] = rejection_reasons
+    result["accepted"] = accepted
+    return result
+
+
+def _normalize_parent_row_ids(
+    source_row_ids: Sequence[str] | None,
+    n_rows: int,
+) -> list[str]:
+    if source_row_ids is None:
+        return [f"train_position:{index}" for index in range(n_rows)]
+    if len(source_row_ids) != n_rows:
+        raise ValueError("source_row_ids must contain one identifier per training row.")
+    normalized = [str(value) for value in source_row_ids]
+    if any(not value for value in normalized):
+        raise ValueError("source_row_ids must not contain empty identifiers.")
+    return normalized
 
 
 def _metadata_from_candidates(
@@ -247,6 +318,10 @@ def _metadata_from_candidates(
         "teacher_blend_weight": float(config.teacher_blend_weight),
         "min_neighbor_similarity": config.min_neighbor_similarity,
         "max_teacher_std": config.max_teacher_std,
+        "identity_classification": "feature_space_nonchemical",
+        "chemical_identity_available": False,
+        "scientific_candidate_eligible": False,
+        "development_control_only": True,
         "mean_alpha": _safe_mean(kept, "alpha"),
         "std_alpha": _safe_std(kept, "alpha"),
         "mean_neighbor_similarity": _safe_mean(kept, "nearest_train_similarity"),
@@ -310,6 +385,8 @@ def _empty_candidate_df() -> pd.DataFrame:
             "candidate_id",
             "parent_i",
             "parent_j",
+            "source_row_id",
+            "donor_row_id",
             "alpha",
             "parent_similarity",
             "nearest_train_similarity",
@@ -322,6 +399,22 @@ def _empty_candidate_df() -> pd.DataFrame:
             "label_strategy",
             "teacher_models_used",
             "neighbor_metric",
+            "canonical_reaction_key",
+            "canonical_reaction_hash",
+            "feature_hash",
+            "source_identical",
+            "already_measured",
+            "duplicate_synthetic",
+            "feature_duplicate_synthetic",
+            "chemical_parse_valid",
+            "identity_classification",
+            "chemical_identity_available",
+            "scientific_candidate_eligible",
+            "development_control_only",
+            "source_id_semantics",
+            "donor_id_semantics",
+            "chemical_identity_limitation",
+            "rejection_reason",
         ]
     )
 

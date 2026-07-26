@@ -2,15 +2,24 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from bh_augmentation.augmentation.condition_recombine import (
+    CANDIDATE_AUDIT_ATTR,
+    _updated_candidate_audit,
+    _with_candidate_audit,
     filter_candidates_by_nearest_neighbor_similarity,
     generate_condition_recombined_candidates,
 )
+from bh_augmentation.augmentation.synthetic_identity import (
+    apply_filter_rejection,
+    assert_accepted_identity_invariants,
+)
+from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
 from bh_augmentation.features.featurize import build_feature_matrix
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
@@ -23,9 +32,12 @@ def condition_recombine_ensemble_filter(
     config: dict[str, Any],
     random_state: int,
     cache: dict[object, object] | None = None,
+    *,
+    measured_identity_keys: Iterable[str] = (),
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     """Return real rows plus ensemble-labeled candidates passing all filters."""
     cache = cache if cache is not None else {}
+    role_train = ensure_reaction_role_columns(train_df, parse_if_missing=True)
     multiplier = float(config.get("synthetic_multiplier", 1.0))
     max_rows = config.get("max_synthetic_rows", 3000)
     scored_key = ("scored_candidates", multiplier, max_rows, int(random_state))
@@ -33,19 +45,21 @@ def condition_recombine_ensemble_filter(
         scored = cache[scored_key].copy()
     else:
         candidates = generate_condition_recombined_candidates(
-            train_df,
+            role_train,
             synthetic_multiplier=multiplier,
             max_synthetic_rows=None if max_rows is None else int(max_rows),
             random_state=random_state,
+            feature_config=feature_config,
+            measured_identity_keys=measured_identity_keys,
         )
         candidates = filter_candidates_by_nearest_neighbor_similarity(
-            train_df,
+            role_train,
             candidates,
             feature_config,
             min_similarity=0.0,
         )
         scored = add_teacher_ensemble_predictions(
-            train_df,
+            role_train,
             candidates,
             feature_config,
             list(config.get("teachers", [])),
@@ -64,7 +78,7 @@ def condition_recombine_ensemble_filter(
     accepted["pseudo_label"] = True
     accepted["pseudo_label_model"] = "teacher_ensemble_mean"
 
-    real = train_df.copy()
+    real = role_train.copy()
     real["is_synthetic"] = False
     real["is_augmented"] = False
     real["augmentation_method"] = "real"
@@ -76,8 +90,22 @@ def condition_recombine_ensemble_filter(
         ).astype(str)
 
     metadata = _ensemble_metadata(scored, accepted)
+    audit = accepted.attrs.get(CANDIDATE_AUDIT_ATTR, pd.DataFrame()).copy()
+    metadata["rejection_reason_counts"] = (
+        {
+            str(reason): int(count)
+            for reason, count in audit["rejection_reason"]
+            .fillna("accepted")
+            .value_counts()
+            .sort_index()
+            .items()
+        }
+        if "rejection_reason" in audit
+        else {}
+    )
     combined = pd.concat([real, accepted], ignore_index=True, sort=False)
     combined.attrs["augmentation_metadata"] = metadata
+    combined.attrs[CANDIDATE_AUDIT_ATTR] = audit
     return combined, metadata
 
 
@@ -129,6 +157,10 @@ def add_teacher_ensemble_predictions(
     result["teacher_prediction_range"] = (
         result["teacher_max_prediction"] - result["teacher_min_prediction"]
     )
+    if CANDIDATE_AUDIT_ATTR in candidate_df.attrs:
+        result.attrs[CANDIDATE_AUDIT_ATTR] = candidate_df.attrs[
+            CANDIDATE_AUDIT_ATTR
+        ].copy()
     return result
 
 
@@ -157,11 +189,28 @@ def filter_ensemble_candidates(
             result["teacher_std_prediction"].le(max_std)
             & result["teacher_prediction_range"].le(max_range)
         )
-    accepted = (
+    accepted_mask = (
         result["accepted_by_similarity_filter"]
         & result["accepted_by_uncertainty_filter"]
     )
-    return result.loc[accepted].reset_index(drop=True)
+    if "rejection_reason" not in result.columns:
+        return result.loc[accepted_mask].reset_index(drop=True)
+
+    result = apply_filter_rejection(
+        result,
+        ~result["accepted_by_similarity_filter"].to_numpy(dtype=bool),
+        "nearest_train_similarity_below_threshold",
+    )
+    result = apply_filter_rejection(
+        result,
+        ~result["accepted_by_uncertainty_filter"].to_numpy(dtype=bool),
+        "teacher_uncertainty_above_threshold",
+    )
+    result["accepted"] = result["rejection_reason"].isna()
+    assert_accepted_identity_invariants(result)
+    audit = _updated_candidate_audit(result)
+    accepted = result.loc[result["accepted"]].reset_index(drop=True)
+    return _with_candidate_audit(accepted, audit)
 
 
 def assign_ensemble_pseudo_labels(
@@ -178,6 +227,10 @@ def assign_ensemble_pseudo_labels(
     if maximum < minimum:
         raise ValueError("pseudo_label clip_max must be at least clip_min.")
     result["yield"] = result["teacher_mean_prediction"].clip(minimum, maximum)
+    if CANDIDATE_AUDIT_ATTR in candidate_df.attrs:
+        result.attrs[CANDIDATE_AUDIT_ATTR] = candidate_df.attrs[
+            CANDIDATE_AUDIT_ATTR
+        ].copy()
     return result
 
 
@@ -217,4 +270,8 @@ def _empty_prediction_columns(candidate_df: pd.DataFrame) -> pd.DataFrame:
         "teacher_prediction_range",
     ]:
         result[column] = pd.Series(dtype=float)
+    if CANDIDATE_AUDIT_ATTR in candidate_df.attrs:
+        result.attrs[CANDIDATE_AUDIT_ATTR] = candidate_df.attrs[
+            CANDIDATE_AUDIT_ATTR
+        ].copy()
     return result

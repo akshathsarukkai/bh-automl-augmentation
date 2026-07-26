@@ -20,8 +20,9 @@ def test_run_augmentation_applies_augmentation_only_to_train(tmp_path: Path) -> 
         {
             "reaction_id": [f"rxn_{index:03d}" for index in range(12)],
             "reaction_smiles": [
-                f"CC{'C' * (index % 3)}Br.N."
-                f"{'O' if index % 2 else 'Cl'}.{'C' if index % 4 else 'P'}"
+                f"CC{'C' * (index % 3)}Br.N.[Pd].P(C)(C)C."
+                f"{'N1CCCCC1' if index % 2 else 'N(C)(C)C'}."
+                f"{'CCO' if index % 4 else 'CCCO'}"
                 f">>CC{'C' * (index % 3)}N"
                 for index in range(12)
             ],

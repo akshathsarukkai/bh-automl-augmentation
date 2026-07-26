@@ -6,10 +6,22 @@ import pytest
 
 import bh_augmentation.augmentation.condition_recombine as recombine_module
 from bh_augmentation.augmentation.condition_recombine import (
+    CANDIDATE_AUDIT_ATTR,
     build_reaction_smiles,
+    condition_recombine_pseudolabel,
     generate_condition_recombined_candidates,
     parse_reaction_smiles,
     pseudo_label_candidates,
+)
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    canonicalize_synthetic_roles,
+)
+from bh_augmentation.data.reaction_roles import (
+    CANONICAL_ROLE_NAMES,
+    ROLE_TO_COLUMN,
+    ensure_reaction_role_columns,
+    reaction_roles_from_row,
 )
 
 
@@ -35,10 +47,11 @@ def test_generate_candidates_changes_reactions_without_original_duplicates() -> 
     train = pd.DataFrame(
         {
             "reaction_id": ["r1", "r2", "r3"],
+            "source_row_id": ["row-1", "row-2", "row-3"],
             "reaction_smiles": [
-                "CCBr.N.O.Cl>>CCN",
-                "CCC.N.Br.C>>CCCN",
-                "CCCl.CN.P.O>>CCNC",
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
             ],
             "yield": [30.0, 50.0, 70.0],
         }
@@ -49,6 +62,11 @@ def test_generate_candidates_changes_reactions_without_original_duplicates() -> 
         synthetic_multiplier=1.0,
         max_synthetic_rows=3,
         random_state=7,
+        feature_config={
+            "kind": "bh_role_separated",
+            "n_bits": 32,
+            "fingerprint_backend": "rdkit",
+        },
     )
 
     assert not candidates.empty
@@ -56,11 +74,199 @@ def test_generate_candidates_changes_reactions_without_original_duplicates() -> 
     assert candidates["is_synthetic"].all()
     assert candidates["pseudo_label"].all()
     assert set(candidates["reaction_smiles"]).isdisjoint(train["reaction_smiles"])
+    assert candidates["canonical_reaction_key"].is_unique
+    assert candidates["feature_hash"].is_unique
+    assert candidates["chemical_parse_valid"].all()
+    assert not candidates["source_identical"].any()
+    assert not candidates["already_measured"].any()
+    assert not candidates["duplicate_synthetic"].any()
+    assert not candidates["feature_duplicate_synthetic"].any()
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidates.columns)
     source_reactions = train.set_index("reaction_id")["reaction_smiles"]
     assert all(
         row.reaction_smiles != source_reactions[row.source_reaction_id]
         for row in candidates.itertuples()
     )
+    donor_rows = ensure_reaction_role_columns(train).set_index("source_row_id")
+    for row in candidates.itertuples():
+        synthetic_roles = reaction_roles_from_row(row._asdict())
+        donor_identity = canonicalize_synthetic_roles(
+            reaction_roles_from_row(donor_rows.loc[row.donor_row_id])
+        )
+        assert donor_identity.roles is not None
+        donor_roles = donor_identity.roles
+        for role in ("catalyst", "ligand", "base", "solvent_or_additive"):
+            assert getattr(synthetic_roles, role) == getattr(donor_roles, role)
+            assert getattr(row, ROLE_TO_COLUMN[role]) == getattr(donor_roles, role)
+
+    audit = candidates.attrs[CANDIDATE_AUDIT_ATTR]
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(audit.columns)
+    assert set(audit["source_row_id"]) <= set(train["source_row_id"])
+    assert set(audit["donor_row_id"]) <= set(train["source_row_id"])
+
+
+def test_canonical_candidate_regeneration_is_deterministic() -> None:
+    train = pd.DataFrame(
+        {
+            "source_row_id": ["a", "b", "c"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
+            ],
+            "yield": [30.0, 50.0, 70.0],
+        }
+    )
+    config = {
+        "kind": "bh_role_separated",
+        "n_bits": 32,
+        "fingerprint_backend": "rdkit",
+    }
+
+    first = generate_condition_recombined_candidates(
+        train,
+        synthetic_multiplier=1.0,
+        max_synthetic_rows=3,
+        random_state=11,
+        feature_config=config,
+    )
+    second = generate_condition_recombined_candidates(
+        train.copy(),
+        synthetic_multiplier=1.0,
+        max_synthetic_rows=3,
+        random_state=11,
+        feature_config=config,
+    )
+
+    hash_columns = [
+        "canonical_reaction_key",
+        "canonical_reaction_hash",
+        "feature_hash",
+    ]
+    assert first[hash_columns].to_dict("records") == second[hash_columns].to_dict(
+        "records"
+    )
+    for role in CANONICAL_ROLE_NAMES:
+        assert first[ROLE_TO_COLUMN[role]].tolist() == second[
+            ROLE_TO_COLUMN[role]
+        ].tolist()
+
+
+def test_generation_rejects_broader_measured_keys() -> None:
+    train = pd.DataFrame(
+        {
+            "source_row_id": ["a", "b", "c"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
+            ],
+            "yield": [30.0, 50.0, 70.0],
+        }
+    )
+    config = {
+        "kind": "bh_role_separated",
+        "n_bits": 32,
+        "fingerprint_backend": "rdkit",
+    }
+    baseline = generate_condition_recombined_candidates(
+        train,
+        synthetic_multiplier=1.0,
+        max_synthetic_rows=3,
+        random_state=19,
+        feature_config=config,
+    )
+    measured_key = baseline.iloc[0]["canonical_reaction_key"]
+
+    filtered = generate_condition_recombined_candidates(
+        train,
+        synthetic_multiplier=1.0,
+        max_synthetic_rows=3,
+        random_state=19,
+        feature_config=config,
+        measured_identity_keys=[measured_key],
+    )
+
+    assert measured_key not in set(filtered["canonical_reaction_key"])
+    audit = filtered.attrs[CANDIDATE_AUDIT_ATTR]
+    measured_rows = audit.loc[audit["canonical_reaction_key"].eq(measured_key)]
+    assert not measured_rows.empty
+    assert measured_rows["already_measured"].all()
+    assert set(measured_rows["rejection_reason"]) == {"already_measured"}
+
+
+def test_feature_collision_is_not_reported_as_chemical_equivalence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    train = pd.DataFrame(
+        {
+            "source_row_id": ["a", "b", "c"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
+            ],
+            "yield": [30.0, 50.0, 70.0],
+        }
+    )
+    monkeypatch.setattr(
+        recombine_module,
+        "_features_only",
+        lambda df, config: np.ones((len(df), 2), dtype=np.float32),
+    )
+
+    accepted = generate_condition_recombined_candidates(
+        train,
+        synthetic_multiplier=1.0,
+        max_synthetic_rows=3,
+        random_state=23,
+        feature_config={"kind": "bh_role_separated"},
+    )
+
+    assert len(accepted) == 1
+    audit = accepted.attrs[CANDIDATE_AUDIT_ATTR]
+    feature_collisions = audit.loc[
+        audit["rejection_reason"].eq("feature_duplicate_synthetic")
+    ]
+    assert not feature_collisions.empty
+    assert (~feature_collisions["duplicate_synthetic"]).any()
+    assert feature_collisions["canonical_reaction_key"].notna().all()
+
+
+def test_pseudolabel_path_enriches_canonical_roles_before_featurization() -> None:
+    train = pd.DataFrame(
+        {
+            "source_row_id": ["a", "b", "c"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
+            ],
+            "yield": [30.0, 50.0, 70.0],
+        }
+    )
+
+    augmented = condition_recombine_pseudolabel(
+        train,
+        {
+            "kind": "bh_role_separated",
+            "n_bits": 8,
+            "fingerprint_backend": "rdkit",
+        },
+        synthetic_multiplier=1.0,
+        max_synthetic_rows=3,
+        teacher_model="ridge",
+        min_neighbor_similarity=0.0,
+        random_state=5,
+    )
+
+    synthetic = augmented.loc[augmented["is_synthetic"]]
+    assert not synthetic.empty
+    assert synthetic["canonical_reaction_key"].is_unique
+    assert synthetic["feature_hash"].is_unique
+    assert synthetic["chemical_parse_valid"].all()
+    assert not synthetic["already_measured"].any()
+    assert not augmented.attrs[CANDIDATE_AUDIT_ATTR].empty
 
 
 def test_pseudo_label_candidates_clips_teacher_predictions(

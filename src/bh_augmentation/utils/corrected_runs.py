@@ -39,7 +39,7 @@ def load_corrected_bh_dataframe(dataset_path: str | Path) -> pd.DataFrame:
     result = frame.loc[valid].copy()
     if result.empty:
         raise ValueError("No rows remain after corrected condition-role validation.")
-    return ensure_reaction_role_columns(result, parse_if_missing=False)
+    return ensure_reaction_role_columns(result, parse_if_missing=False).reset_index(drop=True)
 
 
 def resolve_corrected_feature_config(

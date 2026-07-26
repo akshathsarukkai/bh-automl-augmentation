@@ -8,6 +8,9 @@ from scripts.compare_corrected_condition_transfer import (
     assert_matched_real_only_baselines,
 )
 
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+)
 from bh_augmentation.run_condition_transfer import run_condition_transfer
 from bh_augmentation.run_role_aware_condition_transfer import (
     run_role_aware_condition_transfer,
@@ -38,6 +41,10 @@ def test_tiny_corrected_anonymous_config_completes(
     selected = pd.read_csv(anonymous["selected_policy_metrics"])
     assert set(selected["split"]) == {"valid", "test"}
     assert (selected["n_synthetic_train"] > 0).all()
+    candidates = pd.read_csv(anonymous["candidate_audit"])
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidates)
+    assert {"transfer_kind", "seed", "train_fraction", "policy_id"} <= set(candidates)
+    assert not candidates[["source_row_id", "donor_row_id"]].isna().any().any()
 
 
 def test_tiny_corrected_role_aware_config_completes(
@@ -51,6 +58,10 @@ def test_tiny_corrected_role_aware_config_completes(
     assert (selected["n_synthetic_train"] > 0).all()
     accepted = audit.loc[audit["n_synthetic_train"] > 0]
     assert accepted["changed_any_transferred_role_fraction"].eq(1.0).all()
+    candidates = pd.read_csv(role["candidate_audit"])
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidates)
+    assert {"transfer_kind", "seed", "train_fraction", "policy_id"} <= set(candidates)
+    assert not candidates[["source_row_id", "donor_row_id"]].isna().any().any()
 
 
 def test_corrected_baselines_and_hashes_match_exactly(

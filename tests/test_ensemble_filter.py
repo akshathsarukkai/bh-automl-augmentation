@@ -7,7 +7,6 @@ import pytest
 import bh_augmentation.augmentation.ensemble_filter as ensemble_module
 from bh_augmentation.augmentation.condition_recombine import (
     generate_condition_recombined_candidates,
-    parse_reaction_smiles,
 )
 from bh_augmentation.augmentation.ensemble_filter import (
     add_teacher_ensemble_predictions,
@@ -15,16 +14,22 @@ from bh_augmentation.augmentation.ensemble_filter import (
     condition_recombine_ensemble_filter,
     filter_ensemble_candidates,
 )
+from bh_augmentation.augmentation.synthetic_identity import canonicalize_synthetic_roles
+from bh_augmentation.data.reaction_roles import (
+    ensure_reaction_role_columns,
+    reaction_roles_from_row,
+)
 
 
 def _train_data() -> pd.DataFrame:
     return pd.DataFrame(
         {
             "reaction_id": ["r1", "r2", "r3"],
+            "source_row_id": ["row-1", "row-2", "row-3"],
             "reaction_smiles": [
-                "CCBr.N.O.Cl>>CCN",
-                "CCC.N.Br.C>>CCCN",
-                "CCCl.CN.P.O>>CCNC",
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
             ],
             "yield": [30.0, 50.0, 70.0],
         }
@@ -36,18 +41,28 @@ def test_recombined_candidates_preserve_source_roles_and_use_donor_conditions() 
     candidates = generate_condition_recombined_candidates(
         train, synthetic_multiplier=2.0, max_synthetic_rows=6, random_state=4
     )
-    by_id = train.set_index("reaction_id")
+    by_id = ensure_reaction_role_columns(train).set_index("reaction_id")
     real_reactions = set(train["reaction_smiles"])
 
     assert candidates["reaction_smiles"].is_unique
     assert set(candidates["reaction_smiles"]).isdisjoint(real_reactions)
     for row in candidates.itertuples():
-        source = parse_reaction_smiles(by_id.loc[row.source_reaction_id, "reaction_smiles"])
-        donor = parse_reaction_smiles(by_id.loc[row.donor_reaction_id, "reaction_smiles"])
-        synthetic = parse_reaction_smiles(row.reaction_smiles)
-        assert synthetic["substrate_tokens"] == source["substrate_tokens"]
-        assert synthetic["product"] == source["product"]
-        assert synthetic["condition_tokens"] == donor["condition_tokens"]
+        source = canonicalize_synthetic_roles(
+            reaction_roles_from_row(by_id.loc[row.source_reaction_id])
+        ).roles
+        donor = canonicalize_synthetic_roles(
+            reaction_roles_from_row(by_id.loc[row.donor_reaction_id])
+        ).roles
+        synthetic = reaction_roles_from_row(row._asdict())
+        assert source is not None
+        assert donor is not None
+        assert synthetic.reactant_1 == source.reactant_1
+        assert synthetic.reactant_2 == source.reactant_2
+        assert synthetic.product == source.product
+        assert synthetic.catalyst == donor.catalyst
+        assert synthetic.ligand == donor.ligand
+        assert synthetic.base == donor.base
+        assert synthetic.solvent_or_additive == donor.solvent_or_additive
 
 
 def test_teacher_ensemble_computes_statistics_and_clipped_mean_labels(
@@ -145,7 +160,11 @@ def test_ensemble_filter_handles_zero_accepted_candidates(
     )
     augmented, metadata = condition_recombine_ensemble_filter(
         _train_data(),
-        {"kind": "reaction_morgan_sum", "n_bits": 8},
+        {
+            "kind": "bh_role_separated",
+            "n_bits": 8,
+            "fingerprint_backend": "rdkit",
+        },
         {
             "synthetic_multiplier": 1.0,
             "min_neighbor_similarity": 0.0,
@@ -163,3 +182,9 @@ def test_ensemble_filter_handles_zero_accepted_candidates(
     assert metadata["n_candidates_generated"] > 0
     assert metadata["n_candidates_accepted"] == 0
     assert metadata["acceptance_rate"] == 0.0
+    assert metadata["rejection_reason_counts"][
+        "teacher_uncertainty_above_threshold"
+    ] > 0
+    audit = augmented.attrs["synthetic_candidate_audit"]
+    assert set(audit.loc[audit["accepted"], "rejection_reason"].dropna()) == set()
+    assert not audit["accepted"].any()

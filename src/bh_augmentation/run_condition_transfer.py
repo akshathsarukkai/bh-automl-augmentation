@@ -14,6 +14,7 @@ from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
@@ -36,6 +37,10 @@ from bh_augmentation.run_supervised_ae_latent_baseline import (
 )
 from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.seed import set_global_seed
+from bh_augmentation.utils.synthetic_audits import (
+    build_candidate_audit_frame,
+    combine_candidate_audit_frames,
+)
 
 
 def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
@@ -62,6 +67,7 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
     df = ensure_reaction_role_columns(clean_buchwald_hartwig(raw_df), parse_if_missing=True)
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run condition transfer.")
+    complete_measured_identity_keys = measured_canonical_keys(df)
 
     configured_features = {"kind": "bh_role_separated", **dict(config.get("features", {}))}
     feature_config = normalize_feature_config(_resolve_feature_config(configured_features))
@@ -88,6 +94,7 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
 
     metric_records: list[dict[str, object]] = []
     audit_records: list[dict[str, object]] = []
+    candidate_audit_frames: list[pd.DataFrame] = []
     for seed in seeds:
         set_global_seed(seed)
         for train_fraction, splits in _create_split_variants(df, config, seed):
@@ -126,6 +133,7 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
                     feature_config=feature_config,
                     real_feature_names=feature_names,
                     real_feature_metadata=feature_metadata,
+                    measured_identity_keys=complete_measured_identity_keys,
                 )
                 metadata = dict(result["metadata"])
                 metadata.update(
@@ -137,6 +145,15 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
                     }
                 )
                 audit_records.append(metadata)
+                candidate_audit_frames.append(
+                    build_candidate_audit_frame(
+                        result["candidate_df"],
+                        transfer_kind="anonymous",
+                        seed=seed,
+                        train_fraction=float(train_fraction),
+                        policy_id=policy_id,
+                    )
+                )
 
                 synthetic_df = result["synthetic_df"]
                 synthetic_y = result["synthetic_y"]
@@ -190,7 +207,16 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
         output_paths,
     )
 
-    _write_outputs(policy_metrics, selected_policies, selected_policy_metrics, summary, audit, output_paths)
+    candidate_audit = combine_candidate_audit_frames(candidate_audit_frames)
+    _write_outputs(
+        policy_metrics,
+        selected_policies,
+        selected_policy_metrics,
+        summary,
+        audit,
+        candidate_audit,
+        output_paths,
+    )
     _print_test_summary(summary)
     _print_selected_policy_table(selected_policies, selected_policy_metrics)
     _print_delta_summary("CONDITION TRANSFER DELTAS VS ORIGINAL 6144D RF", rf_delta_summary)
@@ -430,6 +456,7 @@ def _write_outputs(
     selected_policy_metrics: pd.DataFrame,
     summary: pd.DataFrame,
     audit: pd.DataFrame,
+    candidate_audit: pd.DataFrame,
     output_paths: dict[str, Path],
 ) -> None:
     for key in [
@@ -438,6 +465,7 @@ def _write_outputs(
         "selected_policy_metrics_path",
         "summary_path",
         "synthetic_audit_path",
+        "synthetic_candidate_audit_path",
     ]:
         output_paths[key].parent.mkdir(parents=True, exist_ok=True)
     policy_metrics.to_csv(output_paths["policy_metrics_path"], index=False)
@@ -445,6 +473,9 @@ def _write_outputs(
     selected_policy_metrics.to_csv(output_paths["selected_policy_metrics_path"], index=False)
     summary.to_csv(output_paths["summary_path"], index=False)
     audit.to_csv(output_paths["synthetic_audit_path"], index=False)
+    candidate_audit.to_csv(
+        output_paths["synthetic_candidate_audit_path"], index=False
+    )
 
 
 def _print_test_summary(summary: pd.DataFrame) -> None:
@@ -577,6 +608,12 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
         "selected_policy_metrics_path": Path(output.get("selected_policy_metrics_path", directory / "selected_policy_metrics.csv")),
         "summary_path": Path(output.get("summary_path", directory / "summary.csv")),
         "synthetic_audit_path": Path(output.get("synthetic_audit_path", directory / "synthetic_audit.csv")),
+        "synthetic_candidate_audit_path": Path(
+            output.get(
+                "synthetic_candidate_audit_path",
+                directory / "synthetic_candidate_audit.csv",
+            )
+        ),
         "condition_transfer_vs_original_rf_by_seed_path": Path(
             output.get("condition_transfer_vs_original_rf_by_seed_path", directory / "condition_transfer_vs_original_rf_by_seed.csv")
         ),

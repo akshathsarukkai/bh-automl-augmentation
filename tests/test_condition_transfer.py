@@ -15,6 +15,9 @@ from bh_augmentation.augmentation.condition_transfer import (
 from bh_augmentation.augmentation.condition_transfer import (
     generate_condition_transfer_examples as _generate_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+)
 from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
 from bh_augmentation.features.featurize import (
     build_feature_matrix as _build_feature_matrix,
@@ -185,7 +188,10 @@ def test_condition_transfer_filtering_clips_and_removes_existing_duplicates() ->
     train = pd.DataFrame(
         {
             "reaction_id": ["r1", "r2"],
-            "reaction_smiles": ["A.B.C.D.E.F>>P", "A.B.G.H.I.J>>P"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCBr.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCN",
+            ],
             "yield": [-20.0, 140.0],
         }
     )
@@ -280,6 +286,7 @@ output:
     policy_metrics = pd.read_csv(paths["policy_metrics_path"])
     selected = pd.read_csv(paths["selected_policy_metrics_path"])
     audit = pd.read_csv(paths["synthetic_audit_path"])
+    candidate_audit = pd.read_csv(paths["synthetic_candidate_audit_path"])
     assert paths["selected_policies_path"].exists()
     assert paths["summary_path"].exists()
     assert "bh_role_separated_real_only" in set(policy_metrics["representation"])
@@ -290,6 +297,8 @@ output:
     assert set(selected["split"]) == {"valid", "test"}
     assert not audit["used_validation_or_test_parents"].any()
     assert (audit["n_synthetic_train"] > 0).any()
+    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidate_audit)
+    assert not candidate_audit[["source_row_id", "donor_row_id"]].isna().any().any()
 
 
 def _feature_config() -> dict[str, object]:

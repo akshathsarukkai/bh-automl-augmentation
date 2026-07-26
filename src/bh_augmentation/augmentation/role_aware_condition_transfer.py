@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
@@ -10,7 +11,14 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from bh_augmentation.data.bh_condition_reader import recover_condition_fields
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    apply_filter_rejection,
+    assert_accepted_identity_invariants,
+    audit_candidate_identities,
+    canonical_candidate_record,
+    measured_canonical_keys,
+)
 from bh_augmentation.data.reaction_roles import (
     CANONICAL_ROLE_COLUMNS,
     ROLE_TO_COLUMN,
@@ -156,10 +164,15 @@ def generate_role_aware_condition_transfer_examples(
     feature_config: dict[str, Any],
     real_feature_names: list[str],
     real_feature_metadata: FeatureMetadata,
+    measured_identity_keys: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Generate role-aware synthetic reactions using only training rows."""
     _validate_config(config)
     _validate_training_frame(df_train)
+    all_measured_keys = measured_canonical_keys(
+        df_train,
+        additional_keys=measured_identity_keys,
+    )
     train = df_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
     X_train_array = np.asarray(X_train, dtype=np.float32)
     y_train_array = np.asarray(y_train, dtype=np.float32).reshape(-1)
@@ -202,7 +215,6 @@ def generate_role_aware_condition_transfer_examples(
     np.fill_diagonal(substrate_similarity, -np.inf)
     np.fill_diagonal(condition_similarity, -np.inf)
 
-    existing_reactions = set(train["reaction_smiles"].astype(str))
     rows: list[dict[str, Any]] = []
     n_identical_skipped = 0
     n_invalid_role_parse_skipped = 0
@@ -235,21 +247,16 @@ def generate_role_aware_condition_transfer_examples(
             train_records[donor_position],
             effective_mode,
         )
-        if synthetic["synthetic_reaction_smiles"] == str(train_records[source_position]["reaction_smiles"]):
+        synthetic = {
+            **synthetic,
+            **canonical_candidate_record(synthetic["reaction_roles"]),
+        }
+        if synthetic["reaction_smiles"] == str(train_records[source_position]["reaction_smiles"]):
             n_identical_skipped += 1
-            continue
-        if synthetic["synthetic_reaction_smiles"] in existing_reactions:
-            n_identical_skipped += 1
-            continue
-        validation = recover_condition_fields({"reaction_smiles": synthetic["synthetic_reaction_smiles"]})
-        if validation.get("condition_parse_status") != "ok":
-            n_invalid_role_parse_skipped += 1
-            continue
 
         rows.append(
             {
                 "candidate_id": candidate_id,
-                "reaction_smiles": synthetic["synthetic_reaction_smiles"],
                 "source_position": source_position,
                 "donor_position": donor_position,
                 "source_index": source_dataframe_indices[source_position],
@@ -296,6 +303,16 @@ def generate_role_aware_condition_transfer_examples(
         real_metadata=real_feature_metadata,
         synthetic_metadata=synthetic_feature_metadata,
     )
+    candidate_df = audit_candidate_identities(
+        candidate_df,
+        X_synthetic,
+        measured_keys=all_measured_keys,
+        source_rows=train_records,
+    )
+    n_identical_skipped += int(candidate_df["source_identical"].astype(bool).sum())
+    n_invalid_role_parse_skipped += int(
+        (~candidate_df["chemical_parse_valid"].astype(bool)).sum()
+    )
     teacher_mean, teacher_std, teachers_used = _teacher_predictions(X_train_array, y_train_array, X_synthetic, config)
     candidate_df["teacher_mean"] = teacher_mean
     candidate_df["teacher_std"] = teacher_std
@@ -305,8 +322,24 @@ def generate_role_aware_condition_transfer_examples(
         float(config.clip_y_min),
         float(config.clip_y_max),
     )
+    candidate_df = apply_filter_rejection(
+        candidate_df,
+        ~np.isfinite(candidate_df["synthetic_label"].to_numpy(dtype=float)),
+        "invalid_synthetic_label",
+    )
+    if (
+        config.label_strategy == "uncertainty_filtered_teacher"
+        and config.max_teacher_std is not None
+    ):
+        candidate_df = apply_filter_rejection(
+            candidate_df,
+            candidate_df["teacher_std"].to_numpy(dtype=float)
+            > float(config.max_teacher_std),
+            "teacher_uncertainty_above_threshold",
+        )
     accepted = _acceptance_mask(candidate_df, X_synthetic, config)
     candidate_df["accepted"] = accepted
+    assert_accepted_identity_invariants(candidate_df)
     kept_indices = np.flatnonzero(accepted)[:target_count]
     candidate_df.loc[kept_indices, "kept"] = True
 
@@ -631,12 +664,8 @@ def _acceptance_mask(
     X_synthetic: np.ndarray,
     config: RoleAwareConditionTransferConfig,
 ) -> np.ndarray:
-    finite_features = np.isfinite(X_synthetic).all(axis=1)
-    finite_labels = np.isfinite(candidate_df["synthetic_label"].to_numpy(dtype=float))
-    accepted = finite_features & finite_labels
-    if config.label_strategy == "uncertainty_filtered_teacher" and config.max_teacher_std is not None:
-        accepted &= candidate_df["teacher_std"].to_numpy(dtype=float) <= float(config.max_teacher_std)
-    return accepted
+    del X_synthetic, config
+    return candidate_df["rejection_reason"].isna().to_numpy(dtype=bool)
 
 
 def _metadata_from_candidates(
@@ -746,6 +775,9 @@ def _synthetic_columns() -> list[str]:
         "changed_ligand",
         "changed_base",
         "changed_solvent_or_additive",
+        *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        "synthetic_identity_audit_version",
+        "canonicalization_version",
         *CANONICAL_ROLE_COLUMNS,
     ]
 

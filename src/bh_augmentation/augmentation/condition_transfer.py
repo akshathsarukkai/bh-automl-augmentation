@@ -3,18 +3,26 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    apply_filter_rejection,
+    assert_accepted_identity_invariants,
+    audit_candidate_identities,
+    canonical_candidate_record,
+    measured_canonical_keys,
+)
 from bh_augmentation.data.reaction_roles import (
     CANONICAL_ROLE_COLUMNS,
     ReactionRoles,
     ensure_reaction_role_columns,
     reaction_roles_from_row,
-    reaction_roles_to_record,
 )
 from bh_augmentation.features.compatibility import FeatureMetadata, assert_feature_compatibility
 from bh_augmentation.features.featurize import (
@@ -128,6 +136,7 @@ def generate_condition_transfer_examples(
     feature_config: dict[str, Any],
     real_feature_names: list[str],
     real_feature_metadata: FeatureMetadata,
+    measured_identity_keys: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Generate condition-transfer examples using only low-data training rows."""
     _validate_config(config)
@@ -135,7 +144,12 @@ def generate_condition_transfer_examples(
         raise ValueError("condition transfer requires a reaction_smiles column.")
 
     role_train = ensure_reaction_role_columns(df_train, parse_if_missing=True)
+    all_measured_keys = measured_canonical_keys(
+        role_train,
+        additional_keys=measured_identity_keys,
+    )
     train = role_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
+    train_records = train.to_dict(orient="records")
     X_train_array = np.asarray(X_train, dtype=np.float32)
     y_train_array = np.asarray(y_train, dtype=np.float32).reshape(-1)
     if len(train) != len(X_train_array) or len(train) != len(y_train_array):
@@ -206,8 +220,8 @@ def generate_condition_transfer_examples(
             train.loc[source_position],
             train.loc[donor_position],
         )
-        synthetic_record = reaction_roles_to_record(synthetic_roles)
-        synthetic_reaction = synthetic_roles.reaction_smiles()
+        synthetic_record = canonical_candidate_record(synthetic_roles)
+        synthetic_reaction = synthetic_record["reaction_smiles"]
         rows.append(
             {
                 "candidate_id": candidate_id,
@@ -233,7 +247,6 @@ def generate_condition_transfer_examples(
                 "existing_real_duplicate": False,
                 "accepted": False,
                 "kept": False,
-                "reaction_roles": synthetic_roles,
                 **synthetic_record,
             }
         )
@@ -257,7 +270,6 @@ def generate_condition_transfer_examples(
             np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
         )
 
-    candidate_df = _mark_duplicates(candidate_df, set(train["reaction_smiles"].astype(str)))
     feature_frame = candidate_df.copy()
     feature_frame["yield"] = 0.0
     X_synthetic, _, synthetic_feature_names, synthetic_feature_metadata = (
@@ -271,6 +283,17 @@ def generate_condition_transfer_examples(
         real_metadata=real_feature_metadata,
         synthetic_metadata=synthetic_feature_metadata,
     )
+    candidate_df = audit_candidate_identities(
+        candidate_df,
+        X_synthetic,
+        measured_keys=all_measured_keys,
+        source_rows=train_records,
+    )
+    candidate_df["synthetic_was_duplicate"] = (
+        candidate_df["duplicate_synthetic"].astype(bool)
+        | candidate_df["feature_duplicate_synthetic"].astype(bool)
+    )
+    candidate_df["existing_real_duplicate"] = candidate_df["already_measured"].astype(bool)
     invalid_featurization_count = 0
     teacher_mean, teacher_std, teachers_used = _teacher_predictions(
         X_train_array,
@@ -287,8 +310,35 @@ def generate_condition_transfer_examples(
         float(config.clip_y_min),
         float(config.clip_y_max),
     )
+    candidate_df = apply_filter_rejection(
+        candidate_df,
+        ~np.isfinite(candidate_df["synthetic_label"].to_numpy(dtype=float)),
+        "invalid_synthetic_label",
+    )
+    if config.min_similarity is not None and config.donor_strategy in {
+        "nearest_reaction",
+        "nearest_substrate",
+        "high_yield_nearest",
+    }:
+        candidate_df = apply_filter_rejection(
+            candidate_df,
+            candidate_df["donor_similarity"].to_numpy(dtype=float)
+            < float(config.min_similarity),
+            "similarity_below_threshold",
+        )
+    if (
+        config.label_strategy == "uncertainty_filtered_teacher"
+        and config.max_teacher_std is not None
+    ):
+        candidate_df = apply_filter_rejection(
+            candidate_df,
+            candidate_df["teacher_std"].to_numpy(dtype=float)
+            > float(config.max_teacher_std),
+            "teacher_uncertainty_above_threshold",
+        )
     accepted = _acceptance_mask(candidate_df, X_synthetic, config)
     candidate_df["accepted"] = accepted
+    assert_accepted_identity_invariants(candidate_df)
     kept_indices = np.flatnonzero(accepted)[:target_count]
     candidate_df.loc[kept_indices, "kept"] = True
 
@@ -436,19 +486,8 @@ def _acceptance_mask(
     X_synthetic: np.ndarray,
     config: ConditionTransferConfig,
 ) -> np.ndarray:
-    accepted = np.isfinite(X_synthetic).all(axis=1)
-    accepted &= np.isfinite(candidate_df["synthetic_label"].to_numpy(dtype=float))
-    accepted &= ~candidate_df["synthetic_was_duplicate"].to_numpy(dtype=bool)
-    accepted &= ~candidate_df["existing_real_duplicate"].to_numpy(dtype=bool)
-    if config.min_similarity is not None and config.donor_strategy in {
-        "nearest_reaction",
-        "nearest_substrate",
-        "high_yield_nearest",
-    }:
-        accepted &= candidate_df["donor_similarity"].to_numpy(dtype=float) >= float(config.min_similarity)
-    if config.label_strategy == "uncertainty_filtered_teacher" and config.max_teacher_std is not None:
-        accepted &= candidate_df["teacher_std"].to_numpy(dtype=float) <= float(config.max_teacher_std)
-    return accepted
+    del X_synthetic, config
+    return candidate_df["rejection_reason"].isna().to_numpy(dtype=bool)
 
 
 def _mark_duplicates(candidate_df: pd.DataFrame, real_reactions: set[str]) -> pd.DataFrame:
@@ -572,6 +611,9 @@ def _synthetic_columns() -> list[str]:
         "source_substrate_block",
         "donor_condition_block",
         "synthetic_was_duplicate",
+        *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        "synthetic_identity_audit_version",
+        "canonicalization_version",
         *CANONICAL_ROLE_COLUMNS,
     ]
 
