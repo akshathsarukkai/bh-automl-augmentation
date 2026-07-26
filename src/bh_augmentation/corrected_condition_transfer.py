@@ -22,6 +22,7 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
 )
 from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.bh_condition_reader import parse_bh_reaction_smiles
+from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
 from bh_augmentation.features.compatibility import assert_feature_compatibility
 from bh_augmentation.features.featurize import build_feature_matrix_with_metadata
 from bh_augmentation.models.baselines import get_model
@@ -29,7 +30,6 @@ from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
 from bh_augmentation.run_supervised_ae_latent_baseline import (
     _compute_metric,
-    _create_split_variants,
     _parse_model_config,
     _resolve_model_configs,
     _resolve_seeds,
@@ -41,12 +41,12 @@ from bh_augmentation.utils.corrected_runs import (
     CORRECTED_STATUS,
     assert_training_only_parents,
     build_run_manifest,
+    canonical_split_audit_record,
     feature_contract_record,
     load_corrected_bh_dataframe,
     prepare_fresh_output_directory,
     resolve_corrected_feature_config,
     sha256_file,
-    split_audit_record,
     write_json,
 )
 from bh_augmentation.utils.seed import set_global_seed
@@ -77,6 +77,15 @@ def run_corrected_condition_transfer(
         config.get("features", {}), required_kind=CORRECTED_ROLE_FEATURE_KIND
     )
     dataset_path = Path(_dataset_path(config))
+    seeds = _resolve_seeds(config)
+    train_fractions = _corrected_train_fractions(config)
+    split_directory = _corrected_split_directory(config)
+    saved_splits = load_saved_canonical_splits(
+        dataset_path,
+        split_directory,
+        requested_seeds=seeds,
+        requested_fractions=train_fractions,
+    )
     dataset_hash = sha256_file(dataset_path)
     frame = load_corrected_bh_dataframe(dataset_path)
     complete_measured_identity_keys = measured_canonical_keys(frame)
@@ -99,13 +108,25 @@ def run_corrected_condition_transfer(
     compatibility_rows: list[dict[str, Any]] = []
     split_rows: list[dict[str, Any]] = []
     split_hashes: dict[str, str] = {}
+    selection_exclusions: list[dict[str, Any]] = []
 
-    for seed in _resolve_seeds(config):
+    for seed in seeds:
         set_global_seed(seed)
-        for train_fraction, splits in _create_split_variants(frame, config, seed):
+        for train_fraction, splits in saved_splits.materialize_variants(
+            frame,
+            seed=seed,
+            train_fractions=train_fractions,
+        ):
             fraction = float(train_fraction)
-            split_record = split_audit_record(
-                seed, fraction, splits, dataset_hash=dataset_hash
+            split_record = canonical_split_audit_record(
+                seed,
+                fraction,
+                splits,
+                dataset_hash=dataset_hash,
+                saved_audit=saved_splits.audit_record(
+                    seed=seed,
+                    train_fraction=fraction,
+                ),
             )
             split_rows.append(split_record)
             split_hashes[_split_key(seed, fraction)] = str(split_record["split_hash"])
@@ -265,11 +286,23 @@ def run_corrected_condition_transfer(
 
             for model_name, candidates in eligible.items():
                 if not candidates:
-                    raise ValueError(
-                        "No eligible nonzero-synthetic corrected policy for "
-                        f"kind={transfer_kind}, seed={seed}, fraction={fraction}, "
-                        f"model={model_name}."
+                    selection_exclusions.append(
+                        {
+                            "seed": seed,
+                            "train_fraction": fraction,
+                            "model": model_name,
+                            "transfer_kind": transfer_kind,
+                            "selection_status": "no_eligible_nonzero_synthetic_policy",
+                            "reason": (
+                                "All generated policies were empty, rejected, or non-finite; "
+                                "no augmentation test metric was evaluated."
+                            ),
+                            "split_hash": split_record["split_hash"],
+                            "source_id_split_hash": split_record["source_id_split_hash"],
+                            "dataset_hash": dataset_hash,
+                        }
                     )
+                    continue
                 selected = min(candidates, key=lambda item: item["valid_rmse"])
                 selected_record = dict(selected["record"])
                 selected_record["selected_policy"] = True
@@ -305,10 +338,38 @@ def run_corrected_condition_transfer(
 
     policy_metrics = pd.DataFrame(metric_rows)
     selected_policies = pd.DataFrame(selected_rows)
+    if selected_policies.empty:
+        selected_policies = pd.DataFrame(
+            columns=[
+                *[
+                    column
+                    for column in policy_metrics.columns
+                    if column not in {"split", "metric", "value"}
+                ],
+                "valid_rmse",
+            ]
+        )
+    selection_exclusions_frame = pd.DataFrame(
+        selection_exclusions,
+        columns=[
+            "seed",
+            "train_fraction",
+            "model",
+            "transfer_kind",
+            "selection_status",
+            "reason",
+            "split_hash",
+            "source_id_split_hash",
+            "dataset_hash",
+        ],
+    )
     selected_policy_metrics = policy_metrics.loc[
         policy_metrics["selected_policy"].fillna(False).astype(bool)
     ].copy()
-    if (selected_policies["n_synthetic_train"].astype(int) <= 0).any():
+    if (
+        not selected_policies.empty
+        and (selected_policies["n_synthetic_train"].astype(int) <= 0).any()
+    ):
         raise ValueError("A zero-synthetic corrected policy was selected.")
     if selected_policy_metrics["value"].isna().any():
         raise ValueError("Selected corrected policy metrics contain NaN values.")
@@ -321,6 +382,7 @@ def run_corrected_condition_transfer(
     pd.DataFrame(compatibility_rows).to_csv(paths["feature_compatibility_audit"], index=False)
     summary.to_csv(paths["summary"], index=False)
     pd.DataFrame(split_rows).to_csv(paths["split_audit"], index=False)
+    selection_exclusions_frame.to_csv(paths["selection_exclusions"], index=False)
     combine_candidate_audit_frames(candidate_audit_frames).to_csv(
         paths["candidate_audit"], index=False
     )
@@ -334,8 +396,13 @@ def run_corrected_condition_transfer(
         output_directory=output_dir,
         split_hashes=split_hashes,
         feature_metadata_hash=feature_metadata_hash,
+        canonical_split_contract={
+            **saved_splits.audit_metadata,
+            "split_directory": str(split_directory),
+        },
     )
     manifest["transfer_kind"] = transfer_kind
+    manifest["selection_exclusion_count"] = len(selection_exclusions)
     write_json(paths["run_manifest"], manifest)
     return paths
 
@@ -648,6 +715,7 @@ def _output_paths(directory: Path, kind: str) -> dict[str, Path]:
         "feature_compatibility_audit": directory / "feature_compatibility_audit.csv",
         "summary": directory / "summary.csv",
         "split_audit": directory / "split_audit.csv",
+        "selection_exclusions": directory / "selection_exclusions.csv",
         "role_value_counts": directory / "role_value_counts.csv",
         "run_manifest": directory / "run_manifest.json",
     }
@@ -673,6 +741,26 @@ def _dataset_path(config: Mapping[str, Any]) -> str:
     if not path:
         raise ValueError("Config must define dataset.path.")
     return str(path)
+
+
+def _corrected_split_directory(config: Mapping[str, Any]) -> Path:
+    split_config = config.get("splits", {})
+    if split_config.get("method") != "canonical_saved":
+        raise ValueError("Corrected scientific runs require splits.method='canonical_saved'.")
+    directory = split_config.get("directory")
+    if not directory:
+        raise ValueError("Corrected scientific runs require splits.directory.")
+    return Path(directory)
+
+
+def _corrected_train_fractions(config: Mapping[str, Any]) -> list[float]:
+    low_data = config.get("low_data", {})
+    if not low_data.get("enabled", False):
+        return [1.0]
+    fractions = low_data.get("train_fractions")
+    if not isinstance(fractions, list) or not fractions:
+        raise ValueError("Corrected low_data.train_fractions must be a non-empty list.")
+    return [float(value) for value in fractions]
 
 
 def _split_key(seed: int, fraction: float) -> str:

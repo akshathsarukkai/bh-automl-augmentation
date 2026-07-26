@@ -8,6 +8,10 @@ from typing import Any
 import pandas as pd
 import yaml
 
+from bh_augmentation.data.audit_canonical_dataset import run_canonical_data_audit
+from bh_augmentation.data.canonical_splits import run_canonical_grouped_splits
+from canonical_test_utils import audit_config, split_config
+
 
 def corrected_dataset(n_rows: int = 72) -> pd.DataFrame:
     reactant_1 = ["Brc1ccccc1", "Clc1ccccc1", "Brc1ccncc1", "Ic1ccccc1"]
@@ -56,9 +60,36 @@ def write_corrected_config(
     kind: str,
     output_name: str,
 ) -> Path:
-    dataset_path = tmp_path / "corrected_dataset.csv"
+    source_path = tmp_path / "corrected_source_dataset.csv"
+    dataset_path = tmp_path / "corrected_canonical_dataset.csv"
+    audit_directory = tmp_path / "corrected_fixture_audit"
+    split_directory = tmp_path / "corrected_fixture_splits"
+    if not source_path.exists():
+        corrected_dataset().to_csv(source_path, index=False)
     if not dataset_path.exists():
-        corrected_dataset().to_csv(dataset_path, index=False)
+        run_canonical_data_audit(
+            audit_config(source_path, dataset_path, audit_directory),
+            config_path=tmp_path / "fixture_audit.yaml",
+        )
+    if not split_directory.exists():
+        grouped_config = split_config(
+            source_path,
+            dataset_path,
+            split_directory,
+            seeds=[0],
+        )
+        grouped_config["splits"].update(
+            {
+                "train_size": 0.6,
+                "valid_size": 0.2,
+                "test_size": 0.2,
+                "train_fractions": [0.5, 1.0],
+            }
+        )
+        run_canonical_grouped_splits(
+            grouped_config,
+            config_path=tmp_path / "fixture_splits.yaml",
+        )
     output_dir = tmp_path / output_name
     base: dict[str, Any] = {
         "seed": 0,
@@ -66,10 +97,8 @@ def write_corrected_config(
         "corrected_revalidation": {"enabled": True},
         "dataset": {"path": str(dataset_path)},
         "splits": {
-            "method": "random",
-            "train_size": 0.6,
-            "valid_size": 0.2,
-            "test_size": 0.2,
+            "method": "canonical_saved",
+            "directory": str(split_directory),
         },
         "low_data": {"enabled": True, "train_fractions": [0.5]},
         "features": {

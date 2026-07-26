@@ -1,23 +1,24 @@
 seed: 42
 seeds: [0, 1, 2, 3, 4]
+corrected_revalidation:
+  enabled: true
 
 dataset:
-  path: data/processed/bh_clean_stress.csv
+  path: data/processed/bh_canonical_roles_v1.csv
 
 splits:
-  method: random
-  train_size: 0.8
-  valid_size: 0.1
-  test_size: 0.1
+  method: canonical_saved
+  directory: results/corrected_canonical_splits
 
 low_data:
   enabled: true
   train_fractions: [0.01, 0.05, 0.10, 0.20]
 
 features:
-  kind: reaction_role_concat
+  kind: bh_role_separated
   n_bits: 2048
   radius: 2
+  fingerprint_backend: rdkit
 
 models:
   - ridge
@@ -37,6 +38,8 @@ metrics: [rmse, mae, r2, spearman]
 
 condition_transfer:
   enabled: true
+  role_change_requirement: all
+  fallback_policy: reject
   selection_model:
     name: xgboost
     params: *xgboost_params
@@ -57,6 +60,9 @@ condition_transfer:
   clip_y_max: 100.0
   candidates_per_real: 10
   teacher_models: [ridge, random_forest]
+  donor_similarity_n_bits: 2048
+  donor_similarity_radius: 2
+  donor_similarity_backend: rdkit
 
 supervised_autoencoder:
   latent_dims: [16, 64]
@@ -76,7 +82,7 @@ supervised_autoencoder:
   synthetic_example_weights: [0.25, 0.5, 1.0]
   synthetic_reconstruction_weight: 1.0
 
-evaluate_full_data_reference: true
+evaluate_full_data_reference: false
 
 selection:
   split: valid
@@ -84,18 +90,18 @@ selection:
   lower_is_better: true
 
 output:
-  directory: results/condition_transfer_supervised_ae_xgboost
-  policy_metrics_path: results/condition_transfer_supervised_ae_xgboost/policy_metrics.csv
-  selected_hybrid_policies_path: results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policies.csv
-  selected_hybrid_policy_metrics_path: results/condition_transfer_supervised_ae_xgboost/selected_hybrid_policy_metrics.csv
-  ae_training_audit_path: results/condition_transfer_supervised_ae_xgboost/ae_training_audit.csv
-  synthetic_training_audit_path: results/condition_transfer_supervised_ae_xgboost/synthetic_training_audit.csv
-  summary_path: results/condition_transfer_supervised_ae_xgboost/summary.csv
-  hybrid_vs_real_only_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_real_only_by_seed.csv
-  hybrid_vs_real_only_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_real_only_summary.csv
-  hybrid_vs_anonymous_transfer_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_anonymous_transfer_by_seed.csv
-  hybrid_vs_anonymous_transfer_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_anonymous_transfer_summary.csv
-  hybrid_vs_ae_only_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_ae_only_by_seed.csv
-  hybrid_vs_ae_only_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_ae_only_summary.csv
-  hybrid_vs_best_parent_by_seed_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_best_parent_by_seed.csv
-  hybrid_vs_best_parent_summary_path: results/condition_transfer_supervised_ae_xgboost/hybrid_vs_best_parent_summary.csv
+  directory: results/corrected_condition_transfer_supervised_ae_xgboost
+  policy_metrics_path: results/corrected_condition_transfer_supervised_ae_xgboost/policy_metrics.csv
+  selected_hybrid_policies_path: results/corrected_condition_transfer_supervised_ae_xgboost/selected_hybrid_policies.csv
+  selected_hybrid_policy_metrics_path: results/corrected_condition_transfer_supervised_ae_xgboost/selected_hybrid_policy_metrics.csv
+  ae_training_audit_path: results/corrected_condition_transfer_supervised_ae_xgboost/ae_training_audit.csv
+  synthetic_training_audit_path: results/corrected_condition_transfer_supervised_ae_xgboost/synthetic_training_audit.csv
+  summary_path: results/corrected_condition_transfer_supervised_ae_xgboost/summary.csv
+  hybrid_vs_real_only_by_seed_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_real_only_by_seed.csv
+  hybrid_vs_real_only_summary_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_real_only_summary.csv
+  hybrid_vs_anonymous_transfer_by_seed_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_anonymous_transfer_by_seed.csv
+  hybrid_vs_anonymous_transfer_summary_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_anonymous_transfer_summary.csv
+  hybrid_vs_ae_only_by_seed_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_ae_only_by_seed.csv
+  hybrid_vs_ae_only_summary_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_ae_only_summary.csv
+  hybrid_vs_best_parent_by_seed_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_best_parent_by_seed.csv
+  hybrid_vs_best_parent_summary_path: results/corrected_condition_transfer_supervised_ae_xgboost/hybrid_vs_best_parent_summary.csv

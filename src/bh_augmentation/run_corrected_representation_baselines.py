@@ -9,13 +9,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
 from bh_augmentation.features.featurize import build_feature_matrix_with_metadata
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
 from bh_augmentation.run_supervised_ae_latent_baseline import (
     _compute_metric,
-    _create_split_variants,
     _parse_model_config,
     _resolve_model_configs,
     _resolve_seeds,
@@ -26,12 +26,12 @@ from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.corrected_runs import (
     CORRECTED_STATUS,
     build_run_manifest,
+    canonical_split_audit_record,
     feature_contract_record,
     load_corrected_bh_dataframe,
     prepare_fresh_output_directory,
     resolve_corrected_feature_config,
     sha256_file,
-    split_audit_record,
     write_json,
 )
 from bh_augmentation.utils.seed import set_global_seed
@@ -51,6 +51,14 @@ def run_corrected_representation_baselines(config_path: str | Path) -> dict[str,
     _validate_metrics(metric_names)
     seeds = _resolve_seeds(config)
     dataset_path = Path(_dataset_path(config))
+    train_fractions = _corrected_train_fractions(config)
+    split_directory = _corrected_split_directory(config)
+    saved_splits = load_saved_canonical_splits(
+        dataset_path,
+        split_directory,
+        requested_seeds=seeds,
+        requested_fractions=train_fractions,
+    )
     dataset_hash = sha256_file(dataset_path)
     frame = load_corrected_bh_dataframe(dataset_path)
     output_dir = prepare_fresh_output_directory(
@@ -78,12 +86,20 @@ def run_corrected_representation_baselines(config_path: str | Path) -> dict[str,
 
         for seed in seeds:
             set_global_seed(seed)
-            for train_fraction, splits in _create_split_variants(frame, config, seed):
-                split_record = split_audit_record(
+            for train_fraction, splits in saved_splits.materialize_variants(
+                frame,
+                seed=seed,
+                train_fractions=train_fractions,
+            ):
+                split_record = canonical_split_audit_record(
                     seed,
                     float(train_fraction),
                     splits,
                     dataset_hash=dataset_hash,
+                    saved_audit=saved_splits.audit_record(
+                        seed=seed,
+                        train_fraction=float(train_fraction),
+                    ),
                 )
                 split_key = _split_key(seed, float(train_fraction))
                 previous = split_rows_by_key.setdefault(split_key, split_record)
@@ -161,6 +177,10 @@ def run_corrected_representation_baselines(config_path: str | Path) -> dict[str,
         feature_metadata_hash={
             kind: value["feature_metadata_hash"] for kind, value in metadata_json.items()
         },
+        canonical_split_contract={
+            **saved_splits.audit_metadata,
+            "split_directory": str(split_directory),
+        },
     )
     write_json(paths["run_manifest"], manifest)
     return paths
@@ -209,6 +229,26 @@ def _dataset_path(config: dict[str, Any]) -> str:
     if not path:
         raise ValueError("Config must define dataset.path.")
     return str(path)
+
+
+def _corrected_split_directory(config: dict[str, Any]) -> Path:
+    split_config = config.get("splits", {})
+    if split_config.get("method") != "canonical_saved":
+        raise ValueError("Corrected scientific runs require splits.method='canonical_saved'.")
+    directory = split_config.get("directory")
+    if not directory:
+        raise ValueError("Corrected scientific runs require splits.directory.")
+    return Path(directory)
+
+
+def _corrected_train_fractions(config: dict[str, Any]) -> list[float]:
+    low_data = config.get("low_data", {})
+    if not low_data.get("enabled", False):
+        return [1.0]
+    fractions = low_data.get("train_fractions")
+    if not isinstance(fractions, list) or not fractions:
+        raise ValueError("Corrected low_data.train_fractions must be a non-empty list.")
+    return [float(value) for value in fractions]
 
 
 def _split_key(seed: int, fraction: float) -> str:

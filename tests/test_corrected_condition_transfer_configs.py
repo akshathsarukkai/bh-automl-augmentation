@@ -27,7 +27,12 @@ CORRECTED_CONFIGS = [
     "configs/corrected_anonymous_condition_transfer_tiny.yaml",
     "configs/corrected_role_aware_condition_transfer_xgboost.yaml",
     "configs/corrected_role_aware_condition_transfer_tiny.yaml",
+    "configs/condition_transfer_supervised_ae_xgboost.yaml",
+    "configs/condition_transfer_supervised_ae_tiny.yaml",
 ]
+
+CANONICAL_DATASET_PATH = "data/processed/bh_canonical_roles_v1.csv"
+CANONICAL_SPLIT_DIRECTORY = "results/corrected_canonical_splits"
 
 
 @pytest.mark.parametrize("path", CORRECTED_CONFIGS)
@@ -37,6 +42,25 @@ def test_corrected_configs_never_use_legacy_feature_aliases(path: str) -> None:
     feature_values.extend(config["features"].get("representations", []))
     assert not set(feature_values) & set(DEPRECATED_FEATURE_ALIASES)
     assert config["features"]["fingerprint_backend"] == "rdkit"
+
+
+@pytest.mark.parametrize("path", CORRECTED_CONFIGS)
+def test_corrected_configs_use_saved_canonical_assignments(path: str) -> None:
+    config = yaml.safe_load(Path(path).read_text())
+    split_manifest = yaml.safe_load(
+        Path(CANONICAL_SPLIT_DIRECTORY, "split_manifest.json").read_text()
+    )
+
+    assert config["corrected_revalidation"]["enabled"] is True
+    assert config["dataset"]["path"] == CANONICAL_DATASET_PATH
+    assert config["splits"] == {
+        "method": "canonical_saved",
+        "directory": CANONICAL_SPLIT_DIRECTORY,
+    }
+    assert set(config["seeds"]) <= set(split_manifest["seeds"])
+    assert set(config["low_data"]["train_fractions"]) <= set(
+        split_manifest["train_fractions"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -73,6 +97,14 @@ def test_corrected_transfer_configs_use_role_separated_rdkit(path: str) -> None:
             "configs/corrected_role_aware_condition_transfer_tiny.yaml",
             "role_aware_condition_transfer",
         ),
+        (
+            "configs/condition_transfer_supervised_ae_xgboost.yaml",
+            "condition_transfer",
+        ),
+        (
+            "configs/condition_transfer_supervised_ae_tiny.yaml",
+            "condition_transfer",
+        ),
     ],
 )
 def test_corrected_transfer_configs_declare_strict_role_change_and_reject_fallback(
@@ -83,6 +115,28 @@ def test_corrected_transfer_configs_declare_strict_role_change_and_reject_fallba
 
     assert config[section]["role_change_requirement"] == "all"
     assert config[section]["fallback_policy"] == "reject"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "configs/condition_transfer_supervised_ae_xgboost.yaml",
+        "configs/condition_transfer_supervised_ae_tiny.yaml",
+    ],
+)
+def test_corrected_hybrid_configs_disable_random_full_data_reference(path: str) -> None:
+    config = yaml.safe_load(Path(path).read_text())
+
+    assert config["evaluate_full_data_reference"] is False
+    assert config["features"]["kind"] == "bh_role_separated"
+    assert config["features"]["fingerprint_backend"] == "rdkit"
+    assert config["condition_transfer"]["donor_similarity_backend"] == "rdkit"
+    assert config["output"]["directory"].startswith(
+        "results/corrected_condition_transfer_supervised_ae_"
+    )
+    for key, value in config["output"].items():
+        if key.endswith("_path"):
+            assert str(value).startswith(config["output"]["directory"] + "/")
 
 
 def test_role_aware_policy_factory_propagates_strict_role_change_config() -> None:

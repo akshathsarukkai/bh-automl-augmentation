@@ -2,17 +2,23 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 import torch
+from tests.canonical_test_utils import audit_config, split_config
 
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     REQUIRED_SYNTHETIC_RANKING_FIELDS,
     REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
 )
+from bh_augmentation.data.audit_canonical_dataset import run_canonical_data_audit
+from bh_augmentation.data.canonical_splits import run_canonical_grouped_splits
+from bh_augmentation.data.reaction_roles import ReactionRoles, reaction_roles_to_record
 from bh_augmentation.features.compatibility import coordinate_feature_contract
 from bh_augmentation.representations.supervised_autoencoder import (
     SupervisedAEConfig,
@@ -209,6 +215,161 @@ def test_hybrid_runner_tiny_writes_outputs_and_leakage_audits(tmp_path: Path) ->
         assert paths[required].exists()
 
 
+def test_corrected_hybrid_uses_validated_saved_splits(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("rdkit")
+    source_path = tmp_path / "source.csv"
+    canonical_path = tmp_path / "canonical.csv"
+    source_records = []
+    for index in range(24):
+        roles = ReactionRoles(
+            reactant_1=f"{'C' * (index + 1)}Br",
+            reactant_2="CN",
+            catalyst="[Pd]",
+            ligand="CP(C)C",
+            base="[Na+].[OH-]",
+            solvent_or_additive="CCO",
+            product=f"{'C' * (index + 2)}N",
+        )
+        record = reaction_roles_to_record(roles)
+        record.update(
+            {
+                "reaction_id": f"reaction_{index}",
+                "yield": float((index * 13) % 101),
+            }
+        )
+        source_records.append(record)
+    pd.DataFrame(source_records).to_csv(source_path, index=False)
+    run_canonical_data_audit(
+        audit_config(
+            source_path,
+            canonical_path,
+            tmp_path / "corrected_audit",
+        ),
+        config_path=tmp_path / "audit.yaml",
+    )
+    split_directory = tmp_path / "corrected_splits"
+    canonical_split_config = split_config(
+        source_path,
+        canonical_path,
+        split_directory,
+        seeds=[0],
+    )
+    canonical_split_config["splits"]["train_fractions"] = [0.5, 1.0]
+    run_canonical_grouped_splits(
+        canonical_split_config,
+        config_path=tmp_path / "splits.yaml",
+    )
+
+    config_path = tmp_path / "corrected_hybrid.yaml"
+    output_directory = tmp_path / "corrected_hybrid_results"
+    config_path.write_text(
+        _corrected_tiny_config(
+            canonical_path,
+            split_directory,
+            output_directory,
+        ),
+        encoding="utf-8",
+    )
+
+    def _unexpected_random_split(*args: object, **kwargs: object) -> None:
+        raise AssertionError("corrected hybrid attempted a row-level random split")
+
+    monkeypatch.setattr(
+        "bh_augmentation.run_condition_transfer_supervised_ae._create_random_splits",
+        _unexpected_random_split,
+    )
+    monkeypatch.setattr(
+        "bh_augmentation.run_condition_transfer_supervised_ae._create_split_variants",
+        _unexpected_random_split,
+    )
+
+    paths = run_condition_transfer_supervised_ae(config_path)
+
+    split_audit = pd.read_csv(paths["split_audit_path"])
+    manifest = json.loads(paths["run_manifest_path"].read_text())
+    metrics = pd.read_csv(paths["policy_metrics_path"])
+    assert split_audit[["seed", "train_fraction"]].to_dict("records") == [
+        {"seed": 0, "train_fraction": 0.5}
+    ]
+    assert split_audit["source_id_split_hash"].str.len().eq(64).all()
+    assert split_audit["valid_source_id_hash"].str.len().eq(64).all()
+    assert split_audit["test_source_id_hash"].str.len().eq(64).all()
+    assert manifest["canonical_dataset_hash"] == split_audit.loc[
+        0, "canonical_dataset_hash"
+    ]
+    assert manifest["split_aggregate_hash"] == split_audit.loc[
+        0, "split_aggregate_hash"
+    ]
+    assert manifest["per_seed_split_hashes"]["0"] == split_audit.loc[
+        0, "per_seed_split_hash"
+    ]
+    assert manifest["canonicalization_version"] == split_audit.loc[
+        0, "canonicalization_version"
+    ]
+    assert manifest["split_schema_version"] == split_audit.loc[
+        0, "split_schema_version"
+    ]
+    assert manifest["canonical_split_contract"]["split_aggregate_hash"] == manifest[
+        "split_aggregate_hash"
+    ]
+    assert manifest["canonical_split_contract"]["split_directory"] == str(
+        split_directory
+    )
+    split_key = "seed=0|train_fraction=0.5"
+    assert manifest["split_hashes"][split_key] == split_audit.loc[
+        0, "per_seed_split_hash"
+    ]
+    assert manifest["source_id_split_hashes"][split_key] == split_audit.loc[
+        0, "source_id_split_hash"
+    ]
+    assert metrics["source_id_split_hash"].eq(
+        split_audit.loc[0, "source_id_split_hash"]
+    ).all()
+    assert not metrics.empty
+
+
+@pytest.mark.parametrize(
+    ("split_config", "message"),
+    [
+        ("method: random", "splits.method: canonical_saved"),
+        ("method: canonical_saved", "splits.directory"),
+    ],
+)
+def test_corrected_hybrid_rejects_noncanonical_split_configuration_before_output(
+    tmp_path: Path,
+    split_config: str,
+    message: str,
+) -> None:
+    output_directory = tmp_path / "corrected_output"
+    config_path = tmp_path / "invalid_corrected_hybrid.yaml"
+    config_path.write_text(
+        f"""
+seeds: [0]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: {tmp_path / "not_loaded.csv"}
+splits:
+  {split_config}
+low_data:
+  enabled: true
+  train_fractions: [0.5]
+metrics: [rmse]
+output:
+  directory: {output_directory}
+""",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=message):
+        run_condition_transfer_supervised_ae(config_path)
+
+    assert not output_directory.exists()
+
+
 def _selection_row(policy: str, split: str, value: float, n_synthetic: int) -> dict[str, object]:
     return {
         "seed": 0,
@@ -291,6 +452,63 @@ supervised_autoencoder:
 evaluate_full_data_reference: false
 output:
   directory: {output_dir}
+"""
+
+
+def _corrected_tiny_config(
+    data_path: Path,
+    split_directory: Path,
+    output_directory: Path,
+) -> str:
+    return f"""
+seeds: [0]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: {data_path}
+splits:
+  method: canonical_saved
+  directory: {split_directory}
+low_data:
+  enabled: true
+  train_fractions: [0.5]
+features:
+  kind: bh_role_separated
+  n_bits: 8
+  radius: 2
+  fingerprint_backend: rdkit
+models: [ridge]
+metrics: [rmse, mae, r2, spearman]
+condition_transfer:
+  enabled: true
+  role_change_requirement: all
+  fallback_policy: reject
+  selection_model: ridge
+  donor_strategies: [random]
+  label_strategies: [teacher_ensemble]
+  policy_pairs:
+    - {{donor_strategy: random, label_strategy: teacher_ensemble}}
+  synthetic_multipliers: [0.5]
+  n_neighbors: [3]
+  min_similarities: [null]
+  max_teacher_stds: [null]
+  candidates_per_real: 2
+  teacher_models: [ridge]
+  donor_similarity_n_bits: 64
+  donor_similarity_radius: 2
+  donor_similarity_backend: rdkit
+supervised_autoencoder:
+  latent_dims: [4]
+  hidden_dims: [8]
+  max_epochs: 2
+  patience: 1
+  batch_size: 4
+  internal_valid_size: 0.2
+  device: cpu
+  synthetic_example_weights: [0.5]
+evaluate_full_data_reference: false
+output:
+  directory: {output_directory}
 """
 
 

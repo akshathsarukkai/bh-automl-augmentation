@@ -1,5 +1,6 @@
 """Tests for corrected real-only representation baselines."""
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -41,9 +42,46 @@ def test_tiny_representation_baseline_completes(tmp_path: Path) -> None:
     }
     assert all(paths[key].is_file() for key in required)
     metrics = pd.read_csv(paths["policy_metrics"])
+    split_audit = pd.read_csv(paths["split_audit"])
+    manifest = json.loads(paths["run_manifest"].read_text())
     assert set(metrics["representation"]) == set(REQUIRED_REPRESENTATIONS)
     assert set(metrics["split"]) == {"valid", "test"}
     assert metrics["feature_metadata_hash"].notna().all()
+    assert metrics["split_hash"].nunique() == 1
+    contract = manifest["canonical_split_contract"]
+    assert split_audit["split_hash"].eq(contract["per_seed_split_hashes"]["0"]).all()
+    assert split_audit["split_aggregate_hash"].eq(contract["split_aggregate_hash"]).all()
+    assert split_audit["source_id_split_hash"].notna().all()
+
+
+def test_tampered_saved_split_fails_before_training(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config_path = write_corrected_config(
+        tmp_path,
+        kind="representations",
+        output_name="corrected_representation_tamper",
+    )
+    config = yaml.safe_load(config_path.read_text())
+    low_path = (
+        Path(config["splits"]["directory"]) / "low_data_subset_assignments.csv"
+    )
+    low = pd.read_csv(low_path)
+    low.loc[0, "included_in_training_subset"] = not bool(
+        low.loc[0, "included_in_training_subset"]
+    )
+    low.to_csv(low_path, index=False)
+
+    def _unexpected_training(*args: object, **kwargs: object) -> None:
+        raise AssertionError("model training ran before canonical split validation")
+
+    monkeypatch.setattr(
+        "bh_augmentation.run_corrected_representation_baselines.train_model",
+        _unexpected_training,
+    )
+    with pytest.raises(ValueError, match="split hash mismatch|training subset"):
+        run_corrected_representation_baselines(config_path)
 
 
 def test_tiny_representation_widths_follow_contract(tmp_path: Path) -> None:

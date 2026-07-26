@@ -1,11 +1,10 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-26T23:23:48Z
+Updated: 2026-07-26T23:24:34Z
 
-The resumable 18-phase ledger has been initialized from verified Batch 3 state.
-No post–Batch 3 phase has yet passed. The protected worktree contains uncommitted
-Batch 3 canonicalization and split work based on commit
-`01492f8d0c58a1f3b751e50cd420ee92ad1c60b5`.
+The resumable 18-phase ledger was initialized from verified Batch 3 state.
+Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
+and is awaiting its local checkpoint.
 
 Current status: Phase 1 passed and was checkpointed locally at
 `5268df37a39ba443fdf26ee15dc0a09d3bcb59ae`.
@@ -43,8 +42,8 @@ Scientific limitation: a strict anonymous full-condition policy cannot operate
 on this canonical HTE subset while catalyst is a requested invariant role. This
 is retained as a null eligibility result, not converted into a hidden fallback.
 
-Current activity: Phase 3 passed its scientific and engineering gate; its local
-Git checkpoint is pending.
+Current status: Phase 3 passed and was checkpointed locally at
+`1bbfa0ebd08f514e2e1844687f944f3c46352adb`.
 
 Phase 3 validation:
 
@@ -61,6 +60,26 @@ identity rejection; focused fixtures cover nonempty ranking and selection.
 Calibrated uncertainty is deliberately null pending Phase 12, while transparent
 deterministic proxy ranks are labeled accordingly. Nonchemical interpolation
 and GAN controls report component chemical similarities as null.
+
+Current activity: Phase 4 passed its scientific and engineering gate; its local
+Git checkpoint is pending.
+
+Phase 4 validation:
+
+- Focused tests: 85 passed
+- Full suite: 442 passed (35 warnings)
+- Ruff and `git diff --check`: passed
+- Canonical integration smoke: real-only, anonymous, role-aware, and hybrid
+  runners loaded seed 0 at 1% training data from the same saved assignments
+- All four split-audit CSVs are byte-identical and record aggregate hash
+  `cb1d85ab...`, seed hash `3c004950...`, and fixed validation/test ID hashes
+- All 44 runner output hashes recorded by the smoke manifest were revalidated
+
+Scientific result: strict anonymous and typed transfer had no eligible nonzero
+policy in this dense canonical slice, so the runners recorded exclusions and
+did not evaluate augmentation on the outer test. The hybrid completed its
+real-only AE control and selected no hybrid policy. This null eligibility result
+was not replaced by fallback generation.
 
 Canonical dependencies detected:
 

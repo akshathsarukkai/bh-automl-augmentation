@@ -20,6 +20,10 @@ from bh_augmentation.augmentation.synthetic_identity import measured_canonical_k
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.data.saved_canonical_splits import (
+    SavedCanonicalSplits,
+    load_saved_canonical_splits,
+)
 from bh_augmentation.features.compatibility import FeatureMetadata, assert_feature_compatibility
 from bh_augmentation.features.featurize import (
     build_feature_matrix_with_metadata,
@@ -47,6 +51,13 @@ from bh_augmentation.run_supervised_ae_latent_baseline import (
     _validate_metrics,
 )
 from bh_augmentation.utils.config import load_config
+from bh_augmentation.utils.corrected_runs import (
+    build_run_manifest,
+    canonical_split_audit_record,
+    feature_contract_record,
+    prepare_fresh_output_directory,
+    write_json,
+)
 from bh_augmentation.utils.seed import set_global_seed
 from bh_augmentation.utils.synthetic_audits import (
     build_candidate_audit_frame,
@@ -60,14 +71,46 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     seeds = _resolve_seeds(config)
     metric_names = list(config.get("metrics", ["rmse", "mae", "r2", "spearman"]))
     _validate_metrics(metric_names)
-    raw_df = load_reaction_csv(_get_dataset_path(config))
-    df = ensure_reaction_role_columns(clean_buchwald_hartwig(raw_df), parse_if_missing=True)
+    corrected_mode = bool(config.get("corrected_revalidation", {}).get("enabled", False))
+    requested_fractions = _requested_train_fractions(config)
+    saved_splits: SavedCanonicalSplits | None = None
+    if corrected_mode:
+        split_config = dict(config.get("splits", {}))
+        if split_config.get("method") != "canonical_saved":
+            raise ValueError(
+                "Corrected hybrid runs require splits.method: canonical_saved."
+            )
+        split_directory = split_config.get("directory")
+        if not isinstance(split_directory, str) or not split_directory.strip():
+            raise ValueError(
+                "Corrected hybrid runs require a non-empty splits.directory."
+            )
+        saved_splits = load_saved_canonical_splits(
+            _get_dataset_path(config),
+            split_directory,
+            requested_seeds=seeds,
+            requested_fractions=requested_fractions,
+        )
+        df = ensure_reaction_role_columns(
+            saved_splits.canonical,
+            parse_if_missing=False,
+        )
+    else:
+        raw_df = load_reaction_csv(_get_dataset_path(config))
+        df = ensure_reaction_role_columns(
+            clean_buchwald_hartwig(raw_df),
+            parse_if_missing=True,
+        )
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run the hybrid experiment.")
     complete_measured_identity_keys = measured_canonical_keys(df)
 
     configured_features = {"kind": "bh_role_separated", **dict(config.get("features", {}))}
     feature_config = normalize_feature_config(_resolve_feature_config(configured_features))
+    if corrected_mode and feature_config.get("fingerprint_backend") != "rdkit":
+        raise ValueError(
+            "Corrected hybrid runs require features.fingerprint_backend: rdkit."
+        )
     if feature_config["kind"] not in {"bh_role_separated", "bh_role_separated_delta"}:
         raise ValueError(
             "Corrected condition-transfer + supervised-AE runs require "
@@ -81,7 +124,10 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     X = np.asarray(X, dtype=np.float32)
     y = np.asarray(y, dtype=np.float32).reshape(-1)
     paths = _resolve_output_paths(config)
-    paths["directory"].mkdir(parents=True, exist_ok=True)
+    if corrected_mode:
+        prepare_fresh_output_directory(paths["directory"])
+    else:
+        paths["directory"].mkdir(parents=True, exist_ok=True)
     print(
         f"Loaded {len(df)} rows with {X.shape[1]} reaction-role features; "
         f"seeds={seeds}, latent_dims={_latent_dims(config)}.",
@@ -93,12 +139,27 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
     ae_audit: list[dict[str, object]] = []
     synthetic_audit: list[dict[str, object]] = []
     candidate_audit_frames: list[pd.DataFrame] = []
+    split_audit_rows: list[dict[str, object]] = []
 
     for seed in seeds:
         set_global_seed(seed)
         print(f"Starting seed={seed}.", flush=True)
         if bool(config.get("evaluate_full_data_reference", True)):
-            outer = _create_random_splits(df, dict(config.get("splits", {})), seed)
+            if saved_splits is not None:
+                outer = saved_splits.materialize_variants(
+                    df,
+                    seed=seed,
+                    train_fractions=[1.0],
+                )[0][1]
+                split_audit_rows.append(
+                    _saved_split_audit_row(saved_splits, seed, 1.0, outer)
+                )
+            else:
+                outer = _create_random_splits(
+                    df,
+                    dict(config.get("splits", {})),
+                    seed,
+                )
             _append_full_data_reference(
                 metrics,
                 X,
@@ -109,7 +170,25 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
                 metric_names,
             )
 
-        for train_fraction, splits in _create_split_variants(df, config, seed):
+        split_variants = (
+            saved_splits.materialize_variants(
+                df,
+                seed=seed,
+                train_fractions=requested_fractions,
+            )
+            if saved_splits is not None
+            else _create_split_variants(df, config, seed)
+        )
+        for train_fraction, splits in split_variants:
+            if saved_splits is not None:
+                split_audit_rows.append(
+                    _saved_split_audit_row(
+                        saved_splits,
+                        seed,
+                        float(train_fraction),
+                        splits,
+                    )
+                )
             train_indices = _split_positions(splits["train"])
             valid_indices = _split_positions(splits["valid"])
             test_indices = _split_positions(splits["test"])
@@ -271,8 +350,27 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
                 flush=True,
             )
 
-    policy_metrics = pd.DataFrame(metrics)
+    split_audit_df = _deduplicate_split_audit_rows(split_audit_rows)
+    policy_metrics = _attach_saved_split_provenance(
+        pd.DataFrame(metrics),
+        split_audit_df,
+    )
     selected_policies = pd.DataFrame(selected_rows)
+    if selected_policies.empty:
+        selected_policies = pd.DataFrame(
+            columns=[
+                *[
+                    column
+                    for column in policy_metrics.columns
+                    if column not in {"split", "metric", "value"}
+                ],
+                "valid_rmse",
+            ]
+        )
+    selected_policies = _attach_saved_split_provenance(
+        selected_policies,
+        split_audit_df,
+    )
     policy_metrics = _mark_selected_hybrid_metrics(policy_metrics, selected_policies)
     selected_policy_metrics = policy_metrics.loc[policy_metrics["selected_policy"]].copy()
     summary = _summarize(policy_metrics)
@@ -288,10 +386,44 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
         ae_audit_df,
         synthetic_audit_df,
         candidate_audit_df,
+        split_audit_df,
         summary,
         comparisons,
         paths,
     )
+    if saved_splits is not None:
+        contract = feature_contract_record(feature_metadata, feature_names)
+        split_hashes = {
+            (
+                f"seed={int(row.seed)}|"
+                f"train_fraction={float(row.train_fraction):.12g}"
+            ): str(row.split_hash)
+            for row in split_audit_df.itertuples(index=False)
+        }
+        source_id_split_hashes = {
+            (
+                f"seed={int(row.seed)}|"
+                f"train_fraction={float(row.train_fraction):.12g}"
+            ): str(row.source_id_split_hash)
+            for row in split_audit_df.itertuples(index=False)
+        }
+        manifest = build_run_manifest(
+            config=config,
+            config_path=config_path,
+            dataset_path=_get_dataset_path(config),
+            dataset_hash=saved_splits.dataset_hash,
+            output_directory=paths["directory"],
+            split_hashes=split_hashes,
+            feature_metadata_hash=contract["feature_metadata_hash"],
+            canonical_split_contract={
+                **saved_splits.audit_metadata,
+                "split_directory": str(config["splits"]["directory"]),
+            },
+        )
+        manifest.update(saved_splits.audit_metadata)
+        manifest["runner"] = "condition_transfer_supervised_ae"
+        manifest["source_id_split_hashes"] = source_id_split_hashes
+        write_json(paths["run_manifest_path"], manifest)
     _print_completion_summary(policy_metrics, selected_policies, comparisons)
     return paths
 
@@ -1083,6 +1215,104 @@ def _wilcoxon_pvalue(left: np.ndarray, right: np.ndarray) -> float:
         return float("nan")
 
 
+def _requested_train_fractions(config: dict[str, Any]) -> list[float]:
+    low_data = dict(config.get("low_data", {}))
+    if not low_data.get("enabled", False):
+        return [1.0]
+    fractions = low_data.get("train_fractions")
+    if not isinstance(fractions, list) or not fractions:
+        raise ValueError("low_data.train_fractions must contain at least one fraction.")
+    return [float(value) for value in fractions]
+
+
+def _saved_split_audit_row(
+    saved_splits: SavedCanonicalSplits,
+    seed: int,
+    train_fraction: float,
+    splits: dict[str, pd.DataFrame],
+) -> dict[str, object]:
+    saved_audit = saved_splits.audit_record(
+        seed=seed,
+        train_fraction=train_fraction,
+    )
+    record = canonical_split_audit_record(
+        seed,
+        train_fraction,
+        splits,
+        dataset_hash=saved_splits.dataset_hash,
+        saved_audit=saved_audit,
+    )
+    return {
+        **record,
+        "canonical_dataset_hash": saved_audit["canonical_dataset_hash"],
+        "canonical_subset_hash": saved_audit["canonical_subset_hash"],
+        "per_seed_split_hash": saved_audit["per_seed_split_hash"],
+    }
+
+
+def _deduplicate_split_audit_rows(
+    rows: list[dict[str, object]],
+) -> pd.DataFrame:
+    columns = [
+        "seed",
+        "train_fraction",
+        "n_train",
+        "n_valid",
+        "n_test",
+        "train_source_id_hash",
+        "valid_source_id_hash",
+        "test_source_id_hash",
+        "split_hash",
+        "source_id_split_hash",
+        "split_aggregate_hash",
+        "per_seed_split_hash",
+        "canonical_dataset_hash",
+        "canonical_subset_hash",
+        "canonicalization_version",
+        "split_schema_version",
+        "dataset_hash",
+    ]
+    if not rows:
+        return pd.DataFrame(columns=columns)
+    return (
+        pd.DataFrame(rows, columns=columns)
+        .drop_duplicates(["seed", "train_fraction"])
+        .sort_values(["seed", "train_fraction"], kind="stable")
+        .reset_index(drop=True)
+    )
+
+
+def _attach_saved_split_provenance(
+    frame: pd.DataFrame,
+    split_audit: pd.DataFrame,
+) -> pd.DataFrame:
+    if frame.empty or split_audit.empty:
+        return frame
+    provenance_columns = [
+        "seed",
+        "train_fraction",
+        "canonical_dataset_hash",
+        "split_aggregate_hash",
+        "per_seed_split_hash",
+        "source_id_split_hash",
+        "canonicalization_version",
+        "split_schema_version",
+    ]
+    existing = [
+        column
+        for column in provenance_columns
+        if column in frame.columns and column not in {"seed", "train_fraction"}
+    ]
+    if existing:
+        frame = frame.drop(columns=existing)
+    return frame.merge(
+        split_audit[provenance_columns],
+        on=["seed", "train_fraction"],
+        how="left",
+        validate="many_to_one",
+    )
+
+
 def _write_outputs(
     metrics: pd.DataFrame,
     selected: pd.DataFrame,
@@ -1090,6 +1320,7 @@ def _write_outputs(
     ae_audit: pd.DataFrame,
     synthetic_audit: pd.DataFrame,
     candidate_audit: pd.DataFrame,
+    split_audit: pd.DataFrame,
     summary: pd.DataFrame,
     comparisons: dict[str, tuple[pd.DataFrame, pd.DataFrame]],
     paths: dict[str, Path],
@@ -1101,6 +1332,7 @@ def _write_outputs(
         "ae_training_audit_path": ae_audit,
         "synthetic_training_audit_path": synthetic_audit,
         "synthetic_candidate_audit_path": candidate_audit,
+        "split_audit_path": split_audit,
         "summary_path": summary,
     }
     for name, (by_seed, comparison_summary) in comparisons.items():
@@ -1121,6 +1353,8 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
         "ae_training_audit_path": "ae_training_audit.csv",
         "synthetic_training_audit_path": "synthetic_training_audit.csv",
         "synthetic_candidate_audit_path": "synthetic_candidate_audit.csv",
+        "split_audit_path": "split_audit.csv",
+        "run_manifest_path": "run_manifest.json",
         "summary_path": "summary.csv",
     }
     for parent in ["real_only", "anonymous_transfer", "ae_only", "best_parent"]:

@@ -1,19 +1,20 @@
 seed: 0
 seeds: [0]
+corrected_revalidation:
+  enabled: true
 dataset:
-  path: data/processed/bh_clean_stress.csv
+  path: data/processed/bh_canonical_roles_v1.csv
 splits:
-  method: random
-  train_size: 0.8
-  valid_size: 0.1
-  test_size: 0.1
+  method: canonical_saved
+  directory: results/corrected_canonical_splits
 low_data:
   enabled: true
   train_fractions: [0.01]
 features:
-  kind: reaction_role_concat
+  kind: bh_role_separated
   n_bits: 32
   radius: 2
+  fingerprint_backend: rdkit
 models:
   - ridge
   - name: xgboost
@@ -26,6 +27,8 @@ models:
 metrics: [rmse, mae, r2, spearman]
 condition_transfer:
   enabled: true
+  role_change_requirement: all
+  fallback_policy: reject
   selection_model:
     name: xgboost
     params: *tiny_xgb
@@ -43,6 +46,9 @@ condition_transfer:
   clip_y_max: 100.0
   candidates_per_real: 3
   teacher_models: [ridge]
+  donor_similarity_n_bits: 2048
+  donor_similarity_radius: 2
+  donor_similarity_backend: rdkit
 supervised_autoencoder:
   latent_dims: [16]
   hidden_dims: [32]
@@ -66,4 +72,4 @@ selection:
   metric: rmse
   lower_is_better: true
 output:
-  directory: results/condition_transfer_supervised_ae_tiny
+  directory: results/corrected_condition_transfer_supervised_ae_tiny

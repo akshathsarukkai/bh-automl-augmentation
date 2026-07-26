@@ -3,12 +3,10 @@ seeds: [0, 1, 2, 3, 4]
 corrected_revalidation:
   enabled: true
 dataset:
-  path: data/processed/bh_clean_stress.csv
+  path: data/processed/bh_canonical_roles_v1.csv
 splits:
-  method: random
-  train_size: 0.8
-  valid_size: 0.1
-  test_size: 0.1
+  method: canonical_saved
+  directory: results/corrected_canonical_splits
 low_data:
   enabled: true
   train_fractions: [0.01, 0.05, 0.10, 0.20, 1.00]

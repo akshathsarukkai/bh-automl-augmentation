@@ -57,6 +57,10 @@ def resolve_corrected_feature_config(
             f"use {DEPRECATED_FEATURE_ALIASES[raw_kind]!r}."
         )
     resolved = normalize_feature_config(dict(feature_config))
+    if resolved.get("fingerprint_backend") != "rdkit":
+        raise ValueError(
+            "Corrected scientific runs require features.fingerprint_backend='rdkit'."
+        )
     if required_kind is not None and resolved["kind"] != required_kind:
         raise ValueError(
             f"Corrected condition transfer requires features.kind={required_kind!r}; "
@@ -146,6 +150,80 @@ def split_audit_record(
     }
 
 
+def canonical_split_audit_record(
+    seed: int,
+    train_fraction: float,
+    splits: Mapping[str, pd.DataFrame],
+    *,
+    dataset_hash: str,
+    saved_audit: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Audit a validated saved split using immutable source IDs and saved hashes."""
+    source_ids: dict[str, list[str]] = {}
+    canonical_keys: dict[str, set[str]] = {}
+    for split in ("train", "valid", "test"):
+        frame = splits[split]
+        required = {"source_row_id", "canonical_reaction_key"}
+        missing = sorted(required - set(frame))
+        if missing:
+            raise ValueError(
+                f"Saved canonical {split} split is missing audit columns: {missing}."
+            )
+        ids = frame["source_row_id"].astype(str).tolist()
+        if len(ids) != len(set(ids)):
+            raise ValueError(f"Saved canonical {split} split contains duplicate source IDs.")
+        source_ids[split] = sorted(ids)
+        canonical_keys[split] = set(frame["canonical_reaction_key"].astype(str))
+    if (
+        canonical_keys["train"] & canonical_keys["valid"]
+        or canonical_keys["train"] & canonical_keys["test"]
+        or canonical_keys["valid"] & canonical_keys["test"]
+    ):
+        raise ValueError("A canonical reaction key crosses saved train/valid/test splits.")
+
+    required_audit = {
+        "canonical_dataset_hash",
+        "canonical_subset_hash",
+        "canonicalization_version",
+        "split_schema_version",
+        "split_aggregate_hash",
+        "per_seed_split_hash",
+        "source_id_split_hash",
+    }
+    missing_audit = sorted(required_audit - set(saved_audit))
+    if missing_audit:
+        raise ValueError(f"Saved canonical split audit is missing fields: {missing_audit}.")
+    calculated_source_hash = stable_hash(
+        {
+            "schema": "bh-canonical-split-source-ids-v1",
+            "seed": int(seed),
+            "train_fraction": float(train_fraction),
+            **source_ids,
+        }
+    )
+    if calculated_source_hash != saved_audit["source_id_split_hash"]:
+        raise ValueError("Materialized split source-ID hash does not match saved assignments.")
+    return {
+        "seed": int(seed),
+        "train_fraction": float(train_fraction),
+        "n_train": len(source_ids["train"]),
+        "n_valid": len(source_ids["valid"]),
+        "n_test": len(source_ids["test"]),
+        "train_source_id_hash": stable_hash(source_ids["train"]),
+        "valid_source_id_hash": stable_hash(source_ids["valid"]),
+        "test_source_id_hash": stable_hash(source_ids["test"]),
+        "split_hash": str(saved_audit["per_seed_split_hash"]),
+        "source_id_split_hash": calculated_source_hash,
+        "split_aggregate_hash": str(saved_audit["split_aggregate_hash"]),
+        "per_seed_split_hash": str(saved_audit["per_seed_split_hash"]),
+        "canonical_dataset_hash": str(saved_audit["canonical_dataset_hash"]),
+        "canonical_subset_hash": str(saved_audit["canonical_subset_hash"]),
+        "canonicalization_version": str(saved_audit["canonicalization_version"]),
+        "split_schema_version": str(saved_audit["split_schema_version"]),
+        "dataset_hash": dataset_hash,
+    }
+
+
 def assert_training_only_parents(
     candidate_df: pd.DataFrame,
     splits: Mapping[str, pd.DataFrame],
@@ -175,10 +253,11 @@ def build_run_manifest(
     output_directory: str | Path,
     split_hashes: Mapping[str, str],
     feature_metadata_hash: str | Mapping[str, str],
+    canonical_split_contract: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build the mandatory provenance manifest for one corrected run."""
     timestamp = datetime.now(timezone.utc).isoformat()
-    return {
+    manifest = {
         "run_id": f"corrected-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}",
         "timestamp": timestamp,
         "git_commit": _git_value(["git", "rev-parse", "HEAD"]),
@@ -201,6 +280,9 @@ def build_run_manifest(
         "historical_results_loaded": False,
         "result_status": CORRECTED_STATUS,
     }
+    if canonical_split_contract is not None:
+        manifest["canonical_split_contract"] = _jsonable(canonical_split_contract)
+    return manifest
 
 
 def write_json(path: str | Path, value: Any) -> Path:

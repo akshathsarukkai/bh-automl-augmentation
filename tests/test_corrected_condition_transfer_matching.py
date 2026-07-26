@@ -1,5 +1,6 @@
 """Matched-run guarantees for corrected anonymous and role-aware transfer."""
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -91,6 +92,23 @@ def test_corrected_baselines_and_hashes_match_exactly(
         matched["role_aware_feature_metadata_hash"]
     )
     assert matched["anonymous_dataset_hash"].equals(matched["role_aware_dataset_hash"])
+    anonymous_audit = pd.read_csv(anonymous["split_audit"])
+    role_audit = pd.read_csv(role["split_audit"])
+    hash_columns = [
+        "split_hash",
+        "source_id_split_hash",
+        "split_aggregate_hash",
+        "valid_source_id_hash",
+        "test_source_id_hash",
+    ]
+    assert anonymous_audit[hash_columns].equals(role_audit[hash_columns])
+    anonymous_contract = json.loads(anonymous["run_manifest"].read_text())[
+        "canonical_split_contract"
+    ]
+    role_contract = json.loads(role["run_manifest"].read_text())[
+        "canonical_split_contract"
+    ]
+    assert anonymous_contract == role_contract
 
 
 @pytest.mark.parametrize(

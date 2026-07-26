@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-26T23:23:48Z",
+  "updated_at": "2026-07-26T23:37:32Z",
   "phases": [
     {
       "phase_number": 1,
@@ -111,11 +111,11 @@
     {
       "phase_number": 3,
       "phase_name": "Uniform similarity, source caps, and deterministic ranking",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-26T23:08:46Z",
-      "completed_at": null,
+      "completed_at": "2026-07-26T23:24:23Z",
       "git_commit_at_start": "4c9f9c7497d0cc19927a3689841de91b5525d0ca",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "1bbfa0ebd08f514e2e1844687f944f3c46352adb",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_synthetic_identity.py tests/test_condition_transfer.py tests/test_role_aware_condition_transfer.py tests/test_condition_recombine.py tests/test_ensemble_filter.py tests/test_latent_interpolation.py tests/test_utility_guided_feature_gan.py tests/test_run_augmentation.py tests/test_corrected_condition_transfer_matching.py tests/test_condition_transfer_supervised_ae.py tests/test_phase1_identity_smoke.py tests/test_autonomous_execution.py",
         "passed": 131,
@@ -160,16 +160,60 @@
     {
       "phase_number": 4,
       "phase_name": "Canonical split integration",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-26T23:24:34Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "1bbfa0ebd08f514e2e1844687f944f3c46352adb",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_saved_canonical_splits.py tests/test_canonical_grouped_splits.py tests/test_nested_low_data_splits.py tests/test_corrected_representation_baselines.py tests/test_corrected_condition_transfer_matching.py tests/test_corrected_condition_transfer_configs.py tests/test_condition_transfer_supervised_ae.py tests/test_corrected_run_manifests.py tests/test_autonomous_execution.py",
+        "passed": 85,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 442,
+        "status": "passed",
+        "warnings": 35
+      },
+      "smoke_test_result": {
+        "anonymous_selection_exclusions": 1,
+        "command": "python -B scripts/run_phase4_canonical_split_smoke.py results/autonomous_execution/phase_04/20260726-1bbfa0e-canonical-splits-v3",
+        "hybrid_selected_policies": 0,
+        "output_hashes_validated": 44,
+        "role_aware_selection_exclusions": 1,
+        "runner_split_audits_byte_identical": true,
+        "status": "passed"
+      },
+      "output_paths": [
+        {
+          "path": "results/autonomous_execution/phase_04/20260726-1bbfa0e-canonical-splits-v3/smoke_manifest.json",
+          "sha256": "45c508d31e1dac21584891b654226f3a0bceed6d85d435edf765a4cc1f4ed91a"
+        },
+        {
+          "path": "results/autonomous_execution/phase_04/20260726-1bbfa0e-canonical-splits-v3/corrected_real_only/split_audit.csv",
+          "sha256": "c7765944d6c8b73a1e4074cee6b14159ba836fb186cfa98f4472f3150baf2845"
+        },
+        {
+          "path": "results/autonomous_execution/phase_04/20260726-1bbfa0e-canonical-splits-v3/corrected_anonymous/split_audit.csv",
+          "sha256": "c7765944d6c8b73a1e4074cee6b14159ba836fb186cfa98f4472f3150baf2845"
+        },
+        {
+          "path": "results/autonomous_execution/phase_04/20260726-1bbfa0e-canonical-splits-v3/corrected_role_aware/split_audit.csv",
+          "sha256": "c7765944d6c8b73a1e4074cee6b14159ba836fb186cfa98f4472f3150baf2845"
+        },
+        {
+          "path": "results/autonomous_execution/phase_04/20260726-1bbfa0e-canonical-splits-v3/corrected_hybrid/split_audit.csv",
+          "sha256": "c7765944d6c8b73a1e4074cee6b14159ba836fb186cfa98f4472f3150baf2845"
+        }
+      ],
+      "warnings": [
+        "Strict anonymous and role-aware augmentation produced no eligible nonzero policy in the canonical seed-0, 1% smoke; no augmentation test metric was evaluated or fabricated.",
+        "The hybrid completed its real-only AE path but selected no hybrid policy because anonymous strict transfer was ineligible.",
+        "Legacy random splitting remains available only through the explicitly non-corrected development branch of the hybrid runner.",
+        "Earlier successful v1 and v2 smoke directories are preserved but excluded from required Phase 4 outputs; v3 is the post-full-suite authoritative smoke."
+      ],
       "blockers": [],
       "dependencies": ["canonical dataset", "canonical split artifacts"]
     },
