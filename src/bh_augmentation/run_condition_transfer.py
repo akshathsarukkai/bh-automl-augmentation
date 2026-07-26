@@ -297,7 +297,7 @@ def _iter_condition_transfer_policies(
         multipliers,
         n_neighbors_values,
     ):
-        min_values = min_similarities if donor_strategy != "random" else [None]
+        min_values = min_similarities
         std_values = max_teacher_stds if label_strategy == "uncertainty_filtered_teacher" else [None]
         for min_similarity, max_teacher_std in product(min_values, std_values):
             policies.append(
@@ -323,6 +323,11 @@ def _iter_condition_transfer_policies(
                         transfer.get("role_change_requirement", "all")
                     ),
                     fallback_policy=str(transfer.get("fallback_policy", "reject")),
+                    max_candidates_per_source=(
+                        int(transfer["max_candidates_per_source"])
+                        if transfer.get("max_candidates_per_source") is not None
+                        else None
+                    ),
                 )
             )
     return policies

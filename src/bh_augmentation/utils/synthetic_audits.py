@@ -8,6 +8,8 @@ import pandas as pd
 
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
 )
 
 CANDIDATE_AUDIT_CONTEXT_FIELDS = (
@@ -27,9 +29,12 @@ def build_candidate_audit_frame(
     policy_id: str,
 ) -> pd.DataFrame:
     """Attach run context without narrowing the generator's candidate audit."""
-    missing = [
-        field for field in REQUIRED_SYNTHETIC_AUDIT_FIELDS if field not in candidate_df
-    ]
+    required = (
+        *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+        *REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    )
+    missing = [field for field in required if field not in candidate_df]
     if missing:
         raise ValueError(
             "Synthetic candidate audit is missing required fields: " + ", ".join(missing)
@@ -63,11 +68,16 @@ def combine_candidate_audit_frames(
             columns=[
                 *CANDIDATE_AUDIT_CONTEXT_FIELDS,
                 *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+                *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+                *REQUIRED_SYNTHETIC_RANKING_FIELDS,
             ]
         )
-    missing = [
-        field for field in REQUIRED_SYNTHETIC_AUDIT_FIELDS if field not in result
-    ]
+    required = (
+        *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+        *REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    )
+    missing = [field for field in required if field not in result]
     if missing:  # pragma: no cover - guarded by build_candidate_audit_frame
         raise AssertionError(
             "Combined candidate audit lost required fields: " + ", ".join(missing)

@@ -11,6 +11,8 @@ from scipy import sparse
 
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
     apply_filter_rejection,
     assert_accepted_identity_invariants,
     audit_candidate_identities,
@@ -91,6 +93,7 @@ def generate_condition_recombined_candidates(
     *,
     feature_config: dict[str, Any] | None = None,
     measured_identity_keys: Iterable[str] = (),
+    max_candidates_per_source: int | None = None,
 ) -> pd.DataFrame:
     """Generate canonical candidates by transferring all typed donor conditions.
 
@@ -105,6 +108,8 @@ def generate_condition_recombined_candidates(
         raise ValueError("max_synthetic_rows must be non-negative or None.")
     if min_condition_tokens < 0:
         raise ValueError("min_condition_tokens must be non-negative.")
+    if max_candidates_per_source is not None and max_candidates_per_source <= 0:
+        raise ValueError("max_candidates_per_source must be greater than zero.")
     if "reaction_smiles" not in train_df.columns:
         raise ValueError("condition recombination requires reaction_smiles.")
 
@@ -114,9 +119,17 @@ def generate_condition_recombined_candidates(
     )
     if "source_row_id" not in role_train.columns:
         role_train["source_row_id"] = [
-            _reaction_id(role_train.iloc[position], position)
+            _stable_row_id(role_train.iloc[position])
             for position in range(len(role_train))
         ]
+    role_train["_stable_row_key"] = [
+        _stable_training_row_key(role_train.iloc[position])
+        for position in range(len(role_train))
+    ]
+    role_train = role_train.sort_values(
+        "_stable_row_key",
+        kind="mergesort",
+    ).drop(columns="_stable_row_key").reset_index(drop=True)
 
     target = int(synthetic_multiplier * len(train_df))
     if max_synthetic_rows is not None:
@@ -140,18 +153,29 @@ def generate_condition_recombined_candidates(
         additional_keys=measured_identity_keys,
     )
     provisional_generated_keys: set[str] = set()
+    provisional_by_source: dict[str, set[str]] = {}
     rows: list[pd.Series] = []
     max_attempts = max(100, target * 30)
+    configured_source_cap = (
+        int(max_candidates_per_source)
+        if max_candidates_per_source is not None
+        else max(1, int(np.ceil(target / len(source_positions))))
+    )
 
     for attempt in range(max_attempts):
         if feature_config is None and len(rows) >= target:
             break
         if (
             feature_config is not None
-            and len(provisional_generated_keys) >= max(1, target * 2)
+            and len(provisional_generated_keys) >= max(1, target * 4)
+            and all(
+                len(provisional_by_source.get(str(role_train.iloc[position]["source_row_id"]), set()))
+                >= configured_source_cap
+                for position in source_positions
+            )
         ):
             break
-        source_position = int(rng.choice(source_positions))
+        source_position = int(source_positions[attempt % len(source_positions)])
         donor_position = int(rng.choice(donor_positions))
         if source_position == donor_position and len(donor_positions) > 1:
             continue
@@ -198,6 +222,7 @@ def generate_condition_recombined_candidates(
             and key not in measured_keys
         ):
             provisional_generated_keys.add(key)
+            provisional_by_source.setdefault(str(source_id), set()).add(key)
 
     if not rows:
         return _empty_candidates(role_train)
@@ -213,17 +238,42 @@ def generate_condition_recombined_candidates(
         measured_keys=measured_keys,
         source_rows=role_train.to_dict(orient="records"),
     )
-    accepted_positions = np.flatnonzero(audited["rejection_reason"].isna().to_numpy())
-    over_budget = np.ones(len(audited), dtype=bool)
-    over_budget[accepted_positions[:target]] = False
+    _attach_recombination_ranking_audit(
+        audited,
+        features,
+        role_train,
+        feature_config,
+    )
+    ranked_positions = _rank_accepted_candidate_indices(audited)
+    audited["candidate_rank"] = pd.Series(pd.NA, index=audited.index, dtype="Int64")
+    source_counts: dict[str, int] = {}
+    per_source_rejected = np.zeros(len(audited), dtype=bool)
+    for rank, index in enumerate(ranked_positions, start=1):
+        audited.at[index, "candidate_rank"] = rank
+        source_id = str(audited.at[index, "source_row_id"])
+        source_counts[source_id] = source_counts.get(source_id, 0) + 1
+        audited.at[index, "source_candidate_ordinal"] = source_counts[source_id]
+        if source_counts[source_id] > configured_source_cap:
+            per_source_rejected[index] = True
     audited = apply_filter_rejection(
         audited,
-        over_budget & audited["rejection_reason"].isna().to_numpy(),
+        per_source_rejected,
+        "per_source_cap",
+    )
+    ranked_positions = _rank_accepted_candidate_indices(audited)
+    over_budget = audited["rejection_reason"].isna().to_numpy()
+    over_budget[ranked_positions[:target]] = False
+    audited = apply_filter_rejection(
+        audited,
+        over_budget,
         "candidate_budget_exceeded",
     )
+    audited["max_candidates_per_source"] = configured_source_cap
     audited["accepted"] = audited["rejection_reason"].isna()
     assert_accepted_identity_invariants(audited)
-    accepted = audited.loc[audited["accepted"]].reset_index(drop=True)
+    accepted = audited.loc[_rank_accepted_candidate_indices(audited)].reset_index(
+        drop=True
+    )
     return _with_candidate_audit(accepted, audited)
 
 
@@ -330,6 +380,7 @@ def condition_recombine_pseudolabel(
     random_state: int = 42,
     *,
     measured_identity_keys: Iterable[str] = (),
+    max_candidates_per_source: int | None = None,
 ) -> pd.DataFrame:
     """Return real training rows plus filtered, teacher-labeled recombined reactions."""
     role_train = ensure_reaction_role_columns(train_df, parse_if_missing=True)
@@ -351,6 +402,7 @@ def condition_recombine_pseudolabel(
         random_state=random_state,
         feature_config=feature_config,
         measured_identity_keys=measured_identity_keys,
+        max_candidates_per_source=max_candidates_per_source,
     )
     candidates = filter_candidates_by_nearest_neighbor_similarity(
         role_train,
@@ -432,6 +484,188 @@ def _reaction_id(row: pd.Series, position: int) -> str:
     return str(value) if pd.notna(value) else str(position)
 
 
+def _stable_row_id(row: pd.Series) -> str:
+    for column in ("source_row_id", "reaction_id", "canonical_reaction_key"):
+        value = row.get(column)
+        if pd.notna(value) and str(value):
+            return str(value)
+    identity = canonical_candidate_record(reaction_roles_from_row(row))
+    key = identity.get("canonical_reaction_key")
+    if isinstance(key, str) and key:
+        return f"canonical:{key}"
+    return f"reaction:{str(row.get('reaction_smiles', ''))}"
+
+
+def _stable_training_row_key(row: pd.Series) -> str:
+    return "\0".join(
+        [
+            _stable_row_id(row),
+            str(row.get("canonical_reaction_key", "")),
+            str(row.get("reaction_smiles", "")),
+            f"{float(pd.to_numeric(row.get('yield'), errors='coerce')):.17g}",
+        ]
+    )
+
+
+def _attach_recombination_ranking_audit(
+    candidates: pd.DataFrame,
+    features: np.ndarray,
+    role_train: pd.DataFrame,
+    feature_config: dict[str, Any],
+) -> None:
+    parsed_train = [
+        parse_reaction_smiles(value) for value in role_train["reaction_smiles"]
+    ]
+    substrate_scores: list[float] = []
+    product_scores: list[float] = []
+    condition_scores: list[float] = []
+    for row in candidates.itertuples():
+        source = parsed_train[int(row.source_position)]
+        donor = parsed_train[int(row.donor_position)]
+        substrate_scores.append(
+            _token_jaccard(source["substrate_tokens"], donor["substrate_tokens"])
+        )
+        product_scores.append(_token_jaccard([source["product"]], [donor["product"]]))
+        condition_scores.append(
+            _token_jaccard(source["condition_tokens"], donor["condition_tokens"])
+        )
+    candidates["substrate_similarity"] = substrate_scores
+    candidates["product_similarity"] = product_scores
+    candidates["condition_similarity"] = condition_scores
+    candidates["nontransferred_role_similarity"] = (
+        candidates["substrate_similarity"] + candidates["product_similarity"]
+    ) / 2.0
+    candidates["overall_similarity"] = (
+        candidates["substrate_similarity"]
+        + candidates["product_similarity"]
+        + candidates["condition_similarity"]
+    ) / 3.0
+    candidates["relevant_context_similarity"] = candidates[
+        "nontransferred_role_similarity"
+    ]
+
+    train_features = _features_only(role_train, feature_config)
+    nearest_similarity = _nearest_binary_tanimoto(features, train_features)
+    candidates["nearest_train_similarity"] = nearest_similarity
+    candidates["nearest_training_support_distance"] = 1.0 - nearest_similarity
+    candidates["out_of_support_distance"] = candidates[
+        "nearest_training_support_distance"
+    ]
+    candidates["support_distance_metric"] = "binary_tanimoto_distance"
+    candidates["support_distance_backend"] = (
+        "configured_feature_matrix_nonzero_bits"
+    )
+    candidates["diversity_contribution"] = _static_binary_tanimoto_diversity(features)
+
+    source_yield = np.asarray(
+        [
+            pd.to_numeric(
+                role_train.iloc[int(position)].get("yield"),
+                errors="coerce",
+            )
+            for position in candidates["source_position"]
+        ],
+        dtype=float,
+    )
+    donor_yield = np.asarray(
+        [
+            pd.to_numeric(
+                role_train.iloc[int(position)].get("yield"),
+                errors="coerce",
+            )
+            for position in candidates["donor_position"]
+        ],
+        dtype=float,
+    )
+    train_yield = pd.to_numeric(role_train["yield"], errors="coerce").to_numpy(dtype=float)
+    scale = max(float(np.nanstd(train_yield)), 1.0)
+    proxy = np.abs(source_yield - donor_yield) / scale
+    proxy = np.where(np.isfinite(proxy), proxy, candidates["out_of_support_distance"])
+    candidates["calibrated_uncertainty"] = np.nan
+    candidates["uncertainty_rank_value"] = proxy
+    candidates["uncertainty_rank_basis"] = (
+        "source_donor_label_gap_normalized_uncalibrated_proxy_phase12_pending"
+    )
+
+
+def _token_jaccard(left: Iterable[str], right: Iterable[str]) -> float:
+    left_set = {str(value) for value in left if str(value)}
+    right_set = {str(value) for value in right if str(value)}
+    union = left_set | right_set
+    return float(len(left_set & right_set) / len(union)) if union else 1.0
+
+
+def _nearest_binary_tanimoto(
+    candidate_features: np.ndarray,
+    reference_features: np.ndarray,
+) -> np.ndarray:
+    candidates = np.asarray(candidate_features) != 0
+    reference = np.asarray(reference_features) != 0
+    result = np.zeros(len(candidates), dtype=float)
+    reference_counts = reference.sum(axis=1)
+    for start in range(0, len(candidates), 128):
+        stop = min(start + 128, len(candidates))
+        intersections = candidates[start:stop].astype(np.float32) @ reference.T.astype(np.float32)
+        unions = (
+            candidates[start:stop].sum(axis=1, keepdims=True)
+            + reference_counts[None, :]
+            - intersections
+        )
+        scores = np.divide(
+            intersections,
+            unions,
+            out=np.zeros_like(intersections, dtype=float),
+            where=unions > 0,
+        )
+        result[start:stop] = np.max(scores, axis=1)
+    return result
+
+
+def _static_binary_tanimoto_diversity(features: np.ndarray) -> np.ndarray:
+    values = np.asarray(features) != 0
+    if len(values) <= 1:
+        return np.ones(len(values), dtype=float)
+    counts = values.sum(axis=1)
+    nearest = np.full(len(values), -np.inf, dtype=float)
+    reference = values.T.astype(np.float32)
+    for start in range(0, len(values), 128):
+        stop = min(start + 128, len(values))
+        intersections = values[start:stop].astype(np.float32) @ reference
+        unions = counts[start:stop, None] + counts[None, :] - intersections
+        scores = np.divide(
+            intersections,
+            unions,
+            out=np.zeros_like(intersections, dtype=float),
+            where=unions > 0,
+        )
+        scores[np.arange(stop - start), np.arange(start, stop)] = -np.inf
+        nearest[start:stop] = np.max(scores, axis=1)
+    return 1.0 - nearest
+
+
+def _rank_accepted_candidate_indices(candidates: pd.DataFrame) -> list[int]:
+    accepted = candidates.loc[candidates["rejection_reason"].isna()].copy()
+    if accepted.empty:
+        return []
+    accepted["_stable_key"] = accepted["canonical_reaction_key"].fillna("~").astype(str)
+    accepted["_stable_source"] = accepted["source_row_id"].fillna("").astype(str)
+    accepted["_stable_donor"] = accepted["donor_row_id"].fillna("").astype(str)
+    ranked = accepted.sort_values(
+        [
+            "uncertainty_rank_value",
+            "relevant_context_similarity",
+            "diversity_contribution",
+            "out_of_support_distance",
+            "_stable_key",
+            "_stable_source",
+            "_stable_donor",
+        ],
+        ascending=[True, False, False, True, True, True, True],
+        kind="mergesort",
+    )
+    return [int(index) for index in ranked.index]
+
+
 def _with_candidate_audit(result: pd.DataFrame, audit: pd.DataFrame) -> pd.DataFrame:
     result.attrs[CANDIDATE_AUDIT_ATTR] = audit.reset_index(drop=True).copy()
     return result
@@ -473,9 +707,26 @@ def _empty_candidates(train_df: pd.DataFrame) -> pd.DataFrame:
         "source_index": object,
         "donor_index": object,
         "accepted": bool,
+        "substrate_similarity": float,
+        "product_similarity": float,
+        "nontransferred_role_similarity": float,
+        "condition_similarity": float,
+        "overall_similarity": float,
+        "nearest_training_support_distance": float,
+        "calibrated_uncertainty": float,
+        "uncertainty_rank_value": float,
+        "uncertainty_rank_basis": object,
+        "support_distance_metric": object,
+        "support_distance_backend": object,
     }.items():
         result[column] = pd.Series(dtype=dtype)
     for column in REQUIRED_SYNTHETIC_AUDIT_FIELDS:
+        if column not in result.columns:
+            result[column] = pd.Series(dtype=object)
+    for column in (
+        *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+        *REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    ):
         if column not in result.columns:
             result[column] = pd.Series(dtype=object)
     result.attrs[CANDIDATE_AUDIT_ATTR] = result.copy()

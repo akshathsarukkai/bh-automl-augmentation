@@ -12,6 +12,10 @@ from bh_augmentation.augmentation.latent_interpolation import (
     LatentInterpolationConfig,
     generate_latent_interpolations,
 )
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+)
 from bh_augmentation.representations.supervised_autoencoder import SupervisedAutoencoder
 from bh_augmentation.run_supervised_ae_latent_interpolation import (
     run_supervised_ae_latent_interpolation,
@@ -70,6 +74,63 @@ def test_latent_candidates_have_deterministic_nonchemical_identity_audit() -> No
     assert audited["feature_hash"].tolist() == second["candidate_df"][
         "feature_hash"
     ].tolist()
+
+
+def test_latent_ranking_is_permutation_invariant_and_source_capped() -> None:
+    z_train, y_train = _latent_data()
+    row_ids = [f"row-{index:02d}" for index in range(len(z_train))]
+    config = _config(label_strategy="mixup_label", synthetic_multiplier=1.0)
+    config.max_candidates_per_source = 2
+    permutation = np.array([3, 0, 7, 2, 11, 5, 1, 10, 6, 4, 9, 8])
+
+    first = generate_latent_interpolations(
+        z_train,
+        y_train,
+        _ae_artifacts(latent_dim=z_train.shape[1]),
+        config,
+        source_row_ids=row_ids,
+    )
+    permuted = generate_latent_interpolations(
+        z_train[permutation],
+        y_train[permutation],
+        _ae_artifacts(latent_dim=z_train.shape[1]),
+        config,
+        source_row_ids=[row_ids[index] for index in permutation],
+    )
+    comparison_columns = [
+        "source_row_id",
+        "donor_row_id",
+        "feature_hash",
+        "candidate_rank",
+    ]
+    first_kept = first["candidate_df"].loc[
+        first["candidate_df"]["kept"], comparison_columns
+    ]
+    permuted_kept = permuted["candidate_df"].loc[
+        permuted["candidate_df"]["kept"], comparison_columns
+    ]
+    assert first_kept.to_dict("records") == permuted_kept.to_dict("records")
+
+    audit = first["candidate_df"]
+    assert audit.loc[audit["accepted"]].groupby("source_row_id").size().max() <= 2
+    assert np.isfinite(audit["nearest_training_support_distance"]).all()
+    assert audit["calibrated_uncertainty"].isna().all()
+    assert audit["support_distance_metric"].eq("cosine_distance").all()
+    assert set(REQUIRED_SYNTHETIC_SUPPORT_FIELDS) <= set(audit)
+    assert set(REQUIRED_SYNTHETIC_RANKING_FIELDS) <= set(audit)
+
+
+def test_latent_rejects_nonpositive_source_cap() -> None:
+    z_train, y_train = _latent_data()
+    config = _config(label_strategy="mixup_label")
+    config.max_candidates_per_source = 0
+    with pytest.raises(ValueError, match="max_candidates_per_source"):
+        generate_latent_interpolations(
+            z_train,
+            y_train,
+            _ae_artifacts(latent_dim=z_train.shape[1]),
+            config,
+        )
 
 
 def test_mixup_label_is_between_parent_labels() -> None:
@@ -222,10 +283,12 @@ output:
     policy_metrics = pd.read_csv(paths["policy_metrics_path"])
     selected_metrics = pd.read_csv(paths["selected_policy_metrics_path"])
     audit = pd.read_csv(paths["audit_path"])
+    candidate_audit = pd.read_csv(paths["candidate_audit_path"])
     assert paths["policy_metrics_path"].exists()
     assert paths["selected_policy_metrics_path"].exists()
     assert paths["selected_policies_path"].exists()
     assert paths["audit_path"].exists()
+    assert paths["candidate_audit_path"].exists()
     assert "original_6144" in set(policy_metrics["representation"])
     assert "supervised_ae_4" in set(policy_metrics["representation"])
     assert "supervised_ae_interpolation_4" in set(policy_metrics["representation"])
@@ -233,6 +296,8 @@ output:
     assert set(selected_metrics["split"]) == {"valid", "test"}
     assert not audit["used_validation_or_test_parents"].any()
     assert (audit["n_synthetic_train"] > 0).any()
+    assert set(REQUIRED_SYNTHETIC_SUPPORT_FIELDS) <= set(candidate_audit)
+    assert set(REQUIRED_SYNTHETIC_RANKING_FIELDS) <= set(candidate_audit)
 
 
 def _config(

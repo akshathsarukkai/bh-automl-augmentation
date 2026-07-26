@@ -39,6 +39,10 @@ from bh_augmentation.run_supervised_ae_latent_baseline import (
 )
 from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.seed import set_global_seed
+from bh_augmentation.utils.synthetic_audits import (
+    build_candidate_audit_frame,
+    combine_candidate_audit_frames,
+)
 
 
 def run_supervised_ae_latent_interpolation(config_path: str | Path) -> dict[str, Path]:
@@ -63,6 +67,7 @@ def run_supervised_ae_latent_interpolation(config_path: str | Path) -> dict[str,
 
     metric_records: list[dict[str, object]] = []
     audit_records: list[dict[str, object]] = []
+    candidate_audit_frames: list[pd.DataFrame] = []
 
     for seed in seeds:
         set_global_seed(seed)
@@ -128,7 +133,13 @@ def run_supervised_ae_latent_interpolation(config_path: str | Path) -> dict[str,
 
                 for policy_index, policy in enumerate(_iter_interpolation_policies(config, seed)):
                     policy_id = _policy_id(seed, float(train_fraction), latent_dim, policy_index, policy)
-                    result = generate_latent_interpolations(z_train, y_train, ae_artifacts, policy)
+                    result = generate_latent_interpolations(
+                        z_train,
+                        y_train,
+                        ae_artifacts,
+                        policy,
+                        source_row_ids=_training_row_ids(splits["train"]),
+                    )
                     metadata = result["metadata"]
                     metadata.update(
                         {
@@ -140,6 +151,17 @@ def run_supervised_ae_latent_interpolation(config_path: str | Path) -> dict[str,
                         }
                     )
                     audit_records.append(dict(metadata))
+                    candidate_audit_frames.append(
+                        build_candidate_audit_frame(
+                            result["candidate_df"],
+                            transfer_kind="latent_interpolation",
+                            seed=seed,
+                            train_fraction=float(train_fraction),
+                            policy_id=policy_id,
+                        ).assign(
+                            latent_dim=latent_dim,
+                        )
+                    )
 
                     z_synthetic = result["z_synthetic"]
                     y_synthetic = result["y_synthetic"]
@@ -198,7 +220,16 @@ def run_supervised_ae_latent_interpolation(config_path: str | Path) -> dict[str,
         output_paths,
     )
 
-    _write_outputs(policy_metrics, selected_policies, selected_policy_metrics, summary, audit, output_paths)
+    candidate_audit = combine_candidate_audit_frames(candidate_audit_frames)
+    _write_outputs(
+        policy_metrics,
+        selected_policies,
+        selected_policy_metrics,
+        summary,
+        audit,
+        candidate_audit,
+        output_paths,
+    )
     _print_test_summary(summary)
     _print_selected_policy_table(selected_policies, selected_policy_metrics)
     _print_delta_summary("INTERPOLATION DELTAS VS ORIGINAL 6144D RANDOM FOREST", original_delta_summary)
@@ -300,6 +331,11 @@ def _iter_interpolation_policies(
                     clip_y_max=float(interpolation.get("clip_y_max", 100.0)),
                     random_state=seed,
                     candidates_per_real=int(interpolation.get("candidates_per_real", 20)),
+                    max_candidates_per_source=(
+                        int(interpolation["max_candidates_per_source"])
+                        if interpolation.get("max_candidates_per_source") is not None
+                        else None
+                    ),
                 )
             )
     return policies
@@ -450,6 +486,7 @@ def _write_outputs(
     selected_policy_metrics: pd.DataFrame,
     summary: pd.DataFrame,
     audit: pd.DataFrame,
+    candidate_audit: pd.DataFrame,
     output_paths: dict[str, Path],
 ) -> None:
     for key in [
@@ -458,6 +495,7 @@ def _write_outputs(
         "selected_policy_metrics_path",
         "summary_path",
         "audit_path",
+        "candidate_audit_path",
     ]:
         output_paths[key].parent.mkdir(parents=True, exist_ok=True)
     policy_metrics.to_csv(output_paths["policy_metrics_path"], index=False)
@@ -465,6 +503,7 @@ def _write_outputs(
     selected_policy_metrics.to_csv(output_paths["selected_policy_metrics_path"], index=False)
     summary.to_csv(output_paths["summary_path"], index=False)
     audit.to_csv(output_paths["audit_path"], index=False)
+    candidate_audit.to_csv(output_paths["candidate_audit_path"], index=False)
 
 
 def _print_test_summary(summary: pd.DataFrame) -> None:
@@ -598,6 +637,12 @@ def _resolve_output_paths(config: dict[str, Any]) -> dict[str, Path]:
         ),
         "summary_path": Path(output.get("summary_path", directory / "summary.csv")),
         "audit_path": Path(output.get("audit_path", directory / "synthetic_audit.csv")),
+        "candidate_audit_path": Path(
+            output.get(
+                "candidate_audit_path",
+                directory / "synthetic_candidate_audit.csv",
+            )
+        ),
         "interpolation_vs_original_rf_by_seed_path": Path(
             output.get("interpolation_vs_original_rf_by_seed_path", directory / "interpolation_vs_original_rf_by_seed.csv")
         ),
@@ -622,6 +667,13 @@ def _get_dataset_path(config: dict[str, Any]) -> str | Path:
 
 def _split_positions(split: pd.DataFrame) -> np.ndarray:
     return split.index.to_numpy(dtype=int)
+
+
+def _training_row_ids(split: pd.DataFrame) -> list[str]:
+    for column in ("source_row_id", "reaction_id", "canonical_reaction_key"):
+        if column in split.columns:
+            return [str(value) for value in split[column]]
+    return [f"dataset_row:{int(index)}" for index in split.index]
 
 
 def _as_list(value: object) -> list[Any]:

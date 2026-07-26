@@ -10,6 +10,8 @@ import torch
 
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
 )
 from bh_augmentation.features.compatibility import coordinate_feature_contract
 from bh_augmentation.representations.supervised_autoencoder import (
@@ -192,7 +194,12 @@ def test_hybrid_runner_tiny_writes_outputs_and_leakage_audits(tmp_path: Path) ->
     assert (ae_audit["n_synthetic_in_internal_valid"].fillna(0) == 0).all()
     assert synthetic_audit["source_and_donor_indices_train_only"].all()
     assert not synthetic_audit["used_validation_or_test_parents"].any()
-    assert set(REQUIRED_SYNTHETIC_AUDIT_FIELDS) <= set(candidate_audit)
+    required = {
+        *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+        *REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    }
+    assert required <= set(candidate_audit)
     assert not candidate_audit[["source_row_id", "donor_row_id"]].isna().any().any()
     for required in [
         "selected_hybrid_policies_path",

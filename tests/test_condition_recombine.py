@@ -15,6 +15,8 @@ from bh_augmentation.augmentation.condition_recombine import (
 )
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
     canonicalize_synthetic_roles,
 )
 from bh_augmentation.data.reaction_roles import (
@@ -150,6 +152,70 @@ def test_canonical_candidate_regeneration_is_deterministic() -> None:
         assert first[ROLE_TO_COLUMN[role]].tolist() == second[
             ROLE_TO_COLUMN[role]
         ].tolist()
+
+
+def test_ranked_candidates_are_permutation_invariant_capped_and_auditable() -> None:
+    train = pd.DataFrame(
+        {
+            "reaction_id": ["r1", "r2", "r3", "r4"],
+            "source_row_id": ["row-a", "row-b", "row-c", "row-d"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCC.N.[Pd].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCCN",
+                "CCCl.CN.[Pd].P(C)(C)C.N1CCCCC1.CCOC>>CCNC",
+                "COC.CN.[Pd].P(O)(O)O.N(C)C.CO>>COCN",
+            ],
+            "yield": [30.0, 50.0, 70.0, 90.0],
+        }
+    )
+    feature_config = {
+        "kind": "bh_role_separated",
+        "n_bits": 32,
+        "fingerprint_backend": "rdkit",
+    }
+    kwargs = {
+        "synthetic_multiplier": 1.0,
+        "max_synthetic_rows": 4,
+        "random_state": 11,
+        "feature_config": feature_config,
+        "max_candidates_per_source": 1,
+    }
+
+    first = generate_condition_recombined_candidates(train, **kwargs)
+    permuted = generate_condition_recombined_candidates(
+        train.sample(frac=1.0, random_state=9),
+        **kwargs,
+    )
+    comparison_columns = [
+        "canonical_reaction_key",
+        "source_row_id",
+        "donor_row_id",
+        "candidate_rank",
+    ]
+    assert first[comparison_columns].to_dict("records") == permuted[
+        comparison_columns
+    ].to_dict("records")
+    assert first["candidate_rank"].is_monotonic_increasing
+
+    audit = first.attrs[CANDIDATE_AUDIT_ATTR]
+    assert audit.loc[audit["accepted"]].groupby("source_row_id").size().max() == 1
+    assert np.isfinite(audit["nearest_training_support_distance"]).all()
+    assert audit["calibrated_uncertainty"].isna().all()
+    assert audit["uncertainty_rank_value"].notna().all()
+    assert audit["uncertainty_rank_basis"].notna().all()
+    assert audit["support_distance_metric"].eq(
+        "binary_tanimoto_distance"
+    ).all()
+    assert set(REQUIRED_SYNTHETIC_SUPPORT_FIELDS) <= set(audit)
+    assert set(REQUIRED_SYNTHETIC_RANKING_FIELDS) <= set(audit)
+
+
+def test_recombination_rejects_nonpositive_source_cap() -> None:
+    with pytest.raises(ValueError, match="max_candidates_per_source"):
+        generate_condition_recombined_candidates(
+            pd.DataFrame({"reaction_smiles": ["CC.N.O>>CCN"], "yield": [50.0]}),
+            max_candidates_per_source=0,
+        )
 
 
 def test_generation_rejects_broader_measured_keys() -> None:

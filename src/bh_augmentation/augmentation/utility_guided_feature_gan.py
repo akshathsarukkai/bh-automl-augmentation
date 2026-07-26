@@ -11,7 +11,12 @@ import pandas as pd
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 
-from bh_augmentation.augmentation.synthetic_identity import configured_feature_hash
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+    configured_feature_hash,
+)
 from bh_augmentation.evaluation.metrics import rmse
 from bh_augmentation.features.compatibility import (
     assert_feature_compatibility,
@@ -49,6 +54,8 @@ def run_utility_guided_feature_gan_augmentation(
     random_state: int,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Generate useful synthetic feature rows from real training rows only."""
+    _configured_source_cap(config)
+    train_df = _stable_training_frame(train_df)
     rng = np.random.default_rng(random_state)
     representation = config.get("representation", {})
     train_student_in_latent_space = bool(
@@ -409,8 +416,9 @@ def score_and_filter_feature_candidates(
     Their exact coordinate hashes are deduplicated separately while chemical
     identity fields remain explicitly unavailable.
     """
+    cap = _configured_source_cap(config)
     if candidates.empty:
-        empty = candidates.copy()
+        empty = _empty_feature_candidate_audit(candidates)
         return (empty, empty.copy()) if return_audit else empty
     X_candidates = np.vstack(candidates["feature_vector"].to_numpy()).astype(np.float32)
     teacher_predictions = np.vstack([predict_model(model, X_candidates) for model in teachers])
@@ -422,10 +430,14 @@ def score_and_filter_feature_candidates(
     scored["yield"] = scored["teacher_mean_prediction"].clip(
         float(pseudo.get("clip_min", 0.0)), float(pseudo.get("clip_max", 100.0))
     )
-    nearest_similarity, nearest_index = _nearest_cosine_similarity(X_candidates, X_real)
+    parent_ids = _normalize_source_ids(source_row_ids, len(X_real))
+    nearest_similarity, nearest_index = _nearest_cosine_similarity(
+        X_candidates,
+        X_real,
+        stable_reference_keys=parent_ids,
+    )
     scored["nearest_train_similarity"] = nearest_similarity
     scored["nearest_real_index"] = nearest_index
-    parent_ids = _normalize_source_ids(source_row_ids, len(X_real))
     scored["source_row_id"] = [parent_ids[index] for index in nearest_index]
     scored["donor_row_id"] = None
     scored["canonical_reaction_key"] = None
@@ -445,6 +457,24 @@ def score_and_filter_feature_candidates(
     scored["donor_id_semantics"] = "not_applicable"
     scored["chemical_identity_limitation"] = (
         "generated_coordinate_has_no_seven_role_reaction_identity"
+    )
+    scored["substrate_similarity"] = np.nan
+    scored["product_similarity"] = np.nan
+    scored["nontransferred_role_similarity"] = np.nan
+    scored["condition_similarity"] = np.nan
+    scored["overall_similarity"] = nearest_similarity
+    scored["relevant_context_similarity"] = nearest_similarity
+    scored["nearest_training_support_distance"] = 1.0 - nearest_similarity
+    scored["out_of_support_distance"] = scored[
+        "nearest_training_support_distance"
+    ]
+    scored["support_distance_metric"] = "cosine_distance"
+    scored["support_distance_backend"] = "numpy_generated_feature_coordinates"
+    scored["diversity_contribution"] = _static_cosine_diversity(X_candidates)
+    scored["calibrated_uncertainty"] = np.nan
+    scored["uncertainty_rank_value"] = scored["teacher_std_prediction"]
+    scored["uncertainty_rank_basis"] = (
+        "teacher_ensemble_std_uncalibrated_proxy_phase12_pending"
     )
 
     scored["feature_duplicate_synthetic"] = False
@@ -481,8 +511,13 @@ def score_and_filter_feature_candidates(
     # Only candidates surviving their individual filters participate in the
     # accepted-generated feature set. A rejected vector cannot shadow a later,
     # otherwise valid candidate with the same coordinates.
+    ranked_indices = _rank_feature_candidate_indices(scored.loc[keep])
+    scored["candidate_rank"] = pd.Series(pd.NA, index=scored.index, dtype="Int64")
+    for rank, index in enumerate(ranked_indices, start=1):
+        scored.at[index, "candidate_rank"] = rank
+
     known_hashes = set(seen_feature_hashes or ())
-    for index in scored.index[keep]:
+    for index in ranked_indices:
         feature_hash = scored.at[index, "feature_hash"]
         if feature_hash in known_hashes:
             scored.at[index, "feature_duplicate_synthetic"] = True
@@ -492,16 +527,20 @@ def score_and_filter_feature_candidates(
             known_hashes.add(feature_hash)
 
     scored["accepted"] = keep
-    filtered = scored.loc[keep].copy()
-    cap = int(config.get("diversity", {}).get("max_synthetic_per_nearest_real", 5))
-    if cap > 0 and not filtered.empty:
-        capped_indices = filtered.groupby(
-            "nearest_real_index", group_keys=False, sort=False
-        ).head(cap).index
-        cap_rejected = keep & ~scored.index.isin(capped_indices)
-        scored.loc[cap_rejected, "accepted"] = False
-        scored.loc[cap_rejected, "rejection_reason"] = "per_source_cap"
-        filtered = scored.loc[scored["accepted"]].copy()
+    source_counts: dict[int, int] = {}
+    for index in _rank_feature_candidate_indices(scored.loc[keep]):
+        nearest_real_index = int(scored.at[index, "nearest_real_index"])
+        source_counts[nearest_real_index] = (
+            source_counts.get(nearest_real_index, 0) + 1
+        )
+        scored.at[index, "source_candidate_ordinal"] = source_counts[
+            nearest_real_index
+        ]
+        if source_counts[nearest_real_index] > cap:
+            scored.at[index, "accepted"] = False
+            scored.at[index, "rejection_reason"] = "per_source_cap"
+            keep.at[index] = False
+    filtered = scored.loc[_rank_feature_candidate_indices(scored.loc[keep])].copy()
     if seen_feature_hashes is not None:
         seen_feature_hashes.update(
             str(value)
@@ -586,12 +625,62 @@ def _reward_score(X_train: np.ndarray, y_train: np.ndarray, X_valid: np.ndarray,
     return rmse(y_valid, predict_model(model, X_valid))
 
 
-def _nearest_cosine_similarity(X: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def _nearest_cosine_similarity(
+    X: np.ndarray,
+    reference: np.ndarray,
+    stable_reference_keys: Sequence[str] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
     X_norm = X / np.maximum(np.linalg.norm(X, axis=1, keepdims=True), 1e-8)
     ref_norm = reference / np.maximum(np.linalg.norm(reference, axis=1, keepdims=True), 1e-8)
-    scores = X_norm @ ref_norm.T
-    nearest = scores.argmax(axis=1)
-    return scores[np.arange(len(X)), nearest], nearest
+    if stable_reference_keys is None:
+        stable_order = np.arange(len(reference), dtype=int)
+    else:
+        stable_order = np.asarray(
+            sorted(
+                range(len(reference)),
+                key=lambda index: str(stable_reference_keys[index]),
+            ),
+            dtype=int,
+        )
+    scores = X_norm @ ref_norm[stable_order].T
+    nearest_stable = scores.argmax(axis=1)
+    nearest = stable_order[nearest_stable]
+    return scores[np.arange(len(X)), nearest_stable], nearest
+
+
+def _static_cosine_diversity(X: np.ndarray) -> np.ndarray:
+    values = np.asarray(X, dtype=np.float64)
+    if len(values) <= 1:
+        return np.ones(len(values), dtype=float)
+    normalized = values / np.maximum(np.linalg.norm(values, axis=1, keepdims=True), 1e-12)
+    nearest = np.full(len(values), -np.inf, dtype=float)
+    for start in range(0, len(values), 128):
+        stop = min(start + 128, len(values))
+        scores = np.clip(normalized[start:stop] @ normalized.T, -1.0, 1.0)
+        scores[np.arange(stop - start), np.arange(start, stop)] = -np.inf
+        nearest[start:stop] = np.max(scores, axis=1)
+    return 1.0 - nearest
+
+
+def _rank_feature_candidate_indices(candidates: pd.DataFrame) -> list[int]:
+    if candidates.empty:
+        return []
+    ranked = candidates.assign(
+        _stable_feature_key=candidates["feature_hash"].fillna("~").astype(str),
+        _stable_source_key=candidates["source_row_id"].fillna("").astype(str),
+    ).sort_values(
+        [
+            "uncertainty_rank_value",
+            "relevant_context_similarity",
+            "diversity_contribution",
+            "out_of_support_distance",
+            "_stable_feature_key",
+            "_stable_source_key",
+        ],
+        ascending=[True, False, False, True, True, True],
+        kind="mergesort",
+    )
+    return [int(index) for index in ranked.index]
 
 
 class _Generator:  # torch.nn.Module without importing torch at module import time
@@ -726,7 +815,7 @@ def _package_result(
         "candidate_audit": (
             candidate_audit.reset_index(drop=True)
             if candidate_audit is not None
-            else pd.DataFrame()
+            else _empty_feature_candidate_audit()
         ),
         "metadata": metadata,
         "feature_transform": feature_transform,
@@ -775,6 +864,7 @@ def _empty_result(
         metadata,
         transform,
         train_student_in_latent_space,
+        candidate_audit=_empty_feature_candidate_audit(),
     ), metadata
 
 
@@ -789,6 +879,48 @@ def _row_ids(frame: pd.DataFrame) -> list[str]:
         if column in frame:
             return [str(value) for value in frame[column]]
     return [f"train_position:{index}" for index in frame.index]
+
+
+def _stable_training_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    result = frame.copy()
+    stable_keys: list[str] = []
+    for position, (_, row) in enumerate(result.iterrows()):
+        row_id = ""
+        for column in ("source_row_id", "reaction_id", "canonical_reaction_key"):
+            value = row.get(column)
+            if pd.notna(value) and str(value):
+                row_id = str(value)
+                break
+        if not row_id:
+            row_id = str(row.get("reaction_smiles", ""))
+        stable_keys.append(
+            "\0".join(
+                [
+                    row_id,
+                    str(row.get("reaction_smiles", "")),
+                    f"{float(pd.to_numeric(row.get('yield'), errors='coerce')):.17g}",
+                    str(position) if not row_id else "",
+                ]
+            )
+        )
+    result["_utility_gan_stable_row_key"] = stable_keys
+    return result.sort_values(
+        "_utility_gan_stable_row_key",
+        kind="mergesort",
+    ).drop(columns="_utility_gan_stable_row_key").reset_index(drop=True)
+
+
+def _configured_source_cap(config: dict[str, Any]) -> int:
+    configured = config.get("max_candidates_per_source")
+    if configured is None:
+        configured = config.get("diversity", {}).get(
+            "max_synthetic_per_nearest_real",
+            5,
+        )
+    cap = int(configured)
+    if cap <= 0:
+        raise ValueError("max_candidates_per_source must be greater than zero.")
+    return cap
 
 
 def _normalize_source_ids(
@@ -807,8 +939,31 @@ def _normalize_source_ids(
 
 def _concat_audits(audits: list[pd.DataFrame]) -> pd.DataFrame:
     if not audits:
-        return pd.DataFrame()
+        return _empty_feature_candidate_audit()
     return pd.concat(audits, ignore_index=True)
+
+
+def _empty_feature_candidate_audit(
+    base: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    result = base.iloc[0:0].copy() if isinstance(base, pd.DataFrame) else pd.DataFrame()
+    generator_fields = (
+        "source_row_id",
+        "donor_row_id",
+        "feature_hash",
+        "feature_duplicate_synthetic",
+        "accepted",
+        "source_candidate_ordinal",
+    )
+    for column in (
+        *generator_fields,
+        *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+        *REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    ):
+        if column not in result:
+            result[column] = pd.Series(dtype=object)
+    return result
 
 
 def _std_or_nan(values: pd.Series | None) -> float:

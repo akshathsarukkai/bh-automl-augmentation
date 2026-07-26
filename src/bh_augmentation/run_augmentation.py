@@ -51,6 +51,10 @@ from bh_augmentation.run_baseline import (
 )
 from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.seed import set_global_seed
+from bh_augmentation.utils.synthetic_audits import (
+    build_candidate_audit_frame,
+    combine_candidate_audit_frames,
+)
 
 
 def run_augmentation(config_path: str | Path) -> Path:
@@ -271,7 +275,6 @@ def _run_augmentation_search(
                         augmentation_cache,
                     )
                 )
-
     output = config.get("output", {})
     search_path = Path(
         output.get(
@@ -370,6 +373,7 @@ def _run_feature_gan_search(
     search_frames: list[pd.DataFrame] = []
     selected_policy_rows: list[dict[str, object]] = []
     selected_metric_rows: list[dict[str, object]] = []
+    selected_candidate_audit_frames: list[pd.DataFrame] = []
     _save_baseline_split_metadata(folds, config)
 
     for feature_config in feature_configs:
@@ -436,13 +440,51 @@ def _run_feature_gan_search(
                         evaluation_cache,
                     )
                 )
+                selected_result, _ = _feature_gan_result(
+                    splits["train"],
+                    splits["valid"],
+                    feature_config,
+                    model_name,
+                    selected_policy,
+                    seed,
+                    evaluation_cache,
+                )
+                selected_audit = selected_result.get("candidate_audit", pd.DataFrame())
+                if isinstance(selected_audit, pd.DataFrame):
+                    selected_candidate_audit_frames.append(
+                        build_candidate_audit_frame(
+                            selected_audit,
+                            transfer_kind="utility_guided_feature_gan",
+                            seed=seed,
+                            train_fraction=float(train_fraction),
+                            policy_id=str(selected_policy["policy_id"]),
+                        ).assign(
+                            fold_index=fold_index,
+                            split_method=split_method,
+                            group_column=group_column,
+                            heldout_group_value=heldout_group,
+                            model=model_name,
+                            selected_policy=True,
+                        )
+                    )
 
     output = config.get("output", {})
     search_path = Path(output.get("search_metrics_path", "results/augmentation_utility_guided_gan/policy_search_metrics.csv"))
     selected_path = Path(output.get("selected_policies_path", "results/augmentation_utility_guided_gan/selected_policies.csv"))
     metrics_path = _get_metrics_output_path(config)
+    candidate_audit_path = Path(
+        output.get(
+            "candidate_audit_path",
+            metrics_path.parent / "synthetic_candidate_audit.csv",
+        )
+    )
     save_metrics_csv(pd.concat(search_frames, ignore_index=True).to_dict("records"), search_path)
     save_metrics_csv(selected_policy_rows, selected_path)
+    candidate_audit_path.parent.mkdir(parents=True, exist_ok=True)
+    combine_candidate_audit_frames(selected_candidate_audit_frames).to_csv(
+        candidate_audit_path,
+        index=False,
+    )
     return save_metrics_csv(selected_metric_rows, metrics_path)
 
 
@@ -639,6 +681,11 @@ def _build_training_variants(
                 recombine_config.get("min_neighbor_similarity", 0.3)
             ),
             random_state=int(recombine_config.get("random_state", seed)),
+            max_candidates_per_source=(
+                int(recombine_config["max_candidates_per_source"])
+                if recombine_config.get("max_candidates_per_source") is not None
+                else None
+            ),
         )
         variants["condition_recombine_pseudolabel"] = assign_synthetic_sample_weights(
             augmented,

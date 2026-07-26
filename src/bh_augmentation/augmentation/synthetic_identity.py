@@ -40,6 +40,25 @@ REQUIRED_SYNTHETIC_AUDIT_FIELDS = (
     "chemical_parse_valid",
     "rejection_reason",
 )
+REQUIRED_SYNTHETIC_SUPPORT_FIELDS = (
+    "substrate_similarity",
+    "product_similarity",
+    "nontransferred_role_similarity",
+    "condition_similarity",
+    "overall_similarity",
+    "nearest_training_support_distance",
+    "support_distance_metric",
+    "support_distance_backend",
+)
+REQUIRED_SYNTHETIC_RANKING_FIELDS = (
+    "calibrated_uncertainty",
+    "uncertainty_rank_value",
+    "uncertainty_rank_basis",
+    "relevant_context_similarity",
+    "diversity_contribution",
+    "out_of_support_distance",
+    "candidate_rank",
+)
 
 
 @dataclass(frozen=True)

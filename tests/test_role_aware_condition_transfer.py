@@ -116,6 +116,10 @@ def test_identical_synthetic_reactions_are_skipped() -> None:
             "role_change_requirement must be one of",
         ),
         ({"fallback_policy": "hidden_chain"}, "fallback_policy must be one of"),
+        (
+            {"max_candidates_per_source": 0},
+            "max_candidates_per_source must be greater than zero",
+        ),
     ],
 )
 def test_invalid_role_change_configuration_is_rejected(
@@ -331,6 +335,26 @@ def test_catalyst_modes_are_made_catalyst_free_when_excluding_invariant_roles() 
     assert policies[0].invariant_roles_excluded == "catalyst"
 
 
+def test_role_aware_factory_preserves_random_similarity_threshold() -> None:
+    counts = _role_value_counts(_train_df())
+    config = {
+        "role_aware_condition_transfer": {
+            "exclude_invariant_roles": False,
+            "role_transfer_modes": ["ligand_only"],
+            "donor_strategies": ["random"],
+            "label_strategies": ["source_label"],
+            "synthetic_multipliers": [0.5],
+            "min_similarities": [0.73],
+            "teacher_models": ["ridge"],
+        }
+    }
+
+    policies = _iter_role_transfer_policies(config, seed=0, role_value_counts=counts)
+
+    assert len(policies) == 1
+    assert policies[0].min_similarity == pytest.approx(0.73)
+
+
 def test_ligand_base_solvent_mode_changes_at_least_one_variable_role() -> None:
     train = _invariant_catalyst_df()
     X, y, _ = build_feature_matrix(train, _feature_config())
@@ -449,6 +473,207 @@ def test_audit_contains_invariant_and_fallback_fields() -> None:
         "changed_any_transferred_role_fraction",
     ]:
         assert column in metadata
+
+
+def test_generation_enforces_the_exact_per_source_candidate_cap() -> None:
+    train = _train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            role_transfer_mode="full_condition_block",
+            donor_strategy="random",
+            label_strategy="source_label",
+            max_candidates_per_source=2,
+            teacher_models=["ridge"],
+        ),
+    )
+
+    generated_counts = result["candidate_df"].groupby("source_position").size()
+    assert not generated_counts.empty
+    assert generated_counts.le(2).all()
+    assert generated_counts.eq(2).all()
+
+
+def test_seeded_generation_and_selection_are_row_permutation_invariant() -> None:
+    train = _train_df()
+    permuted = train.sample(frac=1.0, random_state=91).reset_index(drop=True)
+    config = _config(
+        role_transfer_mode="full_condition_block",
+        donor_strategy="random",
+        label_strategy="source_label",
+        synthetic_multiplier=1.0,
+        max_candidates_per_source=3,
+        teacher_models=["ridge"],
+        random_state=17,
+    )
+
+    X, y, _ = build_feature_matrix(train, _feature_config())
+    permuted_X, permuted_y, _ = build_feature_matrix(permuted, _feature_config())
+    first = generate_role_aware_condition_transfer_examples(train, X, y, config)
+    second = generate_role_aware_condition_transfer_examples(
+        permuted,
+        permuted_X,
+        permuted_y,
+        config,
+    )
+
+    first_keys = first["synthetic_df"]["canonical_reaction_key"].tolist()
+    second_keys = second["synthetic_df"]["canonical_reaction_key"].tolist()
+    assert first_keys
+    assert first_keys == second_keys
+
+
+@pytest.mark.parametrize("donor_strategy", sorted(role_transfer_module.DONOR_STRATEGIES))
+def test_similarity_threshold_applies_to_every_donor_strategy(
+    donor_strategy: str,
+) -> None:
+    train = _train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy=donor_strategy,
+            label_strategy="source_label",
+            min_similarity=2.0,
+            fallback_policy="random",
+            teacher_models=["ridge"],
+        ),
+    )
+
+    assert result["candidate_df"].empty
+    assert result["synthetic_df"].empty
+
+
+@pytest.mark.parametrize("fallback_policy", sorted(role_transfer_module.FALLBACK_POLICIES))
+def test_similarity_threshold_applies_to_every_declared_fallback(
+    fallback_policy: str,
+) -> None:
+    train = _train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy="nearest_condition",
+            label_strategy="source_label",
+            min_similarity=2.0,
+            fallback_policy=fallback_policy,
+            teacher_models=["ridge"],
+        ),
+    )
+
+    assert result["candidate_df"].empty
+    assert result["synthetic_df"].empty
+
+
+def test_phase3_candidate_metrics_and_ranking_fields_are_audited() -> None:
+    train = _train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            role_transfer_mode="full_condition_block",
+            donor_strategy="random",
+            label_strategy="source_label",
+            max_candidates_per_source=3,
+            teacher_models=["ridge"],
+        ),
+    )
+
+    candidates = result["candidate_df"]
+    required_metrics = {
+        "substrate_similarity",
+        "product_similarity",
+        "nontransferred_role_similarity",
+        "condition_similarity",
+        "overall_similarity",
+        "nearest_training_support_distance",
+        "calibrated_uncertainty",
+        "uncertainty_rank_value",
+        "uncertainty_rank_basis",
+        "relevant_context_similarity",
+        "diversity_contribution",
+        "out_of_support_distance",
+        "candidate_rank",
+    }
+    assert required_metrics <= set(candidates)
+    finite_metrics = required_metrics - {
+        "calibrated_uncertainty",
+        "uncertainty_rank_basis",
+    }
+    assert np.isfinite(
+        candidates[list(finite_metrics)].to_numpy(dtype=float)
+    ).all()
+    assert candidates["calibrated_uncertainty"].isna().all()
+    assert set(candidates["uncertainty_rank_basis"]) == {
+        "teacher_std_proxy_phase12_pending"
+    }
+    assert sorted(candidates["candidate_rank"].astype(int)) == list(
+        range(1, len(candidates) + 1)
+    )
+    kept = candidates.loc[candidates["kept"]].sort_values("candidate_rank")
+    expected = (
+        candidates.loc[candidates["accepted"]]
+        .sort_values("candidate_rank")
+        .head(len(kept))
+    )
+    assert kept["canonical_reaction_key"].tolist() == expected[
+        "canonical_reaction_key"
+    ].tolist()
+
+
+def test_candidate_ranking_is_independent_of_generation_traversal() -> None:
+    candidates = pd.DataFrame(
+        {
+            "canonical_reaction_key": [
+                "uncertainty",
+                "context",
+                "diversity",
+                "support",
+                "canonical_b",
+                "canonical_a",
+            ],
+            "source_row_id": [f"s{index}" for index in range(6)],
+            "donor_row_id": [f"d{index}" for index in range(6)],
+            "calibrated_uncertainty": [np.nan] * 6,
+            "uncertainty_rank_value": [0.2, 0.1, 0.1, 0.1, 0.1, 0.1],
+            "relevant_context_similarity": [1.0, 0.9, 0.8, 0.8, 0.8, 0.8],
+            "diversity_contribution": [1.0, 0.0, 0.9, 0.8, 0.8, 0.8],
+            "out_of_support_distance": [0.0, 1.0, 1.0, 0.1, 0.2, 0.2],
+        }
+    )
+
+    ranked = role_transfer_module._rank_candidates(candidates)
+    permuted = role_transfer_module._rank_candidates(
+        candidates.sample(frac=1.0, random_state=4)
+    )
+
+    expected = {
+        "context": 1,
+        "diversity": 2,
+        "support": 3,
+        "canonical_a": 4,
+        "canonical_b": 5,
+        "uncertainty": 6,
+    }
+    assert ranked.set_index("canonical_reaction_key")["candidate_rank"].astype(
+        int
+    ).to_dict() == expected
+    assert permuted.set_index("canonical_reaction_key")[
+        "candidate_rank"
+    ].astype(int).to_dict() == expected
 
 
 def test_runner_smoke_tiny_config_outputs(tmp_path: Path) -> None:

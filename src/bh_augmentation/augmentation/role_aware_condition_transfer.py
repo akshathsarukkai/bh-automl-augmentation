@@ -196,10 +196,18 @@ def generate_role_aware_condition_transfer_examples(
         )
 
     rng = np.random.default_rng(config.random_state)
+    canonical_source_order = _canonical_position_order(train, y_train_array)
     effective_mode = _effective_role_transfer_mode(config)
-    substrate_similarity = _role_similarity_matrix(
+    legacy_donor_context_similarity = _role_similarity_matrix(
         train,
         ["reactant_1", "reactant_2", "product"],
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
+    substrate_similarity = _role_similarity_matrix(
+        train,
+        ["reactant_1", "reactant_2"],
         n_bits=config.donor_similarity_n_bits,
         radius=config.donor_similarity_radius,
         backend=config.donor_similarity_backend,
@@ -211,6 +219,29 @@ def generate_role_aware_condition_transfer_examples(
         radius=config.donor_similarity_radius,
         backend=config.donor_similarity_backend,
     )
+    product_similarity = _role_similarity_matrix(
+        train,
+        ["product"],
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
+    nontransferred_roles = [
+        role
+        for role in ["catalyst", "ligand", "base", "solvent_or_additive"]
+        if role not in ROLE_TRANSFER_MODES[effective_mode]
+    ]
+    nontransferred_role_similarity = (
+        _role_similarity_matrix(
+            train,
+            nontransferred_roles,
+            n_bits=config.donor_similarity_n_bits,
+            radius=config.donor_similarity_radius,
+            backend=config.donor_similarity_backend,
+        )
+        if nontransferred_roles
+        else np.ones((n_real_train, n_real_train), dtype=np.float32)
+    )
     role_values = {
         role: train[ROLE_COLUMNS[role]].astype(str).to_numpy()
         for role in ["catalyst", "ligand", "base", "solvent_or_additive"]
@@ -218,7 +249,7 @@ def generate_role_aware_condition_transfer_examples(
     context_values = _context_values(train)
     train_records = train.to_dict("records")
     source_dataframe_indices = train["_source_dataframe_index"].to_numpy()
-    np.fill_diagonal(substrate_similarity, -np.inf)
+    np.fill_diagonal(legacy_donor_context_similarity, -np.inf)
     np.fill_diagonal(condition_similarity, -np.inf)
 
     rows: list[dict[str, Any]] = []
@@ -226,62 +257,115 @@ def generate_role_aware_condition_transfer_examples(
     n_invalid_role_parse_skipped = 0
     n_same_context_donors_found = 0
     n_role_changed_candidates_found = 0
-    max_candidates = max(1, int(config.max_candidates_per_source)) * n_real_train
-    attempts = max(max_candidates, target_count * max(5, int(config.max_resample_attempts)))
-    for candidate_id in range(attempts):
-        if len(rows) >= max_candidates:
-            break
-        source_position = int(rng.integers(0, n_real_train))
-        donor_position, donor_similarity, donor_fallback_level, donor_stats = _select_donor_position(
-            train=train,
-            source_position=source_position,
-            y_train=y_train_array,
-            substrate_similarity=substrate_similarity,
-            condition_similarity=condition_similarity,
-            role_values=role_values,
-            context_values=context_values,
-            config=config,
-            rng=rng,
-        )
-        n_identical_skipped += donor_stats["n_source_identical_donors_rejected"]
-        n_same_context_donors_found += donor_stats["n_same_context_donors_found"]
-        n_role_changed_candidates_found += donor_stats["n_role_changed_candidates_found"]
-        if donor_position is None:
-            continue
+    per_source_cap = max(0, int(config.max_candidates_per_source))
+    generated_per_source = {position: 0 for position in range(n_real_train)}
+    candidate_id = 0
+    for source_position in canonical_source_order:
+        used_donors: set[int] = set()
+        while generated_per_source[source_position] < per_source_cap:
+            donor_position, donor_similarity, donor_fallback_level, donor_stats = _select_donor_position(
+                train=train,
+                source_position=source_position,
+                y_train=y_train_array,
+                substrate_similarity=legacy_donor_context_similarity,
+                condition_similarity=condition_similarity,
+                role_values=role_values,
+                context_values=context_values,
+                config=config,
+                rng=rng,
+                excluded_donor_positions=used_donors,
+            )
+            n_identical_skipped += donor_stats["n_source_identical_donors_rejected"]
+            n_same_context_donors_found += donor_stats["n_same_context_donors_found"]
+            n_role_changed_candidates_found += donor_stats["n_role_changed_candidates_found"]
+            if donor_position is None:
+                break
+            used_donors.add(donor_position)
 
-        synthetic = build_role_transferred_reaction_smiles(
-            train_records[source_position],
-            train_records[donor_position],
-            effective_mode,
-        )
-        synthetic = {
-            **synthetic,
-            **canonical_candidate_record(synthetic["reaction_roles"]),
-        }
-        if synthetic["reaction_smiles"] == str(train_records[source_position]["reaction_smiles"]):
-            n_identical_skipped += 1
-
-        rows.append(
-            {
-                "candidate_id": candidate_id,
-                "source_position": source_position,
-                "donor_position": donor_position,
-                "source_index": source_dataframe_indices[source_position],
-                "donor_index": source_dataframe_indices[donor_position],
-                "source_yield": float(y_train_array[source_position]),
-                "donor_yield": float(y_train_array[donor_position]),
-                "donor_similarity": float(donor_similarity),
-                "donor_fallback_level": donor_fallback_level,
-                "fallback_policy": config.fallback_policy,
-                "fallback_used": donor_fallback_level.startswith("fallback_"),
-                "teacher_mean": np.nan,
-                "teacher_std": np.nan,
-                "synthetic_label": np.nan,
-                "accepted": False,
-                "kept": False,
+            synthetic = build_role_transferred_reaction_smiles(
+                train_records[source_position],
+                train_records[donor_position],
+                effective_mode,
+            )
+            synthetic = {
                 **synthetic,
+                **canonical_candidate_record(synthetic["reaction_roles"]),
             }
-        )
+            if synthetic["reaction_smiles"] == str(train_records[source_position]["reaction_smiles"]):
+                n_identical_skipped += 1
+
+            substrate_score = float(substrate_similarity[source_position, donor_position])
+            product_score = float(product_similarity[source_position, donor_position])
+            nontransferred_score = float(
+                nontransferred_role_similarity[source_position, donor_position]
+            )
+            condition_score = float(condition_similarity[source_position, donor_position])
+            relevant_context_score = float(
+                np.mean([substrate_score, product_score, nontransferred_score])
+            )
+            overall_score = float(
+                np.mean(
+                    [
+                        substrate_score,
+                        product_score,
+                        nontransferred_score,
+                        condition_score,
+                    ]
+                )
+            )
+            rows.append(
+                {
+                    "candidate_id": candidate_id,
+                    "source_position": source_position,
+                    "donor_position": donor_position,
+                    "source_index": source_dataframe_indices[source_position],
+                    "donor_index": source_dataframe_indices[donor_position],
+                    "source_yield": float(y_train_array[source_position]),
+                    "donor_yield": float(y_train_array[donor_position]),
+                    "donor_similarity": float(donor_similarity),
+                    "legacy_donor_context_similarity": float(
+                        legacy_donor_context_similarity[
+                            source_position, donor_position
+                        ]
+                    ),
+                    "substrate_similarity": substrate_score,
+                    "product_similarity": product_score,
+                    "nontransferred_role_similarity": nontransferred_score,
+                    "condition_similarity": condition_score,
+                    "overall_similarity": overall_score,
+                    "relevant_context_similarity": relevant_context_score,
+                    "diversity_contribution": float(
+                        np.clip(1.0 - condition_score, 0.0, 2.0)
+                    ),
+                    "nearest_training_support_distance": np.nan,
+                    "out_of_support_distance": np.nan,
+                    "calibrated_uncertainty": np.nan,
+                    "uncertainty_rank_value": np.nan,
+                    "uncertainty_rank_basis": "teacher_std_proxy_phase12_pending",
+                    "source_candidate_ordinal": (
+                        generated_per_source[source_position] + 1
+                    ),
+                    "generated_per_source": 0,
+                    "max_candidates_per_source": per_source_cap,
+                    "candidate_rank": pd.NA,
+                    "donor_fallback_level": donor_fallback_level,
+                    "fallback_policy": config.fallback_policy,
+                    "fallback_used": donor_fallback_level.startswith("fallback_"),
+                    "teacher_mean": np.nan,
+                    "teacher_std": np.nan,
+                    "synthetic_label": np.nan,
+                    "accepted": False,
+                    "kept": False,
+                    **synthetic,
+                }
+            )
+            generated_per_source[source_position] += 1
+            candidate_id += 1
+
+    for row in rows:
+        row["generated_per_source"] = generated_per_source[
+            int(row["source_position"])
+        ]
 
     candidate_df = pd.DataFrame(rows) if rows else _empty_candidate_df()
     if candidate_df.empty:
@@ -328,9 +412,29 @@ def generate_role_aware_condition_transfer_examples(
     n_invalid_role_parse_skipped += int(
         (~candidate_df["chemical_parse_valid"].astype(bool)).sum()
     )
-    teacher_mean, teacher_std, teachers_used = _teacher_predictions(X_train_array, y_train_array, X_synthetic, config)
+    teacher_order = np.asarray(canonical_source_order, dtype=int)
+    teacher_mean, teacher_std, teachers_used = _teacher_predictions(
+        X_train_array[teacher_order],
+        y_train_array[teacher_order],
+        X_synthetic,
+        config,
+    )
     candidate_df["teacher_mean"] = teacher_mean
     candidate_df["teacher_std"] = teacher_std
+    # Ensemble spread is useful for ordering but is not calibrated uncertainty.
+    candidate_df["calibrated_uncertainty"] = np.nan
+    candidate_df["uncertainty_rank_value"] = teacher_std
+    candidate_df["uncertainty_rank_basis"] = (
+        "teacher_std_proxy_phase12_pending"
+    )
+    support_distance = _nearest_training_support_distance(X_synthetic, X_train_array)
+    candidate_df["nearest_training_support_distance"] = support_distance
+    candidate_df["support_distance_metric"] = "euclidean_distance"
+    candidate_df["support_distance_backend"] = (
+        f"{real_feature_metadata.representation_kind}:"
+        f"{real_feature_metadata.fingerprint_backend}"
+    )
+    candidate_df["out_of_support_distance"] = support_distance
     candidate_df["teacher_models_used"] = ",".join(teachers_used)
     candidate_df["synthetic_label"] = np.clip(
         _assign_labels(candidate_df, config),
@@ -342,6 +446,13 @@ def generate_role_aware_condition_transfer_examples(
         ~np.isfinite(candidate_df["synthetic_label"].to_numpy(dtype=float)),
         "invalid_synthetic_label",
     )
+    if config.min_similarity is not None:
+        candidate_df = apply_filter_rejection(
+            candidate_df,
+            candidate_df["donor_similarity"].to_numpy(dtype=float)
+            < float(config.min_similarity),
+            "similarity_below_threshold",
+        )
     if (
         config.label_strategy == "uncertainty_filtered_teacher"
         and config.max_teacher_std is not None
@@ -356,11 +467,20 @@ def generate_role_aware_condition_transfer_examples(
     candidate_df["accepted"] = accepted
     assert_accepted_identity_invariants(candidate_df)
     assert_accepted_role_change_invariants(candidate_df)
-    kept_indices = np.flatnonzero(accepted)[:target_count]
+    candidate_df = _rank_candidates(candidate_df)
+    kept_indices = (
+        candidate_df.loc[candidate_df["accepted"]]
+        .sort_values("candidate_rank", kind="mergesort")
+        .head(target_count)
+        .index.to_numpy(dtype=int)
+    )
     candidate_df.loc[kept_indices, "kept"] = True
 
-    synthetic_df = candidate_df.loc[candidate_df["kept"], _synthetic_columns()].copy()
-    synthetic_df["yield"] = candidate_df.loc[candidate_df["kept"], "synthetic_label"].to_numpy(dtype=float)
+    kept_candidates = candidate_df.loc[kept_indices].sort_values(
+        "candidate_rank", kind="mergesort"
+    )
+    synthetic_df = kept_candidates[_synthetic_columns()].copy()
+    synthetic_df["yield"] = kept_candidates["synthetic_label"].to_numpy(dtype=float)
     synthetic_y = synthetic_df["yield"].to_numpy(dtype=float)
     metadata = _metadata_from_candidates(
         candidate_df,
@@ -377,7 +497,7 @@ def generate_role_aware_condition_transfer_examples(
         synthetic_y,
         metadata,
         candidate_df,
-        X_synthetic[candidate_df["kept"].to_numpy(dtype=bool)].astype(np.float32),
+        X_synthetic[kept_candidates.index.to_numpy(dtype=int)].astype(np.float32),
         synthetic_feature_names,
         synthetic_feature_metadata,
     )
@@ -393,8 +513,14 @@ def _select_donor_position(
     context_values: dict[str, np.ndarray],
     config: RoleAwareConditionTransferConfig,
     rng: np.random.Generator,
+    excluded_donor_positions: set[int] | None = None,
 ) -> tuple[int | None, float, str, dict[str, int]]:
-    candidates = [position for position in range(len(train)) if position != source_position]
+    excluded = excluded_donor_positions or set()
+    candidates = [
+        position
+        for position in _canonical_position_order(train, y_train)
+        if position != source_position and position not in excluded
+    ]
     transferred_roles = ROLE_TRANSFER_MODES[_effective_role_transfer_mode(config)]
     role_changed_candidates = _filter_role_changed(
         candidates,
@@ -436,6 +562,7 @@ def _select_donor_position(
             transferred_roles=transferred_roles,
             strategy=config.donor_strategy,
             fallback_policy=config.fallback_policy,
+            min_similarity=config.min_similarity,
             rng=rng,
             stats=stats,
         )
@@ -445,7 +572,25 @@ def _select_donor_position(
         return None, float("nan"), "unavailable", stats
 
     if config.donor_strategy == "random":
-        donor_position = int(rng.choice(candidates))
+        eligible = _similarity_eligible(
+            candidates,
+            source_position,
+            substrate_similarity,
+            config.min_similarity,
+        )
+        if not eligible:
+            return _select_declared_fallback(
+                candidates=candidates,
+                source_position=source_position,
+                y_train=y_train,
+                substrate_similarity=substrate_similarity,
+                context_values=context_values,
+                fallback_policy=config.fallback_policy,
+                min_similarity=config.min_similarity,
+                rng=rng,
+                stats=stats,
+            )
+        donor_position = int(rng.choice(eligible))
         return donor_position, float(substrate_similarity[source_position, donor_position]), "random", stats
 
     similarity = condition_similarity if config.donor_strategy == "nearest_condition" else substrate_similarity
@@ -463,6 +608,7 @@ def _select_donor_position(
             substrate_similarity=substrate_similarity,
             context_values=context_values,
             fallback_policy=config.fallback_policy,
+            min_similarity=config.min_similarity,
             rng=rng,
             stats=stats,
         )
@@ -487,6 +633,7 @@ def _select_context_aware_donor(
     transferred_roles: list[str],
     strategy: str,
     fallback_policy: str,
+    min_similarity: float | None,
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> tuple[int | None, float, str, dict[str, int]]:
@@ -511,7 +658,10 @@ def _select_context_aware_donor(
         for position in candidates
         if context_values["product_key"][position] == context_values["product_key"][source_position]
     ]
-    same_product_or_reactant = sorted(set(same_product) | set(same_reactant))
+    same_product_or_reactant_set = set(same_product) | set(same_reactant)
+    same_product_or_reactant = [
+        position for position in candidates if position in same_product_or_reactant_set
+    ]
 
     if strategy == "same_substrate_different_role":
         levels = [("strict_same_reactant_key", same_reactant)]
@@ -523,7 +673,13 @@ def _select_context_aware_donor(
         levels = [("strict_same_nontransferred_roles", same_nontransferred)]
 
     for fallback_level, level_candidates in levels:
-        unique_candidates = sorted(set(level_candidates))
+        unique_candidates = list(dict.fromkeys(level_candidates))
+        unique_candidates = _similarity_eligible(
+            unique_candidates,
+            source_position,
+            substrate_similarity,
+            min_similarity,
+        )
         if not unique_candidates:
             continue
         stats["n_same_context_donors_found"] += len(unique_candidates)
@@ -544,6 +700,7 @@ def _select_context_aware_donor(
         substrate_similarity=substrate_similarity,
         context_values=context_values,
         fallback_policy=fallback_policy,
+        min_similarity=min_similarity,
         rng=rng,
         stats=stats,
     )
@@ -556,13 +713,14 @@ def _select_declared_fallback(
     substrate_similarity: np.ndarray,
     context_values: dict[str, np.ndarray],
     fallback_policy: str,
+    min_similarity: float | None,
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> tuple[int | None, float, str, dict[str, int]]:
     """Apply exactly one named fallback to role-valid donor candidates."""
     if fallback_policy == "reject" or not candidates:
         return None, float("nan"), "fallback_reject", stats
-    fallback_candidates = sorted(set(candidates))
+    fallback_candidates = list(dict.fromkeys(candidates))
     if fallback_policy == "same_product":
         fallback_candidates = [
             position
@@ -573,6 +731,14 @@ def _select_declared_fallback(
         if not fallback_candidates:
             return None, float("nan"), "fallback_same_product", stats
         stats["n_same_context_donors_found"] += len(fallback_candidates)
+    fallback_candidates = _similarity_eligible(
+        fallback_candidates,
+        source_position,
+        substrate_similarity,
+        min_similarity,
+    )
+    if not fallback_candidates:
+        return None, float("nan"), f"fallback_{fallback_policy}", stats
     donor_position = _choose_from_candidates(
         fallback_candidates,
         source_position=source_position,
@@ -625,6 +791,48 @@ def _filter_role_changed(
             role_values[role][position] != role_values[role][source_position]
             for role in transferred_roles
         )
+    ]
+
+
+def _canonical_position_order(train: pd.DataFrame, y_train: np.ndarray) -> list[int]:
+    """Return a row-order-independent traversal without changing public positions."""
+    role_columns = [ROLE_COLUMNS[role] for role in ROLE_COLUMNS]
+    reaction_ids = (
+        train["reaction_id"].astype(str).to_numpy()
+        if "reaction_id" in train
+        else np.full(len(train), "", dtype=object)
+    )
+    role_values = [
+        train[column].astype(str).to_numpy()
+        for column in role_columns
+    ]
+    reactions = train["reaction_smiles"].astype(str).to_numpy()
+    yields = np.asarray(y_train, dtype=float)
+
+    def canonical_key(position: int) -> tuple[str, ...]:
+        return (
+            *(values[position] for values in role_values),
+            reactions[position],
+            reaction_ids[position],
+            float(yields[position]).hex(),
+        )
+
+    return sorted(range(len(train)), key=canonical_key)
+
+
+def _similarity_eligible(
+    candidates: list[int],
+    source_position: int,
+    similarity: np.ndarray,
+    min_similarity: float | None,
+) -> list[int]:
+    if min_similarity is None:
+        return list(candidates)
+    threshold = float(min_similarity)
+    return [
+        position
+        for position in candidates
+        if float(similarity[source_position, position]) >= threshold
     ]
 
 
@@ -756,6 +964,74 @@ def _acceptance_mask(
     return candidate_df["rejection_reason"].isna().to_numpy(dtype=bool)
 
 
+def _nearest_training_support_distance(
+    X_synthetic: np.ndarray,
+    X_train: np.ndarray,
+) -> np.ndarray:
+    synthetic = np.asarray(X_synthetic, dtype=np.float32)
+    training = np.asarray(X_train, dtype=np.float32)
+    if len(synthetic) == 0:
+        return np.empty(0, dtype=float)
+    if len(training) == 0:
+        return np.full(len(synthetic), np.inf, dtype=float)
+    result = np.empty(len(synthetic), dtype=float)
+    for start in range(0, len(synthetic), 256):
+        stop = min(start + 256, len(synthetic))
+        deltas = synthetic[start:stop, None, :] - training[None, :, :]
+        squared = np.einsum("ijk,ijk->ij", deltas, deltas, optimize=True)
+        result[start:stop] = np.sqrt(np.min(squared, axis=1))
+    return result
+
+
+def _rank_candidates(candidate_df: pd.DataFrame) -> pd.DataFrame:
+    """Rank independently of generation order using the declared Phase-3 keys."""
+    result = candidate_df.copy()
+    ranking = pd.DataFrame(index=result.index)
+    calibrated = pd.to_numeric(
+        result["calibrated_uncertainty"], errors="coerce"
+    )
+    proxy = pd.to_numeric(
+        result["uncertainty_rank_value"], errors="coerce"
+    )
+    ranking["_uncertainty"] = calibrated.where(calibrated.notna(), proxy).fillna(np.inf)
+    ranking["_context"] = pd.to_numeric(
+        result["relevant_context_similarity"], errors="coerce"
+    ).fillna(-np.inf)
+    ranking["_diversity"] = pd.to_numeric(
+        result["diversity_contribution"], errors="coerce"
+    ).fillna(-np.inf)
+    ranking["_support"] = pd.to_numeric(
+        result["out_of_support_distance"], errors="coerce"
+    ).fillna(np.inf)
+    ranking["_canonical_key"] = result["canonical_reaction_key"].fillna("~").astype(str)
+    ranking["_source_key"] = result.get(
+        "source_row_id", pd.Series("", index=result.index)
+    ).fillna("").astype(str)
+    ranking["_donor_key"] = result.get(
+        "donor_row_id", pd.Series("", index=result.index)
+    ).fillna("").astype(str)
+    ordered_indices = ranking.sort_values(
+        [
+            "_uncertainty",
+            "_context",
+            "_diversity",
+            "_support",
+            "_canonical_key",
+            "_source_key",
+            "_donor_key",
+        ],
+        ascending=[True, False, False, True, True, True, True],
+        kind="mergesort",
+    ).index
+    ranks = pd.Series(
+        np.arange(1, len(result) + 1, dtype=int),
+        index=ordered_indices,
+        dtype="Int64",
+    )
+    result["candidate_rank"] = ranks.reindex(result.index)
+    return result
+
+
 def _metadata_from_candidates(
     candidate_df: pd.DataFrame,
     train: pd.DataFrame,
@@ -794,6 +1070,22 @@ def _metadata_from_candidates(
         "n_candidates_generated": int(len(candidate_df)),
         "n_candidates_accepted": accepted_count,
         "n_synthetic_train": int(len(kept)),
+        "max_candidates_per_source": int(config.max_candidates_per_source),
+        "max_generated_per_source": (
+            int(candidate_df["generated_per_source"].max())
+            if "generated_per_source" in candidate_df and not candidate_df.empty
+            else 0
+        ),
+        "source_cap_violation_count": (
+            int(
+                (
+                    candidate_df.groupby("source_position").size()
+                    > int(config.max_candidates_per_source)
+                ).sum()
+            )
+            if "source_position" in candidate_df and not candidate_df.empty
+            else 0
+        ),
         "filter_acceptance_rate": float(accepted_count / len(candidate_df)) if len(candidate_df) else 0.0,
         "mean_donor_similarity": _safe_mean(candidate_df.get("donor_similarity", pd.Series(dtype=float))),
         "mean_teacher_std": _safe_mean(teacher_std),
@@ -855,6 +1147,25 @@ def _synthetic_columns() -> list[str]:
         "source_yield",
         "donor_yield",
         "donor_similarity",
+        "legacy_donor_context_similarity",
+        "substrate_similarity",
+        "product_similarity",
+        "nontransferred_role_similarity",
+        "condition_similarity",
+        "overall_similarity",
+        "nearest_training_support_distance",
+        "support_distance_metric",
+        "support_distance_backend",
+        "calibrated_uncertainty",
+        "uncertainty_rank_value",
+        "uncertainty_rank_basis",
+        "relevant_context_similarity",
+        "diversity_contribution",
+        "out_of_support_distance",
+        "candidate_rank",
+        "source_candidate_ordinal",
+        "generated_per_source",
+        "max_candidates_per_source",
         "donor_fallback_level",
         "fallback_policy",
         "fallback_used",
@@ -911,6 +1222,8 @@ def _validate_config(config: RoleAwareConditionTransferConfig) -> None:
             "fallback_policy must be one of: "
             + ", ".join(sorted(FALLBACK_POLICIES))
         )
+    if config.max_candidates_per_source <= 0:
+        raise ValueError("max_candidates_per_source must be greater than zero.")
     if not config.teacher_models and config.label_strategy in {"teacher_ensemble", "uncertainty_filtered_teacher"}:
         raise ValueError("teacher_models must be non-empty for teacher label strategies.")
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import math
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -88,6 +89,7 @@ class ConditionTransferConfig:
     donor_similarity_backend: str = "auto"
     role_change_requirement: str = "all"
     fallback_policy: str = "reject"
+    max_candidates_per_source: int | None = None
 
 
 def parse_condition_transfer_reaction(value: object) -> ParsedReaction | None:
@@ -162,10 +164,11 @@ def generate_condition_transfer_examples(
     )
     train = role_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
     train_records = train.to_dict(orient="records")
-    canonical_train_roles = [
-        canonicalize_synthetic_roles(reaction_roles_from_row(row)).roles
+    canonical_train_identities = [
+        canonicalize_synthetic_roles(reaction_roles_from_row(row))
         for row in train_records
     ]
+    canonical_train_roles = [identity.roles for identity in canonical_train_identities]
     if any(roles is None for roles in canonical_train_roles):
         raise ValueError("Condition-transfer source rows require valid canonical roles.")
     X_train_array = np.asarray(X_train, dtype=np.float32)
@@ -178,7 +181,7 @@ def generate_condition_transfer_examples(
     invalid_parse_count = len(train) - len(valid_positions)
     n_real_train = len(train)
     target_count = int(math.ceil(max(0.0, config.synthetic_multiplier) * n_real_train))
-    n_candidates = int(math.ceil(max(1, config.candidates_per_real) * n_real_train))
+    max_candidates_per_source = _configured_max_candidates_per_source(config)
     if target_count == 0 or len(valid_positions) < 2:
         metadata = _metadata_from_candidates(
             _empty_candidate_df(),
@@ -197,7 +200,6 @@ def generate_condition_transfer_examples(
             np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
         )
 
-    rng = np.random.default_rng(int(config.random_state))
     similarity_config = {
         **feature_config,
         "kind": "reaction_section_concat",
@@ -213,76 +215,134 @@ def generate_condition_transfer_examples(
         backend=config.donor_similarity_backend,
     )
     np.fill_diagonal(substrate_similarity, -np.inf)
+    product_similarity = _token_group_similarity_matrix(
+        [(item.product,) if item is not None else () for item in parsed],
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
+    condition_similarity = _token_group_similarity_matrix(
+        [item.condition_tokens if item is not None else () for item in parsed],
+        n_bits=config.donor_similarity_n_bits,
+        radius=config.donor_similarity_radius,
+        backend=config.donor_similarity_backend,
+    )
+    np.fill_diagonal(product_similarity, -np.inf)
+    np.fill_diagonal(condition_similarity, -np.inf)
 
     rows: list[dict[str, Any]] = []
-    attempts = max(n_candidates, target_count * 5)
     high_yield_fallback_count = 0
     fallback_attempt_count = 0
     fallback_success_count = 0
-    for candidate_id in range(attempts):
-        source_position = int(rng.choice(valid_positions))
-        donor_position, donor_similarity, used_fallback = _select_donor_position(
-            source_position=source_position,
-            valid_positions=valid_positions,
-            y_train=y_train_array,
-            reaction_similarity=reaction_similarity,
-            substrate_similarity=substrate_similarity,
-            canonical_roles=canonical_train_roles,
-            config=config,
-            rng=rng,
+    stable_row_keys = [
+        _stable_training_row_key(
+            train_records[position],
+            canonical_train_identities[position].canonical_reaction_key,
+            float(y_train_array[position]),
         )
-        if used_fallback:
-            fallback_attempt_count += 1
-        if donor_position is None:
-            continue
-        if used_fallback:
-            high_yield_fallback_count += 1
-            fallback_success_count += 1
-        source = parsed[source_position]
-        donor = parsed[donor_position]
-        if source is None or donor is None:
-            continue
-        synthetic_roles = build_anonymous_condition_transfer_roles(
-            train.loc[source_position],
-            train.loc[donor_position],
+        for position in range(len(train))
+    ]
+    source_order = sorted(valid_positions, key=lambda position: stable_row_keys[position])
+    generated_per_source = {position: 0 for position in source_order}
+    used_donors = {position: set() for position in source_order}
+    source_rngs = {
+        position: np.random.default_rng(
+            _stable_seed(config.random_state, stable_row_keys[position])
         )
-        synthetic_record = canonical_candidate_record(synthetic_roles)
-        synthetic_reaction = synthetic_record["reaction_smiles"]
-        rows.append(
-            {
-                "candidate_id": candidate_id,
-                "reaction_smiles": synthetic_reaction,
-                "source_position": source_position,
-                "donor_position": donor_position,
-                "source_index": train.loc[source_position, "_source_dataframe_index"],
-                "donor_index": train.loc[donor_position, "_source_dataframe_index"],
-                "source_reaction_smiles": source.reaction_smiles,
-                "donor_reaction_smiles": donor.reaction_smiles,
-                "source_yield": float(y_train_array[source_position]),
-                "donor_yield": float(y_train_array[donor_position]),
-                "donor_strategy": config.donor_strategy,
-                "effective_donor_strategy": (
-                    config.fallback_policy if used_fallback else config.donor_strategy
-                ),
-                "fallback_policy": config.fallback_policy,
-                "fallback_used": bool(used_fallback),
-                "label_strategy": config.label_strategy,
-                "donor_similarity": float(donor_similarity),
-                "teacher_mean": np.nan,
-                "teacher_std": np.nan,
-                "synthetic_label": np.nan,
-                "source_product": source.product,
-                "source_substrate_block": source.substrate_block,
-                "donor_condition_block": donor.condition_block,
-                "synthetic_was_duplicate": False,
-                "existing_real_duplicate": False,
-                "accepted": False,
-                "kept": False,
-                **synthetic_record,
-            }
-        )
-        if len(rows) >= n_candidates:
-            break
+        for position in source_order
+    }
+    candidate_id = 0
+    for source_position in source_order:
+        while generated_per_source[source_position] < max_candidates_per_source:
+            available_positions = [
+                position
+                for position in sorted(valid_positions, key=lambda item: stable_row_keys[item])
+                if position == source_position or position not in used_donors[source_position]
+            ]
+            if len(available_positions) < 2:
+                break
+            donor_position, donor_similarity, used_fallback = _select_donor_position(
+                source_position=source_position,
+                valid_positions=available_positions,
+                y_train=y_train_array,
+                reaction_similarity=reaction_similarity,
+                substrate_similarity=substrate_similarity,
+                canonical_roles=canonical_train_roles,
+                config=config,
+                rng=source_rngs[source_position],
+            )
+            if used_fallback:
+                fallback_attempt_count += 1
+            if donor_position is None:
+                break
+            used_donors[source_position].add(donor_position)
+            if used_fallback:
+                high_yield_fallback_count += 1
+                fallback_success_count += 1
+            source = parsed[source_position]
+            donor = parsed[donor_position]
+            if source is None or donor is None:  # pragma: no cover - valid_positions invariant
+                continue
+            synthetic_roles = build_anonymous_condition_transfer_roles(
+                train.loc[source_position],
+                train.loc[donor_position],
+            )
+            synthetic_record = canonical_candidate_record(synthetic_roles)
+            generated_per_source[source_position] += 1
+            source_candidate_ordinal = generated_per_source[source_position]
+            substrate_score = float(substrate_similarity[source_position, donor_position])
+            product_score = float(product_similarity[source_position, donor_position])
+            condition_score = float(condition_similarity[source_position, donor_position])
+            relevant_context_score = float(np.mean([substrate_score, product_score]))
+            overall_score = float(
+                np.mean([substrate_score, product_score, condition_score])
+            )
+            rows.append(
+                {
+                    "candidate_id": candidate_id,
+                    "reaction_smiles": synthetic_record["reaction_smiles"],
+                    "source_position": source_position,
+                    "donor_position": donor_position,
+                    "source_index": train.loc[source_position, "_source_dataframe_index"],
+                    "donor_index": train.loc[donor_position, "_source_dataframe_index"],
+                    "source_reaction_smiles": source.reaction_smiles,
+                    "donor_reaction_smiles": donor.reaction_smiles,
+                    "source_yield": float(y_train_array[source_position]),
+                    "donor_yield": float(y_train_array[donor_position]),
+                    "donor_strategy": config.donor_strategy,
+                    "effective_donor_strategy": (
+                        config.fallback_policy if used_fallback else config.donor_strategy
+                    ),
+                    "fallback_policy": config.fallback_policy,
+                    "fallback_used": bool(used_fallback),
+                    "label_strategy": config.label_strategy,
+                    "donor_similarity": float(donor_similarity),
+                    "substrate_similarity": substrate_score,
+                    "product_similarity": product_score,
+                    "nontransferred_role_similarity": relevant_context_score,
+                    "condition_similarity": condition_score,
+                    "overall_similarity": overall_score,
+                    "relevant_context_similarity": relevant_context_score,
+                    "source_candidate_ordinal": source_candidate_ordinal,
+                    "generated_per_source": 0,
+                    "max_candidates_per_source": max_candidates_per_source,
+                    "source_product": source.product,
+                    "source_substrate_block": source.substrate_block,
+                    "donor_condition_block": donor.condition_block,
+                    "teacher_mean": np.nan,
+                    "teacher_std": np.nan,
+                    "synthetic_label": np.nan,
+                    "synthetic_was_duplicate": False,
+                    "existing_real_duplicate": False,
+                    "accepted": False,
+                    "kept": False,
+                    **synthetic_record,
+                }
+            )
+            candidate_id += 1
+
+    for row in rows:
+        row["generated_per_source"] = generated_per_source[int(row["source_position"])]
 
     candidate_df = pd.DataFrame(rows) if rows else _empty_candidate_df()
     if candidate_df.empty:
@@ -343,6 +403,22 @@ def generate_condition_transfer_examples(
     candidate_df["teacher_mean"] = teacher_mean
     candidate_df["teacher_std"] = teacher_std
     candidate_df["teacher_models_used"] = ",".join(teachers_used)
+    support_distance = _nearest_support_distance(X_synthetic, X_train_array)
+    candidate_df["nearest_training_support_distance"] = support_distance
+    candidate_df["support_distance_metric"] = "cosine_distance"
+    candidate_df["support_distance_backend"] = (
+        f"{real_feature_metadata.representation_kind}:"
+        f"{real_feature_metadata.fingerprint_backend}"
+    )
+    candidate_df["out_of_support_distance"] = support_distance
+    candidate_df["diversity_contribution"] = _diversity_contribution(X_synthetic)
+    uncertainty_rank_value, uncertainty_rank_basis = _uncertainty_ranking_proxy(
+        candidate_df,
+        y_train_array,
+    )
+    candidate_df["calibrated_uncertainty"] = np.nan
+    candidate_df["uncertainty_rank_value"] = uncertainty_rank_value
+    candidate_df["uncertainty_rank_basis"] = uncertainty_rank_basis
     labels = _assign_labels(candidate_df, config)
     candidate_df["synthetic_label"] = np.clip(
         labels,
@@ -354,15 +430,14 @@ def generate_condition_transfer_examples(
         ~np.isfinite(candidate_df["synthetic_label"].to_numpy(dtype=float)),
         "invalid_synthetic_label",
     )
-    if config.min_similarity is not None and config.donor_strategy in {
-        "nearest_reaction",
-        "nearest_substrate",
-        "high_yield_nearest",
-    }:
+    if config.min_similarity is not None:
         candidate_df = apply_filter_rejection(
             candidate_df,
-            candidate_df["donor_similarity"].to_numpy(dtype=float)
-            < float(config.min_similarity),
+            ~np.isfinite(candidate_df["donor_similarity"].to_numpy(dtype=float))
+            | (
+                candidate_df["donor_similarity"].to_numpy(dtype=float)
+                < float(config.min_similarity)
+            ),
             "similarity_below_threshold",
         )
     if (
@@ -379,11 +454,27 @@ def generate_condition_transfer_examples(
     candidate_df["accepted"] = accepted
     assert_accepted_identity_invariants(candidate_df)
     assert_accepted_role_change_invariants(candidate_df)
-    kept_indices = np.flatnonzero(accepted)[:target_count]
+    accepted_indices = np.flatnonzero(accepted)
+    if len(accepted_indices):
+        candidate_df.loc[accepted_indices, "diversity_contribution"] = (
+            _diversity_contribution(X_synthetic[accepted_indices])
+        )
+    candidate_df["candidate_rank"] = pd.Series(
+        pd.array([pd.NA] * len(candidate_df), dtype="Int64"),
+        index=candidate_df.index,
+    )
+    ranked_indices = _rank_accepted_candidates(candidate_df)
+    if ranked_indices:
+        candidate_df.loc[ranked_indices, "candidate_rank"] = np.arange(
+            1, len(ranked_indices) + 1
+        )
+    kept_indices = ranked_indices[:target_count]
     candidate_df.loc[kept_indices, "kept"] = True
 
-    synthetic_df = candidate_df.loc[candidate_df["kept"], _synthetic_columns()].copy()
-    synthetic_df["yield"] = candidate_df.loc[candidate_df["kept"], "synthetic_label"].to_numpy(dtype=float)
+    synthetic_df = candidate_df.loc[kept_indices, _synthetic_columns()].copy()
+    synthetic_df["yield"] = candidate_df.loc[
+        kept_indices, "synthetic_label"
+    ].to_numpy(dtype=float)
     synthetic_y = synthetic_df["yield"].to_numpy(dtype=float)
     duplicate_synthetic_count = int(candidate_df["synthetic_was_duplicate"].sum())
     existing_real_duplicate_count = int(candidate_df["existing_real_duplicate"].sum())
@@ -405,7 +496,7 @@ def generate_condition_transfer_examples(
         synthetic_y,
         metadata,
         candidate_df,
-        X_synthetic[candidate_df["kept"].to_numpy(dtype=bool)].astype(np.float32),
+        X_synthetic[np.asarray(kept_indices, dtype=int)].astype(np.float32),
         synthetic_feature_names,
         synthetic_feature_metadata,
     )
@@ -431,6 +522,14 @@ def _select_donor_position(
     if not candidates:
         return None, float("nan"), False
     if config.donor_strategy == "random":
+        candidates = _similarity_eligible_candidates(
+            source_position,
+            candidates,
+            reaction_similarity,
+            config.min_similarity,
+        )
+        if not candidates:
+            return None, float("nan"), False
         donor = int(rng.choice(candidates))
         return donor, float(reaction_similarity[source_position, donor]), False
     if config.donor_strategy == "nearest_substrate":
@@ -558,6 +657,14 @@ def _select_fallback_donor(
         )
         return donor, similarity, True
     if config.fallback_policy == "random":
+        candidates = _similarity_eligible_candidates(
+            source_position,
+            candidates,
+            reaction_similarity,
+            config.min_similarity,
+        )
+        if not candidates:
+            return None, float("nan"), True
         donor = int(rng.choice(candidates))
         return donor, float(reaction_similarity[source_position, donor]), True
     raise ValueError(f"Unsupported fallback policy: {config.fallback_policy}")
@@ -580,6 +687,23 @@ def _nearest_from_candidates(
         if config.min_similarity is None or score >= float(config.min_similarity):
             return donor, score
     return None, float("nan")
+
+
+def _similarity_eligible_candidates(
+    source_position: int,
+    candidates: list[int],
+    similarity: np.ndarray,
+    min_similarity: float | None,
+) -> list[int]:
+    if min_similarity is None:
+        return candidates
+    threshold = float(min_similarity)
+    return [
+        position
+        for position in candidates
+        if np.isfinite(similarity[source_position, position])
+        and float(similarity[source_position, position]) >= threshold
+    ]
 
 
 def _teacher_predictions(
@@ -675,10 +799,123 @@ def _substrate_similarity_matrix(
     return _cosine_similarity_matrix(np.vstack(fingerprints).astype(np.float32))
 
 
+def _token_group_similarity_matrix(
+    token_groups: list[tuple[str, ...]],
+    *,
+    n_bits: int,
+    radius: int,
+    backend: str,
+) -> np.ndarray:
+    fingerprints: list[np.ndarray] = []
+    for tokens in token_groups:
+        summed = np.zeros(n_bits, dtype=np.float32)
+        for token in tokens:
+            summed += morgan_fingerprint(
+                token,
+                radius=radius,
+                n_bits=n_bits,
+                warn_invalid=False,
+                backend=backend,
+            )
+        fingerprints.append(summed)
+    return _cosine_similarity_matrix(np.vstack(fingerprints).astype(np.float32))
+
+
 def _cosine_similarity_matrix(X: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(X, axis=1, keepdims=True)
     normalized = X / np.maximum(norms, 1e-12)
     return np.clip(normalized @ normalized.T, -1.0, 1.0)
+
+
+def _nearest_support_distance(
+    X_candidates: np.ndarray,
+    X_train: np.ndarray,
+) -> np.ndarray:
+    candidates = np.asarray(X_candidates, dtype=np.float64)
+    train = np.asarray(X_train, dtype=np.float64)
+    candidate_norms = np.linalg.norm(candidates, axis=1, keepdims=True)
+    train_norms = np.linalg.norm(train, axis=1, keepdims=True)
+    normalized_candidates = candidates / np.maximum(candidate_norms, 1e-12)
+    normalized_train = train / np.maximum(train_norms, 1e-12)
+    similarities = np.clip(normalized_candidates @ normalized_train.T, -1.0, 1.0)
+    return 1.0 - np.max(similarities, axis=1)
+
+
+def _diversity_contribution(X_candidates: np.ndarray) -> np.ndarray:
+    candidates = np.asarray(X_candidates, dtype=np.float64)
+    if len(candidates) <= 1:
+        return np.ones(len(candidates), dtype=float)
+    similarities = _cosine_similarity_matrix(candidates)
+    np.fill_diagonal(similarities, -np.inf)
+    return 1.0 - np.max(similarities, axis=1)
+
+
+def _uncertainty_ranking_proxy(
+    candidate_df: pd.DataFrame,
+    y_train: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    teacher_std = candidate_df["teacher_std"].to_numpy(dtype=float)
+    disagreement = 0.5 * np.abs(
+        candidate_df["source_yield"].to_numpy(dtype=float)
+        - candidate_df["donor_yield"].to_numpy(dtype=float)
+    )
+    raw = np.where(np.isfinite(teacher_std), teacher_std, disagreement)
+    calibration_scale = max(float(np.std(np.asarray(y_train, dtype=float))), 1.0)
+    basis = np.where(
+        np.isfinite(teacher_std),
+        "teacher_std_normalized_proxy_phase12_pending",
+        "source_donor_disagreement_normalized_proxy_phase12_pending",
+    )
+    return raw / calibration_scale, basis
+
+
+def _rank_accepted_candidates(candidate_df: pd.DataFrame) -> list[int]:
+    accepted = candidate_df.loc[candidate_df["accepted"].astype(bool)].copy()
+    if accepted.empty:
+        return []
+    accepted["_stable_canonical_key"] = accepted["canonical_reaction_key"].fillna("").astype(str)
+    ranked = accepted.sort_values(
+        by=[
+            "uncertainty_rank_value",
+            "relevant_context_similarity",
+            "diversity_contribution",
+            "out_of_support_distance",
+            "_stable_canonical_key",
+        ],
+        ascending=[True, False, False, True, True],
+        kind="mergesort",
+    )
+    return [int(index) for index in ranked.index]
+
+
+def _stable_training_row_key(
+    row: dict[str, Any],
+    canonical_reaction_key: str | None,
+    yield_value: float,
+) -> tuple[str, str, str]:
+    row_id = row.get("reaction_id")
+    stable_row_id = str(row_id) if row_id is not None and str(row_id) else ""
+    return (
+        str(canonical_reaction_key or row.get("reaction_smiles", "")),
+        stable_row_id,
+        f"{yield_value:.17g}",
+    )
+
+
+def _stable_seed(base_seed: int, key: tuple[str, str, str]) -> int:
+    digest = hashlib.sha256()
+    digest.update(str(int(base_seed)).encode("utf-8"))
+    for value in key:
+        digest.update(b"\0")
+        digest.update(value.encode("utf-8"))
+    return int.from_bytes(digest.digest()[:8], byteorder="little", signed=False)
+
+
+def _configured_max_candidates_per_source(config: ConditionTransferConfig) -> int:
+    legacy_limit = max(1, int(config.candidates_per_real))
+    if config.max_candidates_per_source is None:
+        return legacy_limit
+    return min(legacy_limit, max(1, int(config.max_candidates_per_source)))
 
 
 def _metadata_from_candidates(
@@ -707,6 +944,23 @@ def _metadata_from_candidates(
         "label_strategy": config.label_strategy,
         "synthetic_multiplier": float(config.synthetic_multiplier),
         "n_neighbors": int(config.n_neighbors),
+        "candidates_per_real": int(config.candidates_per_real),
+        "max_candidates_per_source": _configured_max_candidates_per_source(config),
+        "max_generated_per_source": (
+            int(candidate_df["generated_per_source"].max())
+            if not candidate_df.empty and "generated_per_source" in candidate_df
+            else 0
+        ),
+        "source_cap_violation_count": (
+            int(
+                (
+                    candidate_df.groupby("source_position").size()
+                    > _configured_max_candidates_per_source(config)
+                ).sum()
+            )
+            if not candidate_df.empty and "source_position" in candidate_df
+            else 0
+        ),
         "min_similarity": config.min_similarity,
         "max_teacher_std": config.max_teacher_std,
         "high_yield_threshold": float(config.high_yield_threshold),
@@ -743,6 +997,11 @@ def _validate_config(config: ConditionTransferConfig) -> None:
         raise ValueError("n_neighbors must be at least 1.")
     if config.candidates_per_real < 1:
         raise ValueError("candidates_per_real must be at least 1.")
+    if (
+        config.max_candidates_per_source is not None
+        and config.max_candidates_per_source < 1
+    ):
+        raise ValueError("max_candidates_per_source must be at least 1.")
     if config.clip_y_min > config.clip_y_max:
         raise ValueError("clip_y_min must be less than or equal to clip_y_max.")
 
@@ -761,6 +1020,25 @@ def _synthetic_columns() -> list[str]:
         "fallback_policy",
         "fallback_used",
         "label_strategy",
+        "donor_similarity",
+        "substrate_similarity",
+        "product_similarity",
+        "nontransferred_role_similarity",
+        "condition_similarity",
+        "overall_similarity",
+        "nearest_training_support_distance",
+        "support_distance_metric",
+        "support_distance_backend",
+        "calibrated_uncertainty",
+        "uncertainty_rank_value",
+        "uncertainty_rank_basis",
+        "relevant_context_similarity",
+        "diversity_contribution",
+        "out_of_support_distance",
+        "candidate_rank",
+        "source_candidate_ordinal",
+        "generated_per_source",
+        "max_candidates_per_source",
         "teacher_mean",
         "teacher_std",
         "synthetic_label",
@@ -793,7 +1071,6 @@ def _empty_candidate_df() -> pd.DataFrame:
             *_synthetic_columns(),
             "source_position",
             "donor_position",
-            "donor_similarity",
             "existing_real_duplicate",
             "accepted",
             "kept",

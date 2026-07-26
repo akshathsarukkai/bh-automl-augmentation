@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-26T23:07:13Z",
+  "updated_at": "2026-07-26T23:23:48Z",
   "phases": [
     {
       "phase_number": 1,
@@ -62,11 +62,11 @@
     {
       "phase_number": 2,
       "phase_name": "Enforce exact role-change semantics",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-26T22:58:57Z",
-      "completed_at": null,
+      "completed_at": "2026-07-26T23:08:16Z",
       "git_commit_at_start": "5268df37a39ba443fdf26ee15dc0a09d3bcb59ae",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "4c9f9c7497d0cc19927a3689841de91b5525d0ca",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_synthetic_identity.py tests/test_condition_transfer.py tests/test_role_aware_condition_transfer.py tests/test_corrected_condition_transfer_configs.py tests/test_autonomous_execution.py tests/test_corrected_condition_transfer_matching.py tests/test_condition_transfer_supervised_ae.py::test_hybrid_runner_tiny_writes_outputs_and_leakage_audits",
         "passed": 77,
@@ -111,16 +111,49 @@
     {
       "phase_number": 3,
       "phase_name": "Uniform similarity, source caps, and deterministic ranking",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-26T23:08:46Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "4c9f9c7497d0cc19927a3689841de91b5525d0ca",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_synthetic_identity.py tests/test_condition_transfer.py tests/test_role_aware_condition_transfer.py tests/test_condition_recombine.py tests/test_ensemble_filter.py tests/test_latent_interpolation.py tests/test_utility_guided_feature_gan.py tests/test_run_augmentation.py tests/test_corrected_condition_transfer_matching.py tests/test_condition_transfer_supervised_ae.py tests/test_phase1_identity_smoke.py tests/test_autonomous_execution.py",
+        "passed": 131,
+        "status": "passed",
+        "warnings": 5
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 414,
+        "status": "passed",
+        "warnings": 35
+      },
+      "smoke_test_result": {
+        "accepted_candidates": 0,
+        "candidate_proposals": 192,
+        "command": "python -B scripts/run_phase3_ranking_smoke.py results/autonomous_execution/phase_03/20260726-4c9f9c7-ranking-v1",
+        "impossible_threshold_generated_zero": true,
+        "max_candidates_per_source_observed": 2,
+        "permutation_invariant": true,
+        "status": "passed"
+      },
+      "output_paths": [
+        {
+          "path": "results/autonomous_execution/phase_03/20260726-4c9f9c7-ranking-v1/ranked_candidate_audit.csv",
+          "sha256": "b659cccc7d8e7cbb13dfc12ff87cf44a97987a286fb6ddb204de99bb980729ba"
+        },
+        {
+          "path": "results/autonomous_execution/phase_03/20260726-4c9f9c7-ranking-v1/smoke_manifest.json",
+          "sha256": "3028f21c2c9866f8a13310cf83d641854cd6d9b46fecd7e2eb765bbd4a381b1b"
+        }
+      ],
+      "warnings": [
+        "Calibrated uncertainty is intentionally null; deterministic proxy ranking is labeled phase12_pending and must not be interpreted as calibrated evidence.",
+        "The canonical dense-grid smoke produced zero accepted candidates after identity rejection; focused fixtures cover nonempty deterministic ranking and cap enforcement.",
+        "Latent interpolation and GAN controls are nonchemical feature generators, so component chemical similarities are explicitly null.",
+        "The bounded deterministic recombination pool may underfill a requested budget after strict identity and threshold filtering.",
+        "PyTorch bitwise reproducibility may vary across hardware and dependency versions."
+      ],
       "blockers": [],
       "dependencies": ["phase 1", "phase 2"]
     },

@@ -10,7 +10,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from bh_augmentation.augmentation.synthetic_identity import configured_feature_hash
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+    configured_feature_hash,
+)
 from bh_augmentation.models.baselines import get_model
 from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
@@ -43,6 +47,7 @@ class LatentInterpolationConfig:
     clip_y_max: float
     random_state: int
     candidates_per_real: int = 20
+    max_candidates_per_source: int | None = None
 
 
 def generate_latent_interpolations(
@@ -67,7 +72,27 @@ def generate_latent_interpolations(
         raise ValueError("z_train and y_train must contain the same number of rows.")
 
     n_real_train, latent_dim = z_train_array.shape
-    parent_row_ids = _normalize_parent_row_ids(source_row_ids, n_real_train)
+    parent_row_ids = _normalize_parent_row_ids(
+        source_row_ids,
+        z_train_array,
+        y_train_array,
+    )
+    original_positions = np.arange(n_real_train, dtype=int)
+    stable_order = np.asarray(
+        sorted(
+            range(n_real_train),
+            key=lambda index: (
+                parent_row_ids[index],
+                configured_feature_hash(z_train_array[index]) or "",
+                f"{float(y_train_array[index]):.17g}",
+            ),
+        ),
+        dtype=int,
+    )
+    z_train_array = z_train_array[stable_order]
+    y_train_array = y_train_array[stable_order]
+    parent_row_ids = [parent_row_ids[index] for index in stable_order]
+    original_positions = original_positions[stable_order]
     target_count = int(math.ceil(max(0.0, float(config.synthetic_multiplier)) * n_real_train))
     if n_real_train < 2 or target_count == 0:
         candidate_df = _empty_candidate_df()
@@ -78,7 +103,11 @@ def generate_latent_interpolations(
     similarity_matrix = _cosine_similarity_matrix(z_train_array)
     np.fill_diagonal(similarity_matrix, -np.inf)
     neighbor_count = min(max(1, int(config.n_neighbors)), n_real_train - 1)
-    neighbor_indices = np.argsort(-similarity_matrix, axis=1)[:, :neighbor_count]
+    neighbor_indices = np.argsort(
+        -similarity_matrix,
+        axis=1,
+        kind="stable",
+    )[:, :neighbor_count]
 
     n_candidates = max(target_count, int(math.ceil(max(1, config.candidates_per_real) * n_real_train)))
     parent_i = rng.integers(0, n_real_train, size=n_candidates)
@@ -107,8 +136,8 @@ def generate_latent_interpolations(
     candidate_df = pd.DataFrame(
         {
             "candidate_id": np.arange(n_candidates, dtype=int),
-            "parent_i": parent_i.astype(int),
-            "parent_j": parent_j.astype(int),
+            "parent_i": original_positions[parent_i].astype(int),
+            "parent_j": original_positions[parent_j].astype(int),
             "source_row_id": [parent_row_ids[index] for index in parent_i],
             "donor_row_id": [parent_row_ids[index] for index in parent_j],
             "alpha": alpha.astype(float),
@@ -130,8 +159,55 @@ def generate_latent_interpolations(
     candidate_df["label_strategy"] = config.label_strategy
     candidate_df["teacher_models_used"] = ",".join(teachers_used)
     candidate_df["neighbor_metric"] = "cosine"
+    candidate_df["substrate_similarity"] = np.nan
+    candidate_df["product_similarity"] = np.nan
+    candidate_df["nontransferred_role_similarity"] = np.nan
+    candidate_df["condition_similarity"] = np.nan
+    candidate_df["overall_similarity"] = candidate_df["nearest_train_similarity"]
+    candidate_df["relevant_context_similarity"] = candidate_df["parent_similarity"]
+    candidate_df["nearest_training_support_distance"] = (
+        1.0 - candidate_df["nearest_train_similarity"].to_numpy(dtype=float)
+    )
+    candidate_df["out_of_support_distance"] = candidate_df[
+        "nearest_training_support_distance"
+    ]
+    candidate_df["support_distance_metric"] = "cosine_distance"
+    candidate_df["support_distance_backend"] = "numpy_latent_coordinates"
+    candidate_df["diversity_contribution"] = _static_cosine_diversity(z_candidates)
+    teacher_proxy = candidate_df["teacher_std"].to_numpy(dtype=float)
+    interpolation_proxy = (
+        np.abs(y_train_array[parent_i] - y_train_array[parent_j])
+        * np.minimum(alpha, 1.0 - alpha)
+    )
+    scale = max(float(np.std(y_train_array)), 1.0)
+    candidate_df["calibrated_uncertainty"] = np.nan
+    candidate_df["uncertainty_rank_value"] = np.where(
+        np.isfinite(teacher_proxy),
+        teacher_proxy,
+        interpolation_proxy,
+    ) / scale
+    candidate_df["uncertainty_rank_basis"] = np.where(
+        np.isfinite(teacher_proxy),
+        "teacher_ensemble_std_normalized_uncalibrated_proxy_phase12_pending",
+        "parent_label_interpolation_gap_normalized_proxy_phase12_pending",
+    )
 
-    accepted_indices = np.flatnonzero(accepted_mask)[:target_count]
+    ranked_indices = _rank_candidate_indices(candidate_df)
+    candidate_df["candidate_rank"] = pd.Series(pd.NA, index=candidate_df.index, dtype="Int64")
+    for rank, index in enumerate(ranked_indices, start=1):
+        candidate_df.at[index, "candidate_rank"] = rank
+
+    source_cap = _configured_source_cap(config)
+    source_counts: dict[str, int] = {}
+    for index in ranked_indices:
+        source_id = str(candidate_df.at[index, "source_row_id"])
+        source_counts[source_id] = source_counts.get(source_id, 0) + 1
+        candidate_df.at[index, "source_candidate_ordinal"] = source_counts[source_id]
+        if source_counts[source_id] > source_cap:
+            candidate_df.at[index, "accepted"] = False
+            candidate_df.at[index, "rejection_reason"] = "per_source_cap"
+
+    accepted_indices = _rank_candidate_indices(candidate_df)[:target_count]
     candidate_df["kept"] = False
     candidate_df.loc[accepted_indices, "kept"] = True
     z_synthetic = z_candidates[accepted_indices].astype(np.float32)
@@ -281,10 +357,17 @@ def _audit_nonchemical_candidates(
 
 def _normalize_parent_row_ids(
     source_row_ids: Sequence[str] | None,
-    n_rows: int,
+    z_train: np.ndarray,
+    y_train: np.ndarray,
 ) -> list[str]:
+    n_rows = len(z_train)
     if source_row_ids is None:
-        return [f"train_position:{index}" for index in range(n_rows)]
+        return [
+            "feature:"
+            f"{configured_feature_hash(z_train[index])}:"
+            f"yield:{float(y_train[index]):.17g}"
+            for index in range(n_rows)
+        ]
     if len(source_row_ids) != n_rows:
         raise ValueError("source_row_ids must contain one identifier per training row.")
     normalized = [str(value) for value in source_row_ids]
@@ -348,6 +431,53 @@ def _max_cosine_similarity(z_candidates: np.ndarray, z_train: np.ndarray) -> np.
     return np.max(np.clip(normalized_candidates @ normalized_train.T, -1.0, 1.0), axis=1)
 
 
+def _static_cosine_diversity(z_candidates: np.ndarray) -> np.ndarray:
+    """Return each point's fixed distance to its nearest other candidate."""
+    values = np.asarray(z_candidates, dtype=np.float64)
+    if len(values) <= 1:
+        return np.ones(len(values), dtype=float)
+    normalized = values / np.maximum(np.linalg.norm(values, axis=1, keepdims=True), 1e-12)
+    nearest = np.full(len(values), -np.inf, dtype=float)
+    for start in range(0, len(values), 128):
+        stop = min(start + 128, len(values))
+        scores = np.clip(normalized[start:stop] @ normalized.T, -1.0, 1.0)
+        rows = np.arange(stop - start)
+        scores[rows, np.arange(start, stop)] = -np.inf
+        nearest[start:stop] = np.max(scores, axis=1)
+    return 1.0 - nearest
+
+
+def _rank_candidate_indices(candidate_df: pd.DataFrame) -> list[int]:
+    accepted = candidate_df.loc[candidate_df["accepted"].astype(bool)].copy()
+    if accepted.empty:
+        return []
+    accepted["_stable_feature_key"] = accepted["feature_hash"].fillna("~").astype(str)
+    accepted["_stable_source_key"] = accepted["source_row_id"].fillna("").astype(str)
+    accepted["_stable_donor_key"] = accepted["donor_row_id"].fillna("").astype(str)
+    ranked = accepted.sort_values(
+        [
+            "uncertainty_rank_value",
+            "relevant_context_similarity",
+            "diversity_contribution",
+            "out_of_support_distance",
+            "_stable_feature_key",
+            "_stable_source_key",
+            "_stable_donor_key",
+        ],
+        ascending=[True, False, False, True, True, True, True],
+        kind="mergesort",
+    )
+    return [int(index) for index in ranked.index]
+
+
+def _configured_source_cap(config: LatentInterpolationConfig) -> int:
+    return int(
+        config.max_candidates_per_source
+        if config.max_candidates_per_source is not None
+        else config.candidates_per_real
+    )
+
+
 def _sample_alpha(
     rng: np.random.Generator,
     n_candidates: int,
@@ -373,6 +503,13 @@ def _validate_config(config: LatentInterpolationConfig) -> None:
         raise ValueError("synthetic_multiplier must be non-negative.")
     if config.n_neighbors < 1:
         raise ValueError("n_neighbors must be at least 1.")
+    if config.candidates_per_real < 1:
+        raise ValueError("candidates_per_real must be at least 1.")
+    if (
+        config.max_candidates_per_source is not None
+        and config.max_candidates_per_source < 1
+    ):
+        raise ValueError("max_candidates_per_source must be at least 1.")
     if not 0 <= config.teacher_blend_weight <= 1:
         raise ValueError("teacher_blend_weight must be between 0 and 1.")
     if config.clip_y_min > config.clip_y_max:
@@ -380,7 +517,7 @@ def _validate_config(config: LatentInterpolationConfig) -> None:
 
 
 def _empty_candidate_df() -> pd.DataFrame:
-    return pd.DataFrame(
+    result = pd.DataFrame(
         columns=[
             "candidate_id",
             "parent_i",
@@ -399,6 +536,22 @@ def _empty_candidate_df() -> pd.DataFrame:
             "label_strategy",
             "teacher_models_used",
             "neighbor_metric",
+            "substrate_similarity",
+            "product_similarity",
+            "nontransferred_role_similarity",
+            "condition_similarity",
+            "overall_similarity",
+            "relevant_context_similarity",
+            "nearest_training_support_distance",
+            "out_of_support_distance",
+            "support_distance_metric",
+            "support_distance_backend",
+            "diversity_contribution",
+            "calibrated_uncertainty",
+            "uncertainty_rank_value",
+            "uncertainty_rank_basis",
+            "candidate_rank",
+            "source_candidate_ordinal",
             "canonical_reaction_key",
             "canonical_reaction_hash",
             "feature_hash",
@@ -417,6 +570,13 @@ def _empty_candidate_df() -> pd.DataFrame:
             "rejection_reason",
         ]
     )
+    for column in (
+        *REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+        *REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    ):
+        if column not in result:
+            result[column] = pd.Series(dtype=object)
+    return result
 
 
 def _package_result(

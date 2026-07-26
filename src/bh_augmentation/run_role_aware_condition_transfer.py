@@ -328,7 +328,7 @@ def _iter_role_transfer_policies(
         effective_mode, excluded_roles = _effective_policy_mode(str(mode), invariant_roles, exclude_invariant_roles)
         if effective_mode is None:
             continue
-        min_values = _as_list(transfer.get("min_similarities", [None])) if donor_strategy != "random" else [None]
+        min_values = _as_list(transfer.get("min_similarities", [None]))
         std_values = (
             _as_list(transfer.get("max_teacher_stds", [None]))
             if label_strategy == "uncertainty_filtered_teacher"

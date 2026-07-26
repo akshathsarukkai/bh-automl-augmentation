@@ -225,6 +225,134 @@ def test_strict_reject_never_silently_becomes_random_fallback() -> None:
     assert result["metadata"]["fallback_success_count"] == 0
 
 
+def test_random_and_random_fallback_apply_final_donor_similarity_threshold() -> None:
+    roles = [
+        ReactionRoles("CCBr", "N", "[Pd]", "P(C)(C)C", "N(C)(C)C", "CCO", "CCN"),
+        ReactionRoles("CCCl", "N", "[Pt]", "P(CC)(CC)CC", "N1CCCCC1", "CCCO", "CCN"),
+        ReactionRoles("CCCBr", "CN", "[Ni]", "P(C)(C)CC", "CCN(CC)CC", "CO", "CCCN"),
+    ]
+    reaction_similarity = np.array(
+        [[-np.inf, 0.3, 0.9], [0.3, -np.inf, 0.1], [0.9, 0.1, -np.inf]]
+    )
+    substrate_similarity = reaction_similarity.copy()
+    y = np.array([10.0, 20.0, 30.0])
+    random_config = _config("random", "average_label", min_similarity=0.8)
+
+    assert _select_donor_position(
+        0,
+        [0, 1, 2],
+        y,
+        reaction_similarity,
+        substrate_similarity,
+        roles,
+        random_config,
+        np.random.default_rng(1),
+    ) == (2, 0.9, False)
+
+    fallback_config = _config(
+        "high_yield_nearest",
+        "average_label",
+        high_yield_threshold=100.0,
+        fallback_policy="random",
+        min_similarity=0.8,
+    )
+    assert _select_donor_position(
+        0,
+        [0, 1, 2],
+        y,
+        reaction_similarity,
+        substrate_similarity,
+        roles,
+        fallback_config,
+        np.random.default_rng(1),
+    ) == (2, 0.9, True)
+
+
+@pytest.mark.parametrize("donor_strategy", ["random", "nearest_reaction"])
+def test_candidate_generation_is_permutation_stable_and_source_capped(
+    donor_strategy: str,
+) -> None:
+    train = _tiny_train_df()
+    permuted = train.sample(frac=1.0, random_state=17).reset_index(drop=True)
+
+    def generate(frame: pd.DataFrame) -> dict[str, object]:
+        X, y, _ = build_feature_matrix(frame, _feature_config())
+        return generate_condition_transfer_examples(
+            frame,
+            X,
+            y,
+            _config(
+                donor_strategy,
+                "average_label",
+                candidates_per_real=8,
+                max_candidates_per_source=2,
+            ),
+        )
+
+    original_result = generate(train)
+    permuted_result = generate(permuted)
+    comparison_columns = [
+        "source_reaction_smiles",
+        "donor_reaction_smiles",
+        "canonical_reaction_key",
+        "candidate_rank",
+        "kept",
+    ]
+    pd.testing.assert_frame_equal(
+        original_result["candidate_df"][comparison_columns].reset_index(drop=True),
+        permuted_result["candidate_df"][comparison_columns].reset_index(drop=True),
+    )
+
+    candidates = original_result["candidate_df"]
+    generated_counts = candidates.groupby("source_row_id").size()
+    assert generated_counts.le(2).all()
+    assert candidates["source_candidate_ordinal"].le(2).all()
+    assert candidates["generated_per_source"].le(2).all()
+    assert (candidates["max_candidates_per_source"] == 2).all()
+    assert original_result["metadata"]["max_generated_per_source"] <= 2
+    assert original_result["metadata"]["source_cap_violation_count"] == 0
+
+
+def test_audited_candidates_have_phase3_ranking_and_support_fields() -> None:
+    train = _tiny_train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+    result = generate_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            "random",
+            "average_label",
+            synthetic_multiplier=0.5,
+            candidates_per_real=4,
+        ),
+    )
+    candidates = result["candidate_df"]
+    required = {
+        "substrate_similarity",
+        "product_similarity",
+        "nontransferred_role_similarity",
+        "condition_similarity",
+        "overall_similarity",
+        "nearest_training_support_distance",
+        "calibrated_uncertainty",
+        "relevant_context_similarity",
+        "diversity_contribution",
+        "out_of_support_distance",
+        "candidate_rank",
+    }
+    assert required <= set(candidates)
+    assert candidates["calibrated_uncertainty"].isna().all()
+    assert candidates["uncertainty_rank_value"].notna().all()
+    assert candidates["uncertainty_rank_basis"].str.endswith("phase12_pending").all()
+    assert np.allclose(
+        candidates["nearest_training_support_distance"],
+        candidates["out_of_support_distance"],
+    )
+    kept = candidates.loc[candidates["kept"]]
+    assert sorted(kept["candidate_rank"].tolist()) == list(range(1, len(kept) + 1))
+
+
 def test_policy_factory_propagates_role_requirement_and_fallback_exactly() -> None:
     policies = _iter_condition_transfer_policies(
         {
@@ -257,6 +385,22 @@ def test_policy_factory_defaults_primary_semantics_to_strict_reject() -> None:
     assert len(policies) == 1
     assert policies[0].role_change_requirement == "all"
     assert policies[0].fallback_policy == "reject"
+
+
+def test_policy_factory_preserves_random_similarity_threshold() -> None:
+    policies = _iter_condition_transfer_policies(
+        {
+            "condition_transfer": {
+                "donor_strategies": ["random"],
+                "label_strategies": ["average_label"],
+                "min_similarities": [0.75],
+            }
+        },
+        seed=7,
+    )
+
+    assert len(policies) == 1
+    assert policies[0].min_similarity == 0.75
 
 
 @pytest.mark.parametrize(
@@ -495,6 +639,8 @@ def _config(
     max_teacher_std: float | None = None,
     role_change_requirement: str = "any",
     fallback_policy: str = "reject",
+    min_similarity: float | None = None,
+    max_candidates_per_source: int | None = None,
 ) -> ConditionTransferConfig:
     return ConditionTransferConfig(
         donor_strategy=donor_strategy,
@@ -503,7 +649,7 @@ def _config(
         label_strategy=label_strategy,
         teacher_models=["ridge", "random_forest"],
         max_teacher_std=max_teacher_std,
-        min_similarity=None,
+        min_similarity=min_similarity,
         high_yield_threshold=high_yield_threshold,
         clip_y_min=0.0,
         clip_y_max=100.0,
@@ -511,6 +657,7 @@ def _config(
         random_state=4,
         role_change_requirement=role_change_requirement,
         fallback_policy=fallback_policy,
+        max_candidates_per_source=max_candidates_per_source,
     )
 
 

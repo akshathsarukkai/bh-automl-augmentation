@@ -8,6 +8,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from bh_augmentation.augmentation.synthetic_identity import (
+    REQUIRED_SYNTHETIC_RANKING_FIELDS,
+    REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
+)
 from bh_augmentation.augmentation.utility_guided_feature_gan import (
     build_condition_matrix,
     compute_batch_reward,
@@ -105,6 +109,70 @@ def test_feature_candidate_audit_deduplicates_without_claiming_chemistry() -> No
     assert audit["identity_classification"].eq("feature_space_nonchemical").all()
     assert not audit["scientific_candidate_eligible"].any()
     assert accepted["feature_hash"].is_unique
+
+
+def test_feature_candidate_ranking_is_permutation_invariant_and_capped() -> None:
+    X_real = np.array(
+        [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
+        dtype=np.float32,
+    )
+    y_real = np.array([10.0, 20.0, 30.0], dtype=np.float32)
+    source_ids = ["row-z", "row-a", "row-m"]
+    teacher = train_model(get_model("ridge"), X_real, y_real)
+    candidates = pd.DataFrame(
+        {
+            "feature_vector": [
+                np.array([0.4, 0.6], dtype=np.float32),
+                np.array([0.9, 0.1], dtype=np.float32),
+                np.array([0.4, 0.6], dtype=np.float32),
+                np.array([0.2, 0.8], dtype=np.float32),
+            ],
+            "yield_bin": [0, 1, 0, 1],
+        }
+    )
+    config = {
+        "filters": {"enabled": False},
+        "max_candidates_per_source": 1,
+    }
+
+    first, audit = score_and_filter_feature_candidates(
+        candidates,
+        X_real,
+        [teacher],
+        config,
+        source_row_ids=source_ids,
+        return_audit=True,
+    )
+    candidate_permutation = [2, 0, 3, 1]
+    real_permutation = [2, 0, 1]
+    permuted, _ = score_and_filter_feature_candidates(
+        candidates.iloc[candidate_permutation].reset_index(drop=True),
+        X_real[real_permutation],
+        [teacher],
+        config,
+        source_row_ids=[source_ids[index] for index in real_permutation],
+        return_audit=True,
+    )
+    comparison_columns = ["source_row_id", "feature_hash"]
+    assert first[comparison_columns].to_dict("records") == permuted[
+        comparison_columns
+    ].to_dict("records")
+    assert first.groupby("source_row_id").size().max() == 1
+    assert np.isfinite(audit["nearest_training_support_distance"]).all()
+    assert audit["calibrated_uncertainty"].isna().all()
+    assert audit["support_distance_metric"].eq("cosine_distance").all()
+    assert set(REQUIRED_SYNTHETIC_SUPPORT_FIELDS) <= set(audit)
+    assert set(REQUIRED_SYNTHETIC_RANKING_FIELDS) <= set(audit)
+
+
+def test_feature_candidate_filter_rejects_nonpositive_source_cap() -> None:
+    with pytest.raises(ValueError, match="max_candidates_per_source"):
+        score_and_filter_feature_candidates(
+            pd.DataFrame(),
+            np.eye(2, dtype=np.float32),
+            [],
+            {"max_candidates_per_source": 0},
+        )
 
 
 def test_latent_mode_trains_student_on_generated_latent_vectors() -> None:
@@ -253,6 +321,7 @@ def test_utility_gan_runner_writes_policy_search_outputs(tmp_path: Path) -> None
     selected_path = tmp_path / "selected_policies.csv"
     metrics_path = tmp_path / "selected_policy_metrics.csv"
     split_path = tmp_path / "split_metadata.csv"
+    candidate_audit_path = tmp_path / "synthetic_candidate_audit.csv"
     _tiny_reactions(22).to_csv(data_path, index=False)
     config_path.write_text(
         f"""
@@ -327,6 +396,7 @@ output:
   search_metrics_path: {search_path}
   selected_policies_path: {selected_path}
   split_metadata_path: {split_path}
+  candidate_audit_path: {candidate_audit_path}
 """,
         encoding="utf-8",
     )
@@ -337,14 +407,18 @@ output:
     assert search_path.exists()
     assert selected_path.exists()
     assert metrics_path.exists()
+    assert candidate_audit_path.exists()
     search = pd.read_csv(search_path)
     selected = pd.read_csv(selected_path)
     metrics = pd.read_csv(metrics_path)
+    candidate_audit = pd.read_csv(candidate_audit_path)
     assert search["policy_id"].nunique() == 2
     assert set(search["split"]) == {"valid"}
     assert len(selected) == 1
     assert set(metrics["split"]) == {"valid", "test"}
     assert metrics["selected_policy"].all()
+    assert set(REQUIRED_SYNTHETIC_SUPPORT_FIELDS) <= set(candidate_audit)
+    assert set(REQUIRED_SYNTHETIC_RANKING_FIELDS) <= set(candidate_audit)
     assert {
         "n_generator_train",
         "n_reward_valid",
