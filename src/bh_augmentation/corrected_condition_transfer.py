@@ -403,6 +403,8 @@ def run_corrected_condition_transfer(
     )
     manifest["transfer_kind"] = transfer_kind
     manifest["selection_exclusion_count"] = len(selection_exclusions)
+    manifest["execution_protocol"] = "development_combined_search_and_test_pre_phase5"
+    manifest["confirmatory_selection_eligible"] = False
     write_json(paths["run_manifest"], manifest)
     return paths
 

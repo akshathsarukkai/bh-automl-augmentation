@@ -422,6 +422,8 @@ def run_condition_transfer_supervised_ae(config_path: str | Path) -> dict[str, P
         )
         manifest.update(saved_splits.audit_metadata)
         manifest["runner"] = "condition_transfer_supervised_ae"
+        manifest["execution_protocol"] = "development_combined_search_and_test_pre_phase6"
+        manifest["confirmatory_selection_eligible"] = False
         manifest["source_id_split_hashes"] = source_id_split_hashes
         write_json(paths["run_manifest_path"], manifest)
     _print_completion_summary(policy_metrics, selected_policies, comparisons)

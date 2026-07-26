@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-26T23:37:32Z",
+  "updated_at": "2026-07-26T23:54:39Z",
   "phases": [
     {
       "phase_number": 1,
@@ -160,11 +160,11 @@
     {
       "phase_number": 4,
       "phase_name": "Canonical split integration",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-26T23:24:34Z",
-      "completed_at": null,
+      "completed_at": "2026-07-26T23:38:16Z",
       "git_commit_at_start": "1bbfa0ebd08f514e2e1844687f944f3c46352adb",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "e601b1445cf08394d4ec2408c82ec3ac10bd3f04",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_saved_canonical_splits.py tests/test_canonical_grouped_splits.py tests/test_nested_low_data_splits.py tests/test_corrected_representation_baselines.py tests/test_corrected_condition_transfer_matching.py tests/test_corrected_condition_transfer_configs.py tests/test_condition_transfer_supervised_ae.py tests/test_corrected_run_manifests.py tests/test_autonomous_execution.py",
         "passed": 85,
@@ -220,16 +220,71 @@
     {
       "phase_number": 5,
       "phase_name": "Separate policy search from final evaluation",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-26T23:38:29Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "e601b1445cf08394d4ec2408c82ec3ac10bd3f04",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_policy_protocol.py tests/test_policy_search_final_evaluation.py tests/test_saved_canonical_splits.py tests/test_corrected_run_manifests.py tests/test_autonomous_execution.py tests/test_corrected_condition_transfer_matching.py tests/test_condition_transfer_supervised_ae.py tests/test_corrected_condition_transfer_configs.py",
+        "passed": 89,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 463,
+        "status": "passed",
+        "warnings": 35
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/run_phase5_protocol_smoke.py results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1",
+        "final_metric_rows": 4,
+        "final_test_evaluated": true,
+        "outer_test_prediction_batches": 1,
+        "output_hashes_validated": 5,
+        "search_metric_rows": 8,
+        "search_outer_test_metric_evaluations": 0,
+        "search_test_evaluated": false,
+        "selected_policy_count": 1,
+        "status": "passed"
+      },
+      "output_paths": [
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/smoke_manifest.json",
+          "sha256": "2582031e01a77b8111cbd0963a545cafae0ad4d74992f581981c539675dab51a"
+        },
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/search/frozen_policy.json",
+          "sha256": "8deb7e64aae80fbbc532c72481cbd765ed20981eb65903532c81662d75ad16fe"
+        },
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/search/search_metrics.csv",
+          "sha256": "b66ae482f037be86605d7f1f655a52ce1b3303221b2e877588a2c4bae1bb763d"
+        },
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/search/search_manifest.json",
+          "sha256": "9ab889ceee70a3ab8fa552eb4599d79331d0fbe9706500b57917006e8d24561f"
+        },
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/final/final_test_metrics.csv",
+          "sha256": "30833f22bd0e3ad003a40e33d92b322cc55114327724a9ddcce25409ea9f8b62"
+        },
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/final/final_evaluation_manifest.json",
+          "sha256": "da64d6b4b1e04b4496a75a6b95b782c72735c713f30f9368782d8c132270dfa7"
+        },
+        {
+          "path": "results/autonomous_execution/phase_05/20260726-e601b14-search-final-v1/final/evaluation_claim.json",
+          "sha256": "2b365ab44a0872f78f75e8bff9d9ced2a1f188248df876447fb7c0ab4bae8454"
+        }
+      ],
+      "warnings": [
+        "The tiny production smoke selects only between real-only Ridge policies; typed anonymous and role-aware search-to-final paths are covered by end-to-end fixtures rather than credited with canonical-slice gains.",
+        "Each command currently represents one seed and one training fraction; multi-seed orchestration is deferred to the confirmatory protocol.",
+        "AE hybrid policy search remains explicitly development-only pending the leakage and joint-selection repair in Phase 6.",
+        "Dirty-worktree and immutable-manifest hardening are dependencies of Phase 17."
+      ],
       "blockers": [],
       "dependencies": ["phase 4"]
     },

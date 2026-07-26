@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-26T23:24:34Z
+Updated: 2026-07-26T23:54:39Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -61,8 +61,8 @@ Calibrated uncertainty is deliberately null pending Phase 12, while transparent
 deterministic proxy ranks are labeled accordingly. Nonchemical interpolation
 and GAN controls report component chemical similarities as null.
 
-Current activity: Phase 4 passed its scientific and engineering gate; its local
-Git checkpoint is pending.
+Current status: Phase 4 passed and was checkpointed locally at
+`e601b1445cf08394d4ec2408c82ec3ac10bd3f04`.
 
 Phase 4 validation:
 
@@ -80,6 +80,27 @@ policy in this dense canonical slice, so the runners recorded exclusions and
 did not evaluate augmentation on the outer test. The hybrid completed its
 real-only AE control and selected no hybrid policy. This null eligibility result
 was not replaced by fallback generation.
+
+Current status: Phase 5 has passed its scientific and engineering gate and is
+awaiting its local checkpoint commit.
+
+Phase 5 validation:
+
+- Focused tests: 89 passed
+- Full suite: 463 passed (35 warnings)
+- Ruff and `git diff --check`: passed
+- Production integration smoke: 8 inner-validation metric rows, one frozen
+  policy, zero outer-test accesses during search, 4 final metric rows from one
+  outer-test prediction batch
+- All 5 scientific smoke outputs plus the exactly-once evaluation claim were
+  independently hash-validated
+- Anonymous and role-aware transfer both have end-to-end regression tests
+  proving validation-only search, frozen refit, one test prediction batch, and
+  propagation of the full measured canonical-key exclusion set
+
+The smoke is a protocol check, not evidence that transfer improves yield
+prediction. AE hybrid selection remains development-only until Phase 6 repairs
+its internal validation and joint selection.
 
 Canonical dependencies detected:
 

@@ -1,0 +1,33 @@
+seed: 0
+seeds: [0]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  method: canonical_saved
+  directory: results/corrected_canonical_splits
+low_data:
+  enabled: true
+  train_fractions: [0.01]
+features:
+  kind: bh_role_separated
+  n_bits: 32
+  radius: 2
+  fingerprint_backend: rdkit
+metrics: [rmse, mae, r2, spearman]
+policy_search:
+  selection_metric: rmse
+  lower_is_better: true
+  model_policies:
+    - policy_id: ridge-alpha-0.1
+      method: real_only
+      model: ridge
+      params: {alpha: 0.1}
+    - policy_id: ridge-alpha-1.0
+      method: real_only
+      model: ridge
+      params: {alpha: 1.0}
+output:
+  search_directory: results/corrected_policy_search_tiny
+  final_directory: results/corrected_final_evaluation_tiny
