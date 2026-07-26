@@ -14,8 +14,11 @@ from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     apply_filter_rejection,
     assert_accepted_identity_invariants,
+    assert_accepted_role_change_invariants,
     audit_candidate_identities,
+    audit_role_changes,
     canonical_candidate_record,
+    canonicalize_synthetic_roles,
     measured_canonical_keys,
 )
 from bh_augmentation.data.reaction_roles import (
@@ -34,6 +37,13 @@ from bh_augmentation.models.predict import predict_model
 from bh_augmentation.models.train import train_model
 
 DONOR_STRATEGIES = {"random", "nearest_reaction", "nearest_substrate", "high_yield_nearest"}
+FALLBACK_POLICIES = {"reject", "same_product", "nearest_substrate", "random"}
+ANONYMOUS_TRANSFER_ROLES = (
+    "catalyst",
+    "ligand",
+    "base",
+    "solvent_or_additive",
+)
 LABEL_STRATEGIES = {
     "teacher_ensemble",
     "uncertainty_filtered_teacher",
@@ -76,6 +86,8 @@ class ConditionTransferConfig:
     donor_similarity_n_bits: int = 2048
     donor_similarity_radius: int = 2
     donor_similarity_backend: str = "auto"
+    role_change_requirement: str = "all"
+    fallback_policy: str = "reject"
 
 
 def parse_condition_transfer_reaction(value: object) -> ParsedReaction | None:
@@ -150,6 +162,12 @@ def generate_condition_transfer_examples(
     )
     train = role_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
     train_records = train.to_dict(orient="records")
+    canonical_train_roles = [
+        canonicalize_synthetic_roles(reaction_roles_from_row(row)).roles
+        for row in train_records
+    ]
+    if any(roles is None for roles in canonical_train_roles):
+        raise ValueError("Condition-transfer source rows require valid canonical roles.")
     X_train_array = np.asarray(X_train, dtype=np.float32)
     y_train_array = np.asarray(y_train, dtype=np.float32).reshape(-1)
     if len(train) != len(X_train_array) or len(train) != len(y_train_array):
@@ -172,6 +190,8 @@ def generate_condition_transfer_examples(
             existing_real_duplicate_count=0,
             high_yield_fallback_count=0,
         )
+        metadata["fallback_attempt_count"] = 0
+        metadata["fallback_success_count"] = 0
         return _package_result(
             _empty_synthetic_df(), np.empty(0), metadata, _empty_candidate_df(),
             np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
@@ -197,6 +217,8 @@ def generate_condition_transfer_examples(
     rows: list[dict[str, Any]] = []
     attempts = max(n_candidates, target_count * 5)
     high_yield_fallback_count = 0
+    fallback_attempt_count = 0
+    fallback_success_count = 0
     for candidate_id in range(attempts):
         source_position = int(rng.choice(valid_positions))
         donor_position, donor_similarity, used_fallback = _select_donor_position(
@@ -205,13 +227,17 @@ def generate_condition_transfer_examples(
             y_train=y_train_array,
             reaction_similarity=reaction_similarity,
             substrate_similarity=substrate_similarity,
+            canonical_roles=canonical_train_roles,
             config=config,
             rng=rng,
         )
+        if used_fallback:
+            fallback_attempt_count += 1
         if donor_position is None:
             continue
         if used_fallback:
             high_yield_fallback_count += 1
+            fallback_success_count += 1
         source = parsed[source_position]
         donor = parsed[donor_position]
         if source is None or donor is None:
@@ -235,6 +261,11 @@ def generate_condition_transfer_examples(
                 "source_yield": float(y_train_array[source_position]),
                 "donor_yield": float(y_train_array[donor_position]),
                 "donor_strategy": config.donor_strategy,
+                "effective_donor_strategy": (
+                    config.fallback_policy if used_fallback else config.donor_strategy
+                ),
+                "fallback_policy": config.fallback_policy,
+                "fallback_used": bool(used_fallback),
                 "label_strategy": config.label_strategy,
                 "donor_similarity": float(donor_similarity),
                 "teacher_mean": np.nan,
@@ -265,6 +296,8 @@ def generate_condition_transfer_examples(
             existing_real_duplicate_count=0,
             high_yield_fallback_count=high_yield_fallback_count,
         )
+        metadata["fallback_attempt_count"] = fallback_attempt_count
+        metadata["fallback_success_count"] = fallback_success_count
         return _package_result(
             _empty_synthetic_df(), np.empty(0), metadata, candidate_df,
             np.empty((0, X_train_array.shape[1])), real_feature_names, real_feature_metadata,
@@ -288,6 +321,12 @@ def generate_condition_transfer_examples(
         X_synthetic,
         measured_keys=all_measured_keys,
         source_rows=train_records,
+    )
+    candidate_df = audit_role_changes(
+        candidate_df,
+        source_rows=train_records,
+        requested_roles=ANONYMOUS_TRANSFER_ROLES,
+        role_change_requirement=config.role_change_requirement,
     )
     candidate_df["synthetic_was_duplicate"] = (
         candidate_df["duplicate_synthetic"].astype(bool)
@@ -339,6 +378,7 @@ def generate_condition_transfer_examples(
     accepted = _acceptance_mask(candidate_df, X_synthetic, config)
     candidate_df["accepted"] = accepted
     assert_accepted_identity_invariants(candidate_df)
+    assert_accepted_role_change_invariants(candidate_df)
     kept_indices = np.flatnonzero(accepted)[:target_count]
     candidate_df.loc[kept_indices, "kept"] = True
 
@@ -358,6 +398,8 @@ def generate_condition_transfer_examples(
         high_yield_fallback_count=high_yield_fallback_count,
     )
     metadata["teacher_models_used"] = ",".join(teachers_used)
+    metadata["fallback_attempt_count"] = fallback_attempt_count
+    metadata["fallback_success_count"] = fallback_success_count
     return _package_result(
         synthetic_df.reset_index(drop=True),
         synthetic_y,
@@ -375,22 +417,40 @@ def _select_donor_position(
     y_train: np.ndarray,
     reaction_similarity: np.ndarray,
     substrate_similarity: np.ndarray,
+    canonical_roles: list[ReactionRoles | None],
     config: ConditionTransferConfig,
     rng: np.random.Generator,
 ) -> tuple[int | None, float, bool]:
     candidates = [position for position in valid_positions if position != source_position]
+    candidates = _role_change_eligible_candidates(
+        source_position,
+        candidates,
+        canonical_roles=canonical_roles,
+        requirement=config.role_change_requirement,
+    )
     if not candidates:
         return None, float("nan"), False
     if config.donor_strategy == "random":
         donor = int(rng.choice(candidates))
         return donor, float(reaction_similarity[source_position, donor]), False
     if config.donor_strategy == "nearest_substrate":
-        return _nearest_from_candidates(
+        donor, similarity = _nearest_from_candidates(
             source_position,
             candidates,
             substrate_similarity,
             config,
-        ) + (False,)
+        )
+        if donor is not None:
+            return donor, similarity, False
+        return _select_fallback_donor(
+            source_position,
+            candidates,
+            reaction_similarity=reaction_similarity,
+            substrate_similarity=substrate_similarity,
+            canonical_roles=canonical_roles,
+            config=config,
+            rng=rng,
+        )
     if config.donor_strategy == "high_yield_nearest":
         high_yield_candidates = [
             position
@@ -404,20 +464,103 @@ def _select_donor_position(
                 reaction_similarity,
                 config,
             )
-            return donor, similarity, False
-        donor, similarity = _nearest_from_candidates(
+            if donor is not None:
+                return donor, similarity, False
+        return _select_fallback_donor(
             source_position,
             candidates,
-            reaction_similarity,
-            config,
+            reaction_similarity=reaction_similarity,
+            substrate_similarity=substrate_similarity,
+            canonical_roles=canonical_roles,
+            config=config,
+            rng=rng,
         )
-        return donor, similarity, True
-    return _nearest_from_candidates(
+    donor, similarity = _nearest_from_candidates(
         source_position,
         candidates,
         reaction_similarity,
         config,
-    ) + (False,)
+    )
+    if donor is not None:
+        return donor, similarity, False
+    return _select_fallback_donor(
+        source_position,
+        candidates,
+        reaction_similarity=reaction_similarity,
+        substrate_similarity=substrate_similarity,
+        canonical_roles=canonical_roles,
+        config=config,
+        rng=rng,
+    )
+
+
+def _role_change_eligible_candidates(
+    source_position: int,
+    candidates: list[int],
+    *,
+    canonical_roles: list[ReactionRoles | None],
+    requirement: str,
+) -> list[int]:
+    source = canonical_roles[source_position]
+    if source is None:
+        return []
+    eligible: list[int] = []
+    for position in candidates:
+        donor = canonical_roles[position]
+        if donor is None:
+            continue
+        changed = [
+            role
+            for role in ANONYMOUS_TRANSFER_ROLES
+            if getattr(source, role) != getattr(donor, role)
+        ]
+        if (requirement == "all" and len(changed) == len(ANONYMOUS_TRANSFER_ROLES)) or (
+            requirement == "any" and changed
+        ):
+            eligible.append(position)
+    return eligible
+
+
+def _select_fallback_donor(
+    source_position: int,
+    candidates: list[int],
+    *,
+    reaction_similarity: np.ndarray,
+    substrate_similarity: np.ndarray,
+    canonical_roles: list[ReactionRoles | None],
+    config: ConditionTransferConfig,
+    rng: np.random.Generator,
+) -> tuple[int | None, float, bool]:
+    if config.fallback_policy == "reject":
+        return None, float("nan"), True
+    if config.fallback_policy == "same_product":
+        source = canonical_roles[source_position]
+        same_product = [
+            position
+            for position in candidates
+            if source is not None
+            and canonical_roles[position] is not None
+            and canonical_roles[position].product == source.product
+        ]
+        donor, similarity = _nearest_from_candidates(
+            source_position,
+            same_product,
+            reaction_similarity,
+            config,
+        )
+        return donor, similarity, True
+    if config.fallback_policy == "nearest_substrate":
+        donor, similarity = _nearest_from_candidates(
+            source_position,
+            candidates,
+            substrate_similarity,
+            config,
+        )
+        return donor, similarity, True
+    if config.fallback_policy == "random":
+        donor = int(rng.choice(candidates))
+        return donor, float(reaction_similarity[source_position, donor]), True
+    raise ValueError(f"Unsupported fallback policy: {config.fallback_policy}")
 
 
 def _nearest_from_candidates(
@@ -426,6 +569,8 @@ def _nearest_from_candidates(
     similarity: np.ndarray,
     config: ConditionTransferConfig,
 ) -> tuple[int | None, float]:
+    if not candidates:
+        return None, float("nan")
     scores = np.asarray([similarity[source_position, position] for position in candidates], dtype=float)
     order = np.argsort(-scores, kind="mergesort")
     n_neighbors = max(1, min(int(config.n_neighbors), len(order)))
@@ -557,6 +702,8 @@ def _metadata_from_candidates(
         "n_synthetic_train": int(len(kept)),
         "filter_acceptance_rate": float(n_accepted / n_generated) if n_generated else 0.0,
         "donor_strategy": config.donor_strategy,
+        "role_change_requirement": config.role_change_requirement,
+        "fallback_policy": config.fallback_policy,
         "label_strategy": config.label_strategy,
         "synthetic_multiplier": float(config.synthetic_multiplier),
         "n_neighbors": int(config.n_neighbors),
@@ -583,6 +730,13 @@ def _validate_config(config: ConditionTransferConfig) -> None:
         raise ValueError(f"Unsupported donor strategy: {config.donor_strategy}")
     if config.label_strategy not in LABEL_STRATEGIES:
         raise ValueError(f"Unsupported label strategy: {config.label_strategy}")
+    if config.role_change_requirement not in {"all", "any"}:
+        raise ValueError("role_change_requirement must be one of: all, any")
+    if config.fallback_policy not in FALLBACK_POLICIES:
+        raise ValueError(
+            "fallback_policy must be one of: "
+            + ", ".join(sorted(FALLBACK_POLICIES))
+        )
     if config.synthetic_multiplier < 0:
         raise ValueError("synthetic_multiplier must be non-negative.")
     if config.n_neighbors < 1:
@@ -603,6 +757,9 @@ def _synthetic_columns() -> list[str]:
         "source_yield",
         "donor_yield",
         "donor_strategy",
+        "effective_donor_strategy",
+        "fallback_policy",
+        "fallback_used",
         "label_strategy",
         "teacher_mean",
         "teacher_std",
@@ -612,6 +769,13 @@ def _synthetic_columns() -> list[str]:
         "donor_condition_block",
         "synthetic_was_duplicate",
         *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        "requested_roles",
+        "actual_changed_roles",
+        "unchanged_requested_roles",
+        "unexpected_changed_roles",
+        "change_mask",
+        "role_change_requirement",
+        "role_change_valid",
         "synthetic_identity_audit_version",
         "canonicalization_version",
         *CANONICAL_ROLE_COLUMNS,

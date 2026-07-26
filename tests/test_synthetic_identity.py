@@ -8,7 +8,9 @@ import pandas as pd
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     assert_accepted_identity_invariants,
+    assert_accepted_role_change_invariants,
     audit_candidate_identities,
+    audit_role_changes,
     canonical_candidate_record,
     canonicalize_synthetic_roles,
     configured_feature_hash,
@@ -131,6 +133,47 @@ def test_candidate_audit_regeneration_has_identical_hashes() -> None:
     assert first[columns].to_dict(orient="records") == second[columns].to_dict(
         orient="records"
     )
+
+
+def test_role_change_audit_enforces_all_requested_roles() -> None:
+    source = _roles()
+    changed_ligand_only = _roles(ligand="P(CC)(CC)CC")
+    candidate = pd.DataFrame([_candidate(changed_ligand_only)])
+    candidate["rejection_reason"] = None
+
+    audited = audit_role_changes(
+        candidate,
+        source_rows=[_row(source, "source"), _row(source, "donor")],
+        requested_roles=["ligand", "base"],
+        role_change_requirement="all",
+    )
+
+    assert audited.loc[0, "actual_changed_roles"] == "ligand"
+    assert audited.loc[0, "unchanged_requested_roles"] == "base"
+    assert audited.loc[0, "unexpected_changed_roles"] == ""
+    assert audited.loc[0, "change_mask"] == "0001000"
+    assert not bool(audited.loc[0, "role_change_valid"])
+    assert audited.loc[0, "rejection_reason"] == "role_change_requirement_not_met"
+
+
+def test_role_change_audit_allows_any_but_rejects_unrequested_changes() -> None:
+    source = _roles()
+    changed = _roles(ligand="P(CC)(CC)CC", product="CCNC")
+    candidate = pd.DataFrame([_candidate(changed)])
+    candidate["rejection_reason"] = None
+
+    audited = audit_role_changes(
+        candidate,
+        source_rows=[_row(source, "source"), _row(source, "donor")],
+        requested_roles=["ligand", "base"],
+        role_change_requirement="any",
+    )
+
+    assert audited.loc[0, "unexpected_changed_roles"] == "product"
+    assert not bool(audited.loc[0, "role_change_valid"])
+    assert audited.loc[0, "rejection_reason"] == "unexpected_role_change"
+    audited["accepted"] = False
+    assert_accepted_role_change_invariants(audited)
 
 
 def _roles(**changes: str) -> ReactionRoles:

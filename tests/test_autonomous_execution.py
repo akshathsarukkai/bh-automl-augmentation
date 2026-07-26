@@ -17,7 +17,12 @@ def test_repository_state_has_all_required_phases() -> None:
     state = load_and_validate_state("results/autonomous_execution/state.json")
 
     assert len(state["phases"]) == 18
-    assert first_resumable_phase(state) == 1
+    expected = next(
+        phase["phase_number"]
+        for phase in state["phases"]
+        if phase["status"] != "passed"
+    )
+    assert first_resumable_phase(state) == expected
 
 
 def test_missing_passed_artifact_reopens_phase(tmp_path: Path) -> None:

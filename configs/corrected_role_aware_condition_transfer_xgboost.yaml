@@ -32,6 +32,8 @@ models:
 metrics: [rmse, mae, r2, spearman]
 role_aware_condition_transfer:
   enabled: true
+  role_change_requirement: all
+  fallback_policy: reject
   exclude_invariant_roles: true
   allow_zero_synthetic_policy_selection: false
   role_transfer_modes:

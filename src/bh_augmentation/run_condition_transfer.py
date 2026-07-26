@@ -319,6 +319,10 @@ def _iter_condition_transfer_policies(
                     donor_similarity_backend=str(
                         transfer.get("donor_similarity_backend", "auto")
                     ),
+                    role_change_requirement=str(
+                        transfer.get("role_change_requirement", "all")
+                    ),
+                    fallback_policy=str(transfer.get("fallback_policy", "reject")),
                 )
             )
     return policies
@@ -568,6 +572,8 @@ def _policy_metric_fields(metadata: dict[str, Any]) -> dict[str, object]:
 def _empty_policy_metadata() -> dict[str, object]:
     return {
         "donor_strategy": "",
+        "role_change_requirement": "",
+        "fallback_policy": "",
         "label_strategy": "",
         "synthetic_multiplier": np.nan,
         "n_neighbors": np.nan,
@@ -594,7 +600,8 @@ def _policy_id(
         f"seed={seed}|frac={train_fraction}|policy={policy_index}|"
         f"donor={policy.donor_strategy}|label={policy.label_strategy}|"
         f"mult={policy.synthetic_multiplier}|k={policy.n_neighbors}|"
-        f"sim={policy.min_similarity}|std={policy.max_teacher_std}"
+        f"sim={policy.min_similarity}|std={policy.max_teacher_std}|"
+        f"change={policy.role_change_requirement}|fallback={policy.fallback_policy}"
     )
 
 

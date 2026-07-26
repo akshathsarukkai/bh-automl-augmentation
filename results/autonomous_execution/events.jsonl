@@ -1,3 +1,6 @@
 {"event":"autonomous_roadmap_initialized","git_commit":"01492f8d0c58a1f3b751e50cd420ee92ad1c60b5","timestamp":"2026-07-26T22:43:20Z"}
 {"event":"phase_started","git_commit_at_start":"01492f8d0c58a1f3b751e50cd420ee92ad1c60b5","phase_name":"Canonicalize and deduplicate synthetic candidates","phase_number":1,"timestamp":"2026-07-26T22:44:29Z"}
 {"event":"phase_gate_validated","focused_tests":{"passed":108,"warnings":3},"full_suite":{"passed":365,"warnings":34},"phase_number":1,"smoke":{"accepted":0,"deterministic_regeneration":true,"rejected":288},"timestamp":"2026-07-26T22:57:34Z"}
+{"event":"phase_passed","git_commit_at_end":"5268df37a39ba443fdf26ee15dc0a09d3bcb59ae","phase_name":"Canonicalize and deduplicate synthetic candidates","phase_number":1,"timestamp":"2026-07-26T22:58:40Z"}
+{"event":"phase_started","git_commit_at_start":"5268df37a39ba443fdf26ee15dc0a09d3bcb59ae","phase_name":"Enforce exact role-change semantics","phase_number":2,"timestamp":"2026-07-26T22:58:57Z"}
+{"event":"phase_gate_validated","focused_tests":{"passed":77,"warnings":1},"full_suite":{"passed":384,"warnings":35},"phase_number":2,"smoke":{"anonymous_candidates":0,"strict_reject_generated_zero":true,"typed_random_fallback_candidates":2},"timestamp":"2026-07-26T23:07:13Z"}

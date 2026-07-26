@@ -360,6 +360,10 @@ def _iter_role_transfer_policies(
                     donor_similarity_backend=str(
                         transfer.get("donor_similarity_backend", "auto")
                     ),
+                    role_change_requirement=str(
+                        transfer.get("role_change_requirement", "any")
+                    ),
+                    fallback_policy=str(transfer.get("fallback_policy", "random")),
                 )
             )
     max_policies = transfer.get("max_policies")

@@ -15,7 +15,10 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
 from bh_augmentation.corrected_condition_transfer import select_corrected_policy_rows
 from bh_augmentation.data.reaction_roles import ReactionRoles, reaction_roles_dataframe
 from bh_augmentation.features.featurize import DEPRECATED_FEATURE_ALIASES
-from bh_augmentation.run_role_aware_condition_transfer import _effective_policy_mode
+from bh_augmentation.run_role_aware_condition_transfer import (
+    _effective_policy_mode,
+    _iter_role_transfer_policies,
+)
 
 CORRECTED_CONFIGS = [
     "configs/corrected_representation_baselines_xgboost.yaml",
@@ -49,6 +52,63 @@ def test_corrected_transfer_configs_use_role_separated_rdkit(path: str) -> None:
     config = yaml.safe_load(Path(path).read_text())
     assert config["features"]["kind"] == "bh_role_separated"
     assert config["features"]["fingerprint_backend"] == "rdkit"
+
+
+@pytest.mark.parametrize(
+    ("path", "section"),
+    [
+        (
+            "configs/corrected_anonymous_condition_transfer_xgboost.yaml",
+            "condition_transfer",
+        ),
+        (
+            "configs/corrected_anonymous_condition_transfer_tiny.yaml",
+            "condition_transfer",
+        ),
+        (
+            "configs/corrected_role_aware_condition_transfer_xgboost.yaml",
+            "role_aware_condition_transfer",
+        ),
+        (
+            "configs/corrected_role_aware_condition_transfer_tiny.yaml",
+            "role_aware_condition_transfer",
+        ),
+    ],
+)
+def test_corrected_transfer_configs_declare_strict_role_change_and_reject_fallback(
+    path: str,
+    section: str,
+) -> None:
+    config = yaml.safe_load(Path(path).read_text())
+
+    assert config[section]["role_change_requirement"] == "all"
+    assert config[section]["fallback_policy"] == "reject"
+
+
+def test_role_aware_policy_factory_propagates_strict_role_change_config() -> None:
+    config = {
+        "role_aware_condition_transfer": {
+            "role_transfer_modes": ["ligand_base"],
+            "donor_strategies": ["random"],
+            "label_strategies": ["source_label"],
+            "synthetic_multipliers": [0.5],
+            "role_change_requirement": "all",
+            "fallback_policy": "reject",
+        }
+    }
+    role_counts = pd.DataFrame(
+        [
+            {"role": role, "n_unique": 2, "invariant": False}
+            for role in ["catalyst", "ligand", "base", "solvent_or_additive"]
+        ]
+    )
+
+    policy = _iter_role_transfer_policies(config, seed=7, role_value_counts=role_counts)[
+        0
+    ]
+
+    assert policy.role_change_requirement == "all"
+    assert policy.fallback_policy == "reject"
 
 
 def test_anonymous_transfer_preserves_substrates_product_and_replaces_conditions() -> None:

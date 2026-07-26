@@ -108,6 +108,106 @@ def test_identical_synthetic_reactions_are_skipped() -> None:
     assert result["synthetic_df"].empty
 
 
+@pytest.mark.parametrize(
+    ("override", "message"),
+    [
+        (
+            {"role_change_requirement": "sometimes"},
+            "role_change_requirement must be one of",
+        ),
+        ({"fallback_policy": "hidden_chain"}, "fallback_policy must be one of"),
+    ],
+)
+def test_invalid_role_change_configuration_is_rejected(
+    override: dict[str, object],
+    message: str,
+) -> None:
+    train = _train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    with pytest.raises(ValueError, match=message):
+        generate_role_aware_condition_transfer_examples(
+            train,
+            X,
+            y,
+            _config(**override),
+        )
+
+
+def test_ligand_base_all_rejects_donor_that_only_changes_ligand() -> None:
+    train = pd.DataFrame([_row(0), _row(1)])
+    train.loc[1, "recovered_base_smiles"] = train.loc[
+        0, "recovered_base_smiles"
+    ]
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    strict = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            role_transfer_mode="ligand_base",
+            donor_strategy="random",
+            label_strategy="source_label",
+            role_change_requirement="all",
+            fallback_policy="reject",
+        ),
+    )
+    permissive = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            role_transfer_mode="ligand_base",
+            donor_strategy="random",
+            label_strategy="source_label",
+            role_change_requirement="any",
+            fallback_policy="reject",
+        ),
+    )
+
+    assert strict["candidate_df"].empty
+    assert not permissive["candidate_df"].empty
+    accepted = permissive["candidate_df"].loc[
+        permissive["candidate_df"]["accepted"]
+    ]
+    assert not accepted.empty
+    assert accepted["role_change_valid"].astype(bool).all()
+    assert set(accepted["unchanged_requested_roles"]) == {"base"}
+    assert set(accepted["unexpected_changed_roles"]) == {""}
+
+
+def test_context_strategy_uses_only_the_declared_fallback() -> None:
+    train = pd.DataFrame([_row(0), _row(1)])
+    X, y, _ = build_feature_matrix(train, _feature_config())
+    common = {
+        "role_transfer_mode": "ligand_only",
+        "donor_strategy": "same_nontransferred_roles",
+        "label_strategy": "source_label",
+        "role_change_requirement": "all",
+    }
+
+    rejected = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(**common, fallback_policy="reject"),
+    )
+    random_fallback = generate_role_aware_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(**common, fallback_policy="random"),
+    )
+
+    assert rejected["candidate_df"].empty
+    assert not random_fallback["candidate_df"].empty
+    assert set(random_fallback["candidate_df"]["donor_fallback_level"]) == {
+        "fallback_random"
+    }
+    assert random_fallback["candidate_df"]["fallback_used"].astype(bool).all()
+
+
 def test_donor_rows_are_train_only_and_valid_test_are_not_used() -> None:
     train = _train_df()
     train.index = [10, 11, 12, 13, 14, 15]

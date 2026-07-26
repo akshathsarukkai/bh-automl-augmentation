@@ -13,9 +13,12 @@ import pandas as pd
 
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+    ROLE_CHANGE_REQUIREMENTS,
     apply_filter_rejection,
     assert_accepted_identity_invariants,
+    assert_accepted_role_change_invariants,
     audit_candidate_identities,
+    audit_role_changes,
     canonical_candidate_record,
     measured_canonical_keys,
 )
@@ -76,6 +79,7 @@ LABEL_STRATEGIES = {
     "source_label",
     "average_source_donor_label",
 }
+FALLBACK_POLICIES = {"reject", "same_product", "nearest_substrate", "random"}
 _TEACHER_MODEL_CACHE: dict[tuple[object, ...], list[Any]] = {}
 
 
@@ -109,6 +113,8 @@ class RoleAwareConditionTransferConfig:
     donor_similarity_n_bits: int = 256
     donor_similarity_radius: int = 2
     donor_similarity_backend: str = "auto"
+    role_change_requirement: str = "any"
+    fallback_policy: str = "random"
 
 
 def build_role_transferred_reaction_smiles(
@@ -237,10 +243,11 @@ def generate_role_aware_condition_transfer_examples(
             config=config,
             rng=rng,
         )
-        if donor_position is None:
-            continue
+        n_identical_skipped += donor_stats["n_source_identical_donors_rejected"]
         n_same_context_donors_found += donor_stats["n_same_context_donors_found"]
         n_role_changed_candidates_found += donor_stats["n_role_changed_candidates_found"]
+        if donor_position is None:
+            continue
 
         synthetic = build_role_transferred_reaction_smiles(
             train_records[source_position],
@@ -265,6 +272,8 @@ def generate_role_aware_condition_transfer_examples(
                 "donor_yield": float(y_train_array[donor_position]),
                 "donor_similarity": float(donor_similarity),
                 "donor_fallback_level": donor_fallback_level,
+                "fallback_policy": config.fallback_policy,
+                "fallback_used": donor_fallback_level.startswith("fallback_"),
                 "teacher_mean": np.nan,
                 "teacher_std": np.nan,
                 "synthetic_label": np.nan,
@@ -309,6 +318,12 @@ def generate_role_aware_condition_transfer_examples(
         measured_keys=all_measured_keys,
         source_rows=train_records,
     )
+    candidate_df = audit_role_changes(
+        candidate_df,
+        source_rows=train_records,
+        requested_roles=ROLE_TRANSFER_MODES[effective_mode],
+        role_change_requirement=config.role_change_requirement,
+    )
     n_identical_skipped += int(candidate_df["source_identical"].astype(bool).sum())
     n_invalid_role_parse_skipped += int(
         (~candidate_df["chemical_parse_valid"].astype(bool)).sum()
@@ -340,6 +355,7 @@ def generate_role_aware_condition_transfer_examples(
     accepted = _acceptance_mask(candidate_df, X_synthetic, config)
     candidate_df["accepted"] = accepted
     assert_accepted_identity_invariants(candidate_df)
+    assert_accepted_role_change_invariants(candidate_df)
     kept_indices = np.flatnonzero(accepted)[:target_count]
     candidate_df.loc[kept_indices, "kept"] = True
 
@@ -380,10 +396,28 @@ def _select_donor_position(
 ) -> tuple[int | None, float, str, dict[str, int]]:
     candidates = [position for position in range(len(train)) if position != source_position]
     transferred_roles = ROLE_TRANSFER_MODES[_effective_role_transfer_mode(config)]
-    role_changed_candidates = _filter_role_changed(candidates, source_position, role_values, transferred_roles)
+    role_changed_candidates = _filter_role_changed(
+        candidates,
+        source_position,
+        role_values,
+        transferred_roles,
+        requirement=config.role_change_requirement,
+    )
     stats = {
         "n_same_context_donors_found": 0,
         "n_role_changed_candidates_found": len(role_changed_candidates),
+        "n_source_identical_donors_rejected": len(
+            candidates
+        )
+        - len(
+            _filter_role_changed(
+                candidates,
+                source_position,
+                role_values,
+                transferred_roles,
+                requirement="any",
+            )
+        ),
     }
 
     if config.donor_strategy in {
@@ -401,12 +435,12 @@ def _select_donor_position(
             context_values=context_values,
             transferred_roles=transferred_roles,
             strategy=config.donor_strategy,
+            fallback_policy=config.fallback_policy,
             rng=rng,
             stats=stats,
         )
 
-    if config.donor_strategy == "diverse_role_value":
-        candidates = role_changed_candidates
+    candidates = role_changed_candidates
     if not candidates:
         return None, float("nan"), "unavailable", stats
 
@@ -422,7 +456,16 @@ def _select_donor_position(
         candidate_array = candidate_array[keep]
         scores = scores[keep]
     if len(candidate_array) == 0:
-        return None, float("nan"), "unavailable", stats
+        return _select_declared_fallback(
+            candidates=candidates,
+            source_position=source_position,
+            y_train=y_train,
+            substrate_similarity=substrate_similarity,
+            context_values=context_values,
+            fallback_policy=config.fallback_policy,
+            rng=rng,
+            stats=stats,
+        )
 
     if config.donor_strategy == "high_yield_nearest":
         order = np.lexsort((-scores, -y_train[candidate_array]))
@@ -443,6 +486,7 @@ def _select_context_aware_donor(
     context_values: dict[str, np.ndarray],
     transferred_roles: list[str],
     strategy: str,
+    fallback_policy: str,
     rng: np.random.Generator,
     stats: dict[str, int],
 ) -> tuple[int | None, float, str, dict[str, int]]:
@@ -476,35 +520,74 @@ def _select_context_aware_donor(
     elif strategy == "matched_product_or_reactant_key":
         levels = [("strict_matched_product_or_reactant_key", same_product_or_reactant)]
     else:
-        levels = [
-            ("strict_same_nontransferred_roles", same_nontransferred),
-            ("strict_matched_product_or_reactant_key", same_product_or_reactant),
-        ]
+        levels = [("strict_same_nontransferred_roles", same_nontransferred)]
 
-    levels.extend(
-        [
-            ("same_product_key", same_product),
-            ("nearest_substrate", candidates),
-            ("random_changed_role", candidates),
-        ]
-    )
     for fallback_level, level_candidates in levels:
         unique_candidates = sorted(set(level_candidates))
         if not unique_candidates:
             continue
-        if fallback_level.startswith("strict") or fallback_level == "same_product_key":
-            stats["n_same_context_donors_found"] += len(unique_candidates)
+        stats["n_same_context_donors_found"] += len(unique_candidates)
         donor_position = _choose_from_candidates(
             unique_candidates,
             source_position=source_position,
             y_train=y_train,
             substrate_similarity=substrate_similarity,
             prefer_high_yield=strategy == "high_yield_same_context",
-            random_choice=fallback_level == "random_changed_role",
+            random_choice=False,
             rng=rng,
         )
         return donor_position, float(substrate_similarity[source_position, donor_position]), fallback_level, stats
-    return None, float("nan"), "unavailable", stats
+    return _select_declared_fallback(
+        candidates=candidates,
+        source_position=source_position,
+        y_train=y_train,
+        substrate_similarity=substrate_similarity,
+        context_values=context_values,
+        fallback_policy=fallback_policy,
+        rng=rng,
+        stats=stats,
+    )
+
+
+def _select_declared_fallback(
+    candidates: list[int],
+    source_position: int,
+    y_train: np.ndarray,
+    substrate_similarity: np.ndarray,
+    context_values: dict[str, np.ndarray],
+    fallback_policy: str,
+    rng: np.random.Generator,
+    stats: dict[str, int],
+) -> tuple[int | None, float, str, dict[str, int]]:
+    """Apply exactly one named fallback to role-valid donor candidates."""
+    if fallback_policy == "reject" or not candidates:
+        return None, float("nan"), "fallback_reject", stats
+    fallback_candidates = sorted(set(candidates))
+    if fallback_policy == "same_product":
+        fallback_candidates = [
+            position
+            for position in fallback_candidates
+            if context_values["product_key"][position]
+            == context_values["product_key"][source_position]
+        ]
+        if not fallback_candidates:
+            return None, float("nan"), "fallback_same_product", stats
+        stats["n_same_context_donors_found"] += len(fallback_candidates)
+    donor_position = _choose_from_candidates(
+        fallback_candidates,
+        source_position=source_position,
+        y_train=y_train,
+        substrate_similarity=substrate_similarity,
+        prefer_high_yield=False,
+        random_choice=fallback_policy == "random",
+        rng=rng,
+    )
+    return (
+        donor_position,
+        float(substrate_similarity[source_position, donor_position]),
+        f"fallback_{fallback_policy}",
+        stats,
+    )
 
 
 def _choose_from_candidates(
@@ -532,11 +615,16 @@ def _filter_role_changed(
     source_position: int,
     role_values: dict[str, np.ndarray],
     transferred_roles: list[str],
+    requirement: str,
 ) -> list[int]:
+    predicate = all if requirement == "all" else any
     return [
         position
         for position in candidates
-        if any(role_values[role][position] != role_values[role][source_position] for role in transferred_roles)
+        if predicate(
+            role_values[role][position] != role_values[role][source_position]
+            for role in transferred_roles
+        )
     ]
 
 
@@ -692,6 +780,8 @@ def _metadata_from_candidates(
         "role_transfer_mode": config.role_transfer_mode,
         "effective_role_transfer_mode": _effective_role_transfer_mode(config),
         "donor_strategy": config.donor_strategy,
+        "role_change_requirement": config.role_change_requirement,
+        "fallback_policy": config.fallback_policy,
         "label_strategy": config.label_strategy,
         "n_unique_catalysts": int(config.n_unique_catalysts),
         "n_unique_ligands": int(config.n_unique_ligands),
@@ -714,6 +804,11 @@ def _metadata_from_candidates(
         "n_teacher_uncertainty_rejected": int(uncertainty_rejected),
         "n_zero_synthetic_policy_skipped": int(len(kept) == 0),
         "donor_fallback_level": _most_common(kept, "donor_fallback_level"),
+        "n_fallback_used": (
+            int(candidate_df["fallback_used"].astype(bool).sum())
+            if "fallback_used" in candidate_df
+            else 0
+        ),
         "n_same_context_donors_found": int(n_same_context_donors_found),
         "n_role_changed_candidates_found": int(n_role_changed_candidates_found),
         "unique_source_catalysts": int(train[ROLE_COLUMNS["catalyst"]].nunique(dropna=False)),
@@ -761,6 +856,8 @@ def _synthetic_columns() -> list[str]:
         "donor_yield",
         "donor_similarity",
         "donor_fallback_level",
+        "fallback_policy",
+        "fallback_used",
         "teacher_mean",
         "teacher_std",
         "synthetic_label",
@@ -776,6 +873,13 @@ def _synthetic_columns() -> list[str]:
         "changed_base",
         "changed_solvent_or_additive",
         *REQUIRED_SYNTHETIC_AUDIT_FIELDS,
+        "requested_roles",
+        "actual_changed_roles",
+        "unchanged_requested_roles",
+        "unexpected_changed_roles",
+        "change_mask",
+        "role_change_requirement",
+        "role_change_valid",
         "synthetic_identity_audit_version",
         "canonicalization_version",
         *CANONICAL_ROLE_COLUMNS,
@@ -797,6 +901,16 @@ def _validate_config(config: RoleAwareConditionTransferConfig) -> None:
         raise ValueError(f"Unknown donor_strategy: {config.donor_strategy}")
     if config.label_strategy not in LABEL_STRATEGIES:
         raise ValueError(f"Unknown label_strategy: {config.label_strategy}")
+    if config.role_change_requirement not in ROLE_CHANGE_REQUIREMENTS:
+        raise ValueError(
+            "role_change_requirement must be one of: "
+            + ", ".join(sorted(ROLE_CHANGE_REQUIREMENTS))
+        )
+    if config.fallback_policy not in FALLBACK_POLICIES:
+        raise ValueError(
+            "fallback_policy must be one of: "
+            + ", ".join(sorted(FALLBACK_POLICIES))
+        )
     if not config.teacher_models and config.label_strategy in {"teacher_ensemble", "uncertainty_filtered_teacher"}:
         raise ValueError("teacher_models must be non-empty for teacher label strategies.")
 

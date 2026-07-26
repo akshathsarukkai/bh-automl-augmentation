@@ -25,6 +25,7 @@ from bh_augmentation.data.reaction_roles import (
 
 FEATURE_HASH_SCHEMA_VERSION = "configured-feature-vector-v1"
 SYNTHETIC_IDENTITY_AUDIT_VERSION = "canonical-synthetic-identity-v1"
+ROLE_CHANGE_REQUIREMENTS = {"all", "any"}
 
 REQUIRED_SYNTHETIC_AUDIT_FIELDS = (
     "source_row_id",
@@ -265,6 +266,139 @@ def apply_filter_rejection(
     unclassified = result["rejection_reason"].isna().to_numpy(dtype=bool)
     result.loc[mask & unclassified, "rejection_reason"] = str(reason)
     return result
+
+
+def audit_role_changes(
+    candidate_df: pd.DataFrame,
+    *,
+    source_rows: Sequence[Mapping[str, Any]],
+    requested_roles: Sequence[str],
+    role_change_requirement: str,
+) -> pd.DataFrame:
+    """Compare canonical roles and enforce an exact requested change contract."""
+    requested = tuple(str(role) for role in requested_roles)
+    unknown = sorted(set(requested) - set(CANONICAL_ROLE_NAMES))
+    if not requested or unknown:
+        raise ValueError(
+            "requested_roles must be a non-empty subset of canonical roles"
+            + (f"; unknown={unknown}" if unknown else ".")
+        )
+    if len(set(requested)) != len(requested):
+        raise ValueError("requested_roles must not contain duplicates.")
+    if role_change_requirement not in ROLE_CHANGE_REQUIREMENTS:
+        raise ValueError(
+            "role_change_requirement must be one of: "
+            + ", ".join(sorted(ROLE_CHANGE_REQUIREMENTS))
+        )
+
+    result = candidate_df.copy()
+    source_identities = [
+        canonicalize_synthetic_roles(reaction_roles_from_row(row))
+        for row in source_rows
+    ]
+    records: list[dict[str, Any]] = []
+    invalid_contract = np.zeros(len(result), dtype=bool)
+    unexpected_contract = np.zeros(len(result), dtype=bool)
+    requested_set = set(requested)
+    for output_position, (_, candidate) in enumerate(result.iterrows()):
+        source_position = int(candidate["source_position"])
+        source_identity = source_identities[source_position]
+        candidate_identity = _candidate_identity(candidate)
+        if source_identity.roles is None:
+            raise ValueError(
+                f"Source row {source_position} has no valid canonical role identity."
+            )
+
+        changed = []
+        if candidate_identity.roles is not None:
+            changed = [
+                role
+                for role in CANONICAL_ROLE_NAMES
+                if getattr(candidate_identity.roles, role)
+                != getattr(source_identity.roles, role)
+            ]
+        actual_set = set(changed)
+        unchanged_requested = [
+            role for role in requested if role not in actual_set
+        ]
+        unexpected = [
+            role for role in CANONICAL_ROLE_NAMES
+            if role in actual_set and role not in requested_set
+        ]
+        requested_change_valid = (
+            not unchanged_requested
+            if role_change_requirement == "all"
+            else bool(actual_set & requested_set)
+        )
+        valid = bool(
+            candidate_identity.chemical_parse_valid
+            and requested_change_valid
+            and not unexpected
+        )
+        invalid_contract[output_position] = not valid
+        unexpected_contract[output_position] = bool(unexpected)
+        records.append(
+            {
+                "requested_roles": "|".join(requested),
+                "actual_changed_roles": "|".join(changed),
+                "unchanged_requested_roles": "|".join(unchanged_requested),
+                "unexpected_changed_roles": "|".join(unexpected),
+                "change_mask": "".join(
+                    "1" if role in actual_set else "0"
+                    for role in CANONICAL_ROLE_NAMES
+                ),
+                "role_change_requirement": role_change_requirement,
+                "role_change_valid": valid,
+            }
+        )
+
+    audit = pd.DataFrame(records, index=result.index)
+    for column in audit:
+        result[column] = audit[column]
+    result = apply_filter_rejection(
+        result,
+        unexpected_contract,
+        "unexpected_role_change",
+    )
+    result = apply_filter_rejection(
+        result,
+        invalid_contract,
+        "role_change_requirement_not_met",
+    )
+    return result
+
+
+def assert_accepted_role_change_invariants(candidate_df: pd.DataFrame) -> None:
+    """Hard-fail if a final accepted candidate violates its declared role change."""
+    required = {
+        "requested_roles",
+        "actual_changed_roles",
+        "unchanged_requested_roles",
+        "unexpected_changed_roles",
+        "change_mask",
+        "role_change_requirement",
+        "role_change_valid",
+    }
+    missing = sorted(required - set(candidate_df))
+    if missing:
+        raise ValueError("Role-change audit is missing fields: " + ", ".join(missing))
+    accepted = candidate_df.loc[candidate_df["accepted"].astype(bool)]
+    if accepted.empty:
+        return
+    if not accepted["role_change_valid"].astype(bool).all():
+        raise AssertionError("An accepted candidate violates its role-change contract.")
+    if accepted["unexpected_changed_roles"].fillna("").astype(str).str.len().gt(0).any():
+        raise AssertionError("An accepted candidate changes an unrequested role.")
+    strict = accepted["role_change_requirement"].eq("all")
+    if (
+        accepted.loc[strict, "unchanged_requested_roles"]
+        .fillna("")
+        .astype(str)
+        .str.len()
+        .gt(0)
+        .any()
+    ):
+        raise AssertionError("An accepted strict candidate leaves a requested role unchanged.")
 
 
 def assert_accepted_identity_invariants(candidate_df: pd.DataFrame) -> None:

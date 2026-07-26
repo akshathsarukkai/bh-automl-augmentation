@@ -6,9 +6,13 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from bh_augmentation.augmentation.condition_transfer import (
+    ANONYMOUS_TRANSFER_ROLES,
     ConditionTransferConfig,
+    _select_donor_position,
+    _validate_config,
     build_condition_transfer_reaction,
     parse_condition_transfer_reaction,
 )
@@ -18,14 +22,17 @@ from bh_augmentation.augmentation.condition_transfer import (
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
 )
-from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.data.reaction_roles import ReactionRoles, ensure_reaction_role_columns
 from bh_augmentation.features.featurize import (
     build_feature_matrix as _build_feature_matrix,
 )
 from bh_augmentation.features.featurize import (
     build_feature_matrix_with_metadata,
 )
-from bh_augmentation.run_condition_transfer import run_condition_transfer
+from bh_augmentation.run_condition_transfer import (
+    _iter_condition_transfer_policies,
+    run_condition_transfer,
+)
 
 
 def build_feature_matrix(df: pd.DataFrame, config: dict[str, object]):
@@ -96,6 +103,178 @@ def test_condition_transfer_parent_indices_are_train_only() -> None:
     assert set(synthetic["donor_index"]) <= train_indices
     assert set(synthetic["source_index"]).isdisjoint(valid_test_indices)
     assert set(synthetic["donor_index"]).isdisjoint(valid_test_indices)
+
+
+def test_strict_condition_transfer_changes_every_requested_role_only() -> None:
+    train = _strict_role_change_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy="random",
+            label_strategy="average_label",
+            role_change_requirement="all",
+            fallback_policy="reject",
+        ),
+    )
+
+    kept = result["candidate_df"].loc[result["candidate_df"]["kept"]]
+    assert not kept.empty
+    assert kept["role_change_valid"].all()
+    assert set(kept["requested_roles"]) == {"|".join(ANONYMOUS_TRANSFER_ROLES)}
+    assert set(kept["actual_changed_roles"]) == {"|".join(ANONYMOUS_TRANSFER_ROLES)}
+    assert not kept["unchanged_requested_roles"].any()
+    assert not kept["unexpected_changed_roles"].any()
+    assert set(kept["change_mask"]) == {"0011110"}
+    assert set(kept["role_change_requirement"]) == {"all"}
+
+
+def test_any_role_change_accepts_partial_condition_changes_and_audits_them() -> None:
+    train = _tiny_train_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy="random",
+            label_strategy="average_label",
+            role_change_requirement="any",
+        ),
+    )
+
+    kept = result["candidate_df"].loc[result["candidate_df"]["kept"]]
+    assert not kept.empty
+    assert kept["role_change_valid"].all()
+    assert kept["actual_changed_roles"].str.len().gt(0).all()
+    assert kept["unchanged_requested_roles"].str.len().gt(0).any()
+    assert not kept["unexpected_changed_roles"].any()
+
+
+def test_declared_fallback_policies_select_only_the_named_behavior() -> None:
+    roles = [
+        ReactionRoles(
+            "CCBr", "N", "[Pd]", "P(C)(C)C", "N(C)(C)C", "CCO", "CCN"
+        ),
+        ReactionRoles(
+            "CCCl", "N", "[Pt]", "P(CC)(CC)CC", "N1CCCCC1", "CCCO", "CCN"
+        ),
+        ReactionRoles(
+            "CCCBr", "CN", "[Ni]", "P(C)(C)CC", "CCN(CC)CC", "CO", "CCCN"
+        ),
+    ]
+    reaction_similarity = np.array(
+        [[-np.inf, 0.3, 0.9], [0.3, -np.inf, 0.1], [0.9, 0.1, -np.inf]]
+    )
+    substrate_similarity = np.array(
+        [[-np.inf, 0.2, 0.8], [0.2, -np.inf, 0.1], [0.8, 0.1, -np.inf]]
+    )
+    y = np.array([10.0, 20.0, 30.0])
+
+    def select(fallback_policy: str, seed: int = 9):
+        return _select_donor_position(
+            source_position=0,
+            valid_positions=[0, 1, 2],
+            y_train=y,
+            reaction_similarity=reaction_similarity,
+            substrate_similarity=substrate_similarity,
+            canonical_roles=roles,
+            config=_config(
+                donor_strategy="high_yield_nearest",
+                label_strategy="average_label",
+                high_yield_threshold=100.0,
+                role_change_requirement="all",
+                fallback_policy=fallback_policy,
+            ),
+            rng=np.random.default_rng(seed),
+        )
+
+    reject_donor, reject_similarity, reject_used = select("reject")
+    assert reject_donor is None
+    assert np.isnan(reject_similarity)
+    assert reject_used is True
+    assert select("same_product") == (1, 0.3, True)
+    assert select("nearest_substrate") == (2, 0.8, True)
+    expected_random = int(np.random.default_rng(9).choice([1, 2]))
+    assert select("random")[0] == expected_random
+    assert select("random")[2] is True
+
+
+def test_strict_reject_never_silently_becomes_random_fallback() -> None:
+    train = _strict_role_change_df()
+    X, y, _ = build_feature_matrix(train, _feature_config())
+
+    result = generate_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy="high_yield_nearest",
+            label_strategy="average_label",
+            high_yield_threshold=101.0,
+            role_change_requirement="all",
+            fallback_policy="reject",
+        ),
+    )
+
+    assert result["synthetic_df"].empty
+    assert result["metadata"]["fallback_success_count"] == 0
+
+
+def test_policy_factory_propagates_role_requirement_and_fallback_exactly() -> None:
+    policies = _iter_condition_transfer_policies(
+        {
+            "condition_transfer": {
+                "donor_strategies": ["nearest_reaction"],
+                "label_strategies": ["average_label"],
+                "role_change_requirement": "any",
+                "fallback_policy": "same_product",
+            }
+        },
+        seed=7,
+    )
+
+    assert len(policies) == 1
+    assert policies[0].role_change_requirement == "any"
+    assert policies[0].fallback_policy == "same_product"
+
+
+def test_policy_factory_defaults_primary_semantics_to_strict_reject() -> None:
+    policies = _iter_condition_transfer_policies(
+        {
+            "condition_transfer": {
+                "donor_strategies": ["random"],
+                "label_strategies": ["average_label"],
+            }
+        },
+        seed=7,
+    )
+
+    assert len(policies) == 1
+    assert policies[0].role_change_requirement == "all"
+    assert policies[0].fallback_policy == "reject"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("role_change_requirement", "sometimes"),
+        ("fallback_policy", "high_yield"),
+    ],
+)
+def test_role_change_and_fallback_config_reject_unsupported_values(
+    field: str,
+    value: str,
+) -> None:
+    config = _config(donor_strategy="random", label_strategy="average_label")
+    setattr(config, field, value)
+
+    with pytest.raises(ValueError, match=field):
+        _validate_config(config)
 
 
 def test_condition_transfer_donor_strategies_do_not_select_self() -> None:
@@ -261,6 +440,8 @@ condition_transfer:
   clip_y_min: 0.0
   clip_y_max: 100.0
   candidates_per_real: 3
+  role_change_requirement: any
+  fallback_policy: reject
   teacher_models: [ridge, random_forest]
 selection:
   split: valid
@@ -312,6 +493,8 @@ def _config(
     candidates_per_real: int = 10,
     high_yield_threshold: float = 70.0,
     max_teacher_std: float | None = None,
+    role_change_requirement: str = "any",
+    fallback_policy: str = "reject",
 ) -> ConditionTransferConfig:
     return ConditionTransferConfig(
         donor_strategy=donor_strategy,
@@ -326,6 +509,8 @@ def _config(
         clip_y_max=100.0,
         candidates_per_real=candidates_per_real,
         random_state=4,
+        role_change_requirement=role_change_requirement,
+        fallback_policy=fallback_policy,
     )
 
 
@@ -344,5 +529,19 @@ def _tiny_train_df(n_rows: int = 6) -> pd.DataFrame:
             "reaction_id": [f"{reaction_id}_{index}" for index, (reaction_id, _, _) in enumerate(rows)],
             "reaction_smiles": [reaction for _, reaction, _ in rows],
             "yield": [float((yield_value + index) % 101) for index, (_, _, yield_value) in enumerate(rows)],
+        }
+    )
+
+
+def _strict_role_change_df() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "reaction_id": ["strict_1", "strict_2", "strict_3"],
+            "reaction_smiles": [
+                "CCBr.N.[Pd].P(C)(C)C.N(C)(C)C.CCO>>CCN",
+                "CCCl.N.[Pt].P(CC)(CC)CC.N1CCCCC1.CCCO>>CCN",
+                "CCCBr.CN.[Ni].P(C)(C)CC.CCN(CC)CC.CO>>CCCNC",
+            ],
+            "yield": [20.0, 50.0, 80.0],
         }
     )

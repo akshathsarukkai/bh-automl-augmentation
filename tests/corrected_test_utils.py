@@ -15,6 +15,7 @@ def corrected_dataset(n_rows: int = 72) -> pd.DataFrame:
     ligands = ["P(C)(C)C", "P(CC)(CC)CC", "P(c1ccccc1)(c1ccccc1)c1ccccc1"]
     bases = ["O=P(O)(O)O", "O=C(O)O", "CN(C)C(=NC(C)(C)C)N(C)C"]
     solvents = ["CCO", "CCCO", "O1CCOCC1"]
+    catalysts = ["[Pd]", "[Pt]", "[Ni]"]
     products = ["c1ccccc1NC", "c1ccccc1NCC", "c1ccncc1NC"]
     rows: list[dict[str, Any]] = []
     for index in range(n_rows):
@@ -24,7 +25,7 @@ def corrected_dataset(n_rows: int = 72) -> pd.DataFrame:
         base = bases[(index // 5) % len(bases)]
         solvent = solvents[(index // 7) % len(solvents)]
         product = products[index % len(products)]
-        catalyst = "[Pd]"
+        catalyst = catalysts[(index // 11) % len(catalysts)]
         rows.append(
             {
                 "reaction_id": f"corrected_{index}",
@@ -41,6 +42,7 @@ def corrected_dataset(n_rows: int = 72) -> pd.DataFrame:
                 "recovered_base_smiles": base,
                 "recovered_solvent_or_additive_smiles": solvent,
                 "recovered_product_smiles": product,
+                "recovered_temperature": 25.0,
                 "condition_parse_status": "ok",
                 "role_validation_status": "valid",
             }
@@ -107,6 +109,8 @@ def write_corrected_config(
     elif kind == "anonymous":
         base["condition_transfer"] = {
             "enabled": True,
+            "role_change_requirement": "all",
+            "fallback_policy": "reject",
             "donor_strategies": ["random"],
             "label_strategies": ["teacher_ensemble"],
             "synthetic_multipliers": [0.5],
@@ -125,6 +129,8 @@ def write_corrected_config(
     elif kind == "role_aware":
         base["role_aware_condition_transfer"] = {
             "enabled": True,
+            "role_change_requirement": "all",
+            "fallback_policy": "reject",
             "exclude_invariant_roles": True,
             "allow_zero_synthetic_policy_selection": False,
             "role_transfer_modes": ["ligand_base_solvent_or_additive"],

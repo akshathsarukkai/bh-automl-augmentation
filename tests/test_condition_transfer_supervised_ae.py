@@ -259,6 +259,8 @@ models: [ridge]
 metrics: [rmse, mae, r2, spearman]
 condition_transfer:
   enabled: true
+  role_change_requirement: any
+  fallback_policy: reject
   selection_model: ridge
   donor_strategies: [random]
   label_strategies: [teacher_ensemble]

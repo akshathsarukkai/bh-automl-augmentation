@@ -28,6 +28,8 @@ models:
 metrics: [rmse, mae, r2, spearman]
 condition_transfer:
   enabled: true
+  role_change_requirement: all
+  fallback_policy: reject
   donor_strategies: [random]
   label_strategies: [teacher_ensemble]
   synthetic_multipliers: [0.5]

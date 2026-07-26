@@ -32,6 +32,8 @@ models:
 metrics: [rmse, mae, r2, spearman]
 condition_transfer:
   enabled: true
+  role_change_requirement: all
+  fallback_policy: reject
   donor_strategies: [random, nearest_reaction, high_yield_nearest]
   label_strategies: [teacher_ensemble, uncertainty_filtered_teacher, average_label]
   synthetic_multipliers: [0.5, 1.0]
