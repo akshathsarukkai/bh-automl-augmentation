@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-26T23:54:39Z
+Updated: 2026-07-27T00:17:11Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -81,8 +81,8 @@ did not evaluate augmentation on the outer test. The hybrid completed its
 real-only AE control and selected no hybrid policy. This null eligibility result
 was not replaced by fallback generation.
 
-Current status: Phase 5 has passed its scientific and engineering gate and is
-awaiting its local checkpoint commit.
+Current status: Phase 5 passed and was checkpointed locally at
+`0e3013887c9701fece8e052ecb1f3f6624f4367a`.
 
 Phase 5 validation:
 
@@ -101,6 +101,31 @@ Phase 5 validation:
 The smoke is a protocol check, not evidence that transfer improves yield
 prediction. AE hybrid selection remains development-only until Phase 6 repairs
 its internal validation and joint selection.
+
+Current status: Phase 6 has passed its scientific and engineering gate and is
+awaiting its local checkpoint commit.
+
+Phase 6 validation:
+
+- Focused tests: 78 passed
+- Full suite: 492 passed (35 warnings)
+- Ruff and `git diff --check`: passed
+- Canonical integration smoke: 32 eligible measured training rows were split
+  once into 26 AE-fit and 6 untouched real internal-validation rows
+- Three full joint tuples were declared; two strict anonymous tuples had zero
+  accepted synthetic rows and were explicitly excluded
+- The eligible real-only tuple was frozen, refit on all 32 eligible measured
+  rows with no validation reuse, and evaluated through one globally claimed
+  outer-test attempt and one prediction batch
+- No measured-refit, synthetic-parent, canonical validation, or test overlap
+  was detected; all 11 scientific outputs were independently rehashed
+
+The Phase 6 smoke is a leakage/refit protocol result, not evidence of
+augmentation efficacy or AE superiority. Accepted-synthetic production
+fixtures exercise the complete transfer→AE→downstream path and exact synthetic
+identity manifests. The legacy combined runner remains development-only, and
+its test-derived oracle is explicitly marked
+`post_hoc_test_oracle_not_for_selection`.
 
 Canonical dependencies detected:
 

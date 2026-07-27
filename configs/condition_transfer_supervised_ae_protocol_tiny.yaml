@@ -1,0 +1,69 @@
+seed: 0
+seeds: [0]
+corrected_revalidation:
+  enabled: true
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  method: canonical_saved
+  directory: results/corrected_canonical_splits
+low_data:
+  enabled: true
+  train_fractions: [0.01]
+features:
+  kind: bh_role_separated
+  n_bits: 32
+  radius: 2
+  fingerprint_backend: rdkit
+metrics: [rmse, mae]
+ae_policy_search:
+  selection_metric: rmse
+  lower_is_better: true
+  inner_split_seed_offset: 20000
+  transfer_policies:
+    - method: real_only
+    - method: anonymous
+      transfer_config:
+        donor_strategy: random
+        synthetic_multiplier: 0.5
+        n_neighbors: 3
+        label_strategy: teacher_ensemble
+        teacher_models: [ridge]
+        max_teacher_std: null
+        min_similarity: null
+        high_yield_threshold: 70.0
+        clip_y_min: 0.0
+        clip_y_max: 100.0
+        candidates_per_real: 3
+        random_state: 0
+        donor_similarity_n_bits: 64
+        donor_similarity_radius: 2
+        donor_similarity_backend: rdkit
+        role_change_requirement: all
+        fallback_policy: reject
+        max_candidates_per_source: 3
+  latent_dims: [16]
+  synthetic_supervised_weights: [0.5]
+  synthetic_reconstruction_weights: [0.1, 1.0]
+  downstream_models:
+    - name: ridge
+      params:
+        alpha: 1.0
+  ae_settings:
+    hidden_dims: [32]
+    dropout: 0.0
+    reconstruction_weight: 1.0
+    yield_weight: 1.0
+    latent_l2_weight: 0.0
+    learning_rate: 0.001
+    weight_decay: 0.0
+    batch_size: 8
+    max_epochs: 2
+    patience: 1
+    device: cpu
+    internal_valid_size: 0.2
+    minimum_inner_rows: 4
+    minimum_inner_groups: 2
+    refit_epochs: 2
+output:
+  ae_search_directory: results/corrected_joint_ae_policy_search_tiny

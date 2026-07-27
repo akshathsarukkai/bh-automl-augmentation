@@ -191,6 +191,7 @@ def test_hybrid_runner_tiny_writes_outputs_and_leakage_audits(tmp_path: Path) ->
     ae_audit = pd.read_csv(paths["ae_training_audit_path"])
     synthetic_audit = pd.read_csv(paths["synthetic_training_audit_path"])
     candidate_audit = pd.read_csv(paths["synthetic_candidate_audit_path"])
+    test_oracle = pd.read_csv(paths["hybrid_vs_best_parent_by_seed_path"])
     assert {"seed", "train_fraction"} <= set(metrics.columns)
     assert {"valid", "test"} <= set(metrics["split"])
     assert any(metrics["representation"].astype(str).str.endswith("_condition_transfer"))
@@ -207,6 +208,9 @@ def test_hybrid_runner_tiny_writes_outputs_and_leakage_audits(tmp_path: Path) ->
     }
     assert required <= set(candidate_audit)
     assert not candidate_audit[["source_row_id", "donor_row_id"]].isna().any().any()
+    assert test_oracle["analysis_role"].eq(
+        "post_hoc_test_oracle_not_for_selection"
+    ).all()
     for required in [
         "selected_hybrid_policies_path",
         "summary_path",

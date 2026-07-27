@@ -1158,6 +1158,7 @@ def _comparison_vs_best_parent(
     anonymous: pd.DataFrame,
     ae_only: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
+    oracle_label = "post_hoc_test_oracle_not_for_selection"
     rmse_anon = anonymous.loc[anonymous["metric"] == "rmse", ["seed", "train_fraction", "value"]]
     rmse_ae = ae_only.loc[ae_only["metric"] == "rmse", ["seed", "train_fraction", "value"]]
     choices = best_parent_rmse_by_seed(rmse_anon, rmse_ae)
@@ -1169,13 +1170,16 @@ def _comparison_vs_best_parent(
         ignore_index=True,
     ).merge(choices[["seed", "train_fraction", "best_parent"]], on=["seed", "train_fraction"])
     parent_all = parent_all.loc[parent_all["_parent_choice"] == parent_all["best_parent"]]
-    by_seed, _ = _comparison_frame(hybrid, parent_all, "best_parent_per_seed")
+    by_seed, _ = _comparison_frame(hybrid, parent_all, oracle_label)
     by_seed = by_seed.merge(
         choices[["seed", "train_fraction", "best_parent", "best_parent_rmse"]],
         on=["seed", "train_fraction"],
         how="left",
     )
-    return by_seed, _comparison_summary(by_seed)
+    by_seed["analysis_role"] = oracle_label
+    summary = _comparison_summary(by_seed)
+    summary["analysis_role"] = oracle_label
+    return by_seed, summary
 
 
 def _comparison_summary(by_seed: pd.DataFrame) -> pd.DataFrame:

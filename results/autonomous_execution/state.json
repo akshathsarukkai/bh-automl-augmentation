@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-26T23:54:39Z",
+  "updated_at": "2026-07-27T00:17:11Z",
   "phases": [
     {
       "phase_number": 1,
@@ -220,11 +220,11 @@
     {
       "phase_number": 5,
       "phase_name": "Separate policy search from final evaluation",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-26T23:38:29Z",
-      "completed_at": null,
+      "completed_at": "2026-07-26T23:55:50Z",
       "git_commit_at_start": "e601b1445cf08394d4ec2408c82ec3ac10bd3f04",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "0e3013887c9701fece8e052ecb1f3f6624f4367a",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_policy_protocol.py tests/test_policy_search_final_evaluation.py tests/test_saved_canonical_splits.py tests/test_corrected_run_manifests.py tests/test_autonomous_execution.py tests/test_corrected_condition_transfer_matching.py tests/test_condition_transfer_supervised_ae.py tests/test_corrected_condition_transfer_configs.py",
         "passed": 89,
@@ -291,16 +291,81 @@
     {
       "phase_number": 6,
       "phase_name": "Repair AE internal validation and joint policy selection",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-26T23:56:15Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "0e3013887c9701fece8e052ecb1f3f6624f4367a",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_ae_policy_protocol.py tests/test_ae_policy_search.py tests/test_ae_final_evaluation.py tests/test_policy_protocol.py tests/test_policy_search_final_evaluation.py tests/test_condition_transfer_supervised_ae.py tests/test_saved_canonical_splits.py tests/test_corrected_run_manifests.py tests/test_autonomous_execution.py",
+        "passed": 78,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 492,
+        "status": "passed",
+        "warnings": 35
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/run_phase6_ae_protocol_smoke.py results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2",
+        "failed_attempt_preserved": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v1",
+        "feasible_candidate_count": 1,
+        "joint_candidate_count": 3,
+        "leakage_detected": false,
+        "n_ae_fit": 26,
+        "n_ae_internal_validation": 6,
+        "n_eligible_outer_train": 32,
+        "n_synthetic_refit": 0,
+        "outer_test_attempts": 1,
+        "outer_test_prediction_batches": 1,
+        "output_hashes_validated": 11,
+        "selected_transfer_method": "real_only",
+        "status": "passed"
+      },
+      "output_paths": [
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/smoke_manifest.json",
+          "sha256": "1c1feb2b6ff04e01c25b4647da4bb082e161b8598b4a03d753e9e03b2b7ea33d"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/search/frozen_policy.json",
+          "sha256": "5555311b35e6a12700e4bd0ea57f7817cb4ed091b2a038de8112379aaea46dd0"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/search/search_manifest.json",
+          "sha256": "140ead27cf4e25e4130567180725d7dc7328039fa5c7d5447f26101561498079"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/search/search_metrics.csv",
+          "sha256": "e4544ce854f29d834686833fde6c66ec695c3fc5d393bb6c6a9ff54dc3756a6c"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/final/final_test_metrics.csv",
+          "sha256": "daa833eeb590350bddd689fa5e04a8e81983f90ae9c1427bd53ce2f2b683e208"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/final/final_evaluation_manifest.json",
+          "sha256": "9f81b39c5365af9cc2f27d2dd80ac6d7f8f740db3ae173a537b444bbfdb2b3bf"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/final/evaluation_claim.json",
+          "sha256": "468bffe44b5d52441d0c2cd6845c4885fa2760c7f81ad00ae55e2509959fd2fe"
+        },
+        {
+          "path": "results/autonomous_execution/phase_06/20260726-0e30138-joint-ae-v2/search/.outer_test_evaluation_claims/811c515bbc2dd0cacdf5d9dcaeeddb031c5bf3f1e8057e27ac5690a0a9c382a6/evaluation_claim.json",
+          "sha256": "51b4d5fbd81abe9103e8ecdcbd9b32066a1f62adb1d2cd5e899698931e9a81b6"
+        }
+      ],
+      "warnings": [
+        "The canonical seed-0, 1% smoke produced zero accepted strict anonymous candidates; both anonymous weight tuples were excluded and the only scientifically eligible winner was real-only.",
+        "The smoke validates leakage controls and refit semantics, not augmentation efficacy or AE superiority.",
+        "The authoritative v2 smoke follows a preserved failed v1 run whose empty candidate-audit schema mismatch was repaired and regression-tested.",
+        "The old combined hybrid runner remains development-only; its test-derived better-parent comparison is explicitly labeled post_hoc_test_oracle_not_for_selection.",
+        "PyTorch reproducibility across different CPU/GPU hardware is not asserted; dependency and hardware immutability are Phase 17 work.",
+        "Synthetic rows currently affect AE label-scaling statistics; measured-only weighted scaling is scheduled for the Phase 14 redesign."
+      ],
       "blockers": [],
       "dependencies": ["phase 5"]
     },
