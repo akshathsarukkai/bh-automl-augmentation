@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T07:02:21Z
+Updated: 2026-07-27T07:04:26Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -239,6 +239,44 @@ generalization evidence.
 Current status: Phase 9 passed and was checkpointed locally at
 `596e65801414c5e77fc63cd59b048bd9e1a12a83`.
 
+Current status: Phase 12 passed its scientific gate and is awaiting its local
+checkpoint.
+
+Phase 12 validation:
+
+- Focused tests: 177 passed (7 known warnings)
+- Full suite: 793 passed (36 known warnings)
+- Ruff and `git diff --check`: passed
+- Two fresh end-to-end smokes independently validated and produced identical
+  hashes for all 14 scientific artifacts
+- Production calibration: 30 saved split/fraction/condition units, six
+  uncertainty methods, 70,860 calibration predictions, 224/224 exactly
+  reconstructed hidden unit-targets, and 1,344 hidden method predictions
+- Deterministic validator refitting grounded estimator audits and all persisted
+  prediction fields; five fully rehashed oracle/provenance attacks are covered
+  by regression tests
+- Frozen validation policies selected bootstrap ExtraTrees in 26 units and
+  heterogeneous disagreement in four units
+
+Scientific result: validation-selected methods achieved hidden-measured RMSE
+9.067, MAE 6.251, and 90.6% marginal coverage for nominal 90% intervals. The
+validation-frozen filter accepted 114/224 targets; accepted targets had
+descriptive RMSE 5.349 versus 11.737 for rejected targets. This supports use of
+validation-calibrated uncertainty as a filtering signal in this exploratory
+retrospective experiment, not a causal or prospective claim.
+
+Limitations: accepted-target interval coverage was 84.2%, so marginal interval
+calibration does not transfer conditionally after filtering. The 224 unit-target
+records contain 163 unique measured rows, per-unit target counts are 2–15, and
+role/donor/context cohorts overlap and are descriptive only. Prospective
+laboratory validation has not been performed.
+
+Authoritative outputs:
+
+- `results/autonomous_execution/phase_12/corrected-20260726-a39a3eb-phase12-smoke-v12-a`
+- `results/autonomous_execution/phase_12/corrected-20260726-a39a3eb-phase12-smoke-v12-b`
+- `results/autonomous_execution/phase_12/corrected-20260726-a39a3eb-phase12-production-v1`
+
 Current status: Phase 10 is in progress from the Phase 9 checkpoint.
 
 Phase 10 gate validation:
@@ -317,5 +355,7 @@ role-exact `all`/`reject`, fallback-free, train-parent-only, and free of
 measured, source, canonical-key, and feature duplicates. The filtered and
 unfiltered typed controls share exact prefilter pools and accepted sets.
 
-Current status: Phase 11 has passed its scientific gate and is awaiting its
-local checkpoint commit.
+Current status: Phase 11 passed and was checkpointed locally at
+`a39a3ebfc391b2d5f9bdf50979ccc5b5bc9ce51e`.
+
+Current status: Phase 12 is in progress from the Phase 11 checkpoint.
