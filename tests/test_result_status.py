@@ -41,3 +41,44 @@ def test_result_csv_with_invalid_rows_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(InvalidResultError, match=r"RESULT_STATUS\.md"):
         read_result_csv(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        Path("results/stress/logo_product/fold_metrics.csv"),
+        Path("results/stress/logo_reactant/fold_metrics.csv"),
+        Path("results/baseline/stress_logo_product_metrics.csv"),
+        Path("results/baseline/stress_logo_reactant_metrics.csv"),
+    ],
+)
+def test_historical_logo_result_csv_is_rejected_by_default(path: Path) -> None:
+    with pytest.raises(InvalidResultError, match=r"historical_logo_.*RESULT_STATUS\.md"):
+        read_result_csv(path)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        Path("results/stress/logo_product/fold_metrics.csv"),
+        Path("results/stress/logo_reactant/fold_metrics.csv"),
+        Path("results/baseline/stress_logo_product_metrics.csv"),
+        Path("results/baseline/stress_logo_reactant_metrics.csv"),
+    ],
+)
+def test_historical_logo_result_csv_allows_explicit_inspection(path: Path) -> None:
+    table = read_result_csv(path, allow_invalid=True)
+
+    assert not table.empty
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        Path("results/corrected_logo_product_phase7/fold_metrics.csv"),
+        Path("results/corrected_logo_reactant_phase7/fold_metrics.csv"),
+        Path("results/stress/logo_productivity/fold_metrics.csv"),
+    ],
+)
+def test_fresh_or_nonmatching_logo_paths_remain_allowed(path: Path) -> None:
+    assert_result_directory_allowed(path)

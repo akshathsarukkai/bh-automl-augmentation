@@ -8,7 +8,10 @@ path. Corrected experiments must use fresh output directories after review.
 | --- | --- |
 | Role-aware condition transfer v2 | **Invalid** |
 | Any table containing role-aware v2 | **Invalid** |
-| Existing LOGO outputs without verified split metadata | **Invalid** |
+| Historical `results/stress/logo_product/` outputs | **Invalid** |
+| Historical `results/stress/logo_reactant/` outputs | **Invalid** |
+| Historical baseline `stress_logo_*_metrics.csv` files | **Invalid** |
+| Fresh corrected Phase 7 LOGO outputs | Eligible after split-contract validation |
 | Anonymous condition transfer | Development evidence |
 | Anonymous transfer + supervised AE | Development evidence |
 | Random-split baselines | Sanity checks |
@@ -52,6 +55,23 @@ a `run_manifest.json` with `historical_results_loaded=false`, and row-level
 `result_status=corrected_revalidation`. A corrected name alone is insufficient:
 comparison scripts validate manifests, feature hashes, split hashes, dataset
 hashes, and matched real-only metrics.
+
+## Why historical LOGO outputs are invalid
+
+The retained product and reactant outputs under `results/stress/logo_product/`
+and `results/stress/logo_reactant/`, together with the corresponding
+`results/baseline/stress_logo_product_metrics.csv` and
+`stress_logo_reactant_metrics.csv` files, do not contain sufficient evidence to
+verify leave-one-group-out evaluation. In particular, the baseline tables do
+not provide reproducible fold assignments, split hashes, and train/test group
+overlap audits. Their labels alone cannot establish that the saved metrics came
+from valid LOGO splits.
+
+These artifacts remain on disk for provenance. Default result readers reject
+them; `allow_invalid=True` permits explicit historical inspection only. Fresh
+corrected Phase 7 directories remain eligible when their manifests establish
+the declared held-out group, zero train/test group overlap, complete expected
+fold coverage, and assignment hashes.
 
 ## Canonical identity and future benchmarks
 

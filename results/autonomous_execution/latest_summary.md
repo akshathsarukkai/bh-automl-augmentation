@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T00:17:11Z
+Updated: 2026-07-27T00:29:42Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -102,8 +102,8 @@ The smoke is a protocol check, not evidence that transfer improves yield
 prediction. AE hybrid selection remains development-only until Phase 6 repairs
 its internal validation and joint selection.
 
-Current status: Phase 6 has passed its scientific and engineering gate and is
-awaiting its local checkpoint commit.
+Current status: Phase 6 passed and was checkpointed locally at
+`fc5b59aaae917e20594dff27abf7f48d58644248`.
 
 Phase 6 validation:
 
@@ -126,6 +126,30 @@ fixtures exercise the complete transfer→AE→downstream path and exact synthet
 identity manifests. The legacy combined runner remains development-only, and
 its test-derived oracle is explicitly marked
 `post_hoc_test_oracle_not_for_selection`.
+
+Current status: Phase 7 has passed its scientific and engineering gate and is
+awaiting its local checkpoint commit.
+
+Phase 7 validation:
+
+- Focused tests: 66 passed (2 expected/deprecation warnings)
+- Full suite: 531 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Canonical product LOGO: all 5 product groups held out exactly once, 10 fixed
+  Ridge metric rows, aggregate assignment hash `705a4474...`
+- Canonical reactant LOGO: all 15 substrate groups held out exactly once, 30
+  fixed Ridge metric rows, aggregate assignment hash `5d6ad098...`
+- Every fold covers all 3,955 rows exactly once as train or test; source,
+  canonical group, and canonical reaction-key overlaps are zero
+- Both target manifests and all 12 completion-bound outputs rehash exactly;
+  the root completion manifest was written only after both targets completed
+- Tracked historical stress LOGO outputs now reject default loading and remain
+  available only through explicit invalid-result inspection
+
+The logical targets use canonical identity columns:
+`product_key -> canonical_product_key` and
+`reactant_key -> canonical_substrate_key`. No model or representation is
+selected from LOGO test metrics in Phase 7.
 
 Canonical dependencies detected:
 

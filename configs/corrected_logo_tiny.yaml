@@ -1,0 +1,35 @@
+seed: 0
+
+corrected_revalidation:
+  enabled: true
+
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+
+splits:
+  method: leave_one_group_out
+  canonical_dependency_directory: results/corrected_canonical_splits
+  targets:
+    - product_key
+    - reactant_key
+
+features:
+  kind: bh_role_separated
+  n_bits: 32
+  radius: 2
+  fingerprint_backend: rdkit
+
+models:
+  - name: ridge
+    params:
+      alpha: 1.0
+
+metrics:
+  - rmse
+  - mae
+
+output:
+  # Example-only default. Scientific execution should pass a fresh,
+  # timestamp/commit/config-hash-addressed directory on the command line.
+  directory: results/corrected_logo_tiny_example_only
+  example_only: true

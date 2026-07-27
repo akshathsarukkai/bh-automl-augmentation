@@ -21,6 +21,29 @@ INVALID_RESULT_FAMILIES = {
     ),
 }
 
+INVALID_HISTORICAL_PATHS = {
+    ("results", "stress", "logo_product"): (
+        "historical_logo_product",
+        "The saved product LOGO family does not establish a verified "
+        "leave-one-group-out split contract.",
+    ),
+    ("results", "stress", "logo_reactant"): (
+        "historical_logo_reactant",
+        "The saved reactant LOGO family does not establish a verified "
+        "leave-one-group-out split contract.",
+    ),
+    ("results", "baseline", "stress_logo_product_metrics.csv"): (
+        "historical_logo_product_baseline",
+        "The saved product stress-LOGO baseline lacks the fold assignments and "
+        "overlap audit required to verify leave-one-group-out evaluation.",
+    ),
+    ("results", "baseline", "stress_logo_reactant_metrics.csv"): (
+        "historical_logo_reactant_baseline",
+        "The saved reactant stress-LOGO baseline lacks the fold assignments and "
+        "overlap audit required to verify leave-one-group-out evaluation.",
+    ),
+}
+
 INVALID_ROW_MARKERS = (
     "role_aware_condition_transfer",
     "role-aware condition transfer",
@@ -39,7 +62,10 @@ def assert_result_directory_allowed(
     """Reject known-invalid historical result directories by default."""
     if allow_invalid:
         return
-    normalized_parts = [part.lower() for part in Path(path).parts]
+    normalized_parts = tuple(part.lower() for part in Path(path).parts)
+    for marker, (family, reason) in INVALID_HISTORICAL_PATHS.items():
+        if _contains_path_marker(normalized_parts, marker):
+            raise InvalidResultError(_message(family, reason, path))
     for family, reason in INVALID_RESULT_FAMILIES.items():
         matching_parts = [part for part in normalized_parts if family in part]
         if matching_parts:
@@ -99,4 +125,13 @@ def _message(family: str, reason: str, path: str | Path) -> str:
         f"Result family '{family}' is invalid and cannot be loaded by default from {path}. "
         f"{reason} See {STATUS_DOCUMENT}. Pass allow_invalid=True only for explicit "
         "historical inspection; do not use these rows in benchmark claims."
+    )
+
+
+def _contains_path_marker(parts: tuple[str, ...], marker: tuple[str, ...]) -> bool:
+    """Return whether an exact, contiguous historical path marker is present."""
+    marker_length = len(marker)
+    return any(
+        parts[start : start + marker_length] == marker
+        for start in range(len(parts) - marker_length + 1)
     )
