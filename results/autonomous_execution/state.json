@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-27T02:12:09Z",
+  "updated_at": "2026-07-27T02:58:04Z",
   "phases": [
     {
       "phase_number": 1,
@@ -436,11 +436,11 @@
     {
       "phase_number": 8,
       "phase_name": "Nested group-aware OOD validation",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-27T00:31:16Z",
-      "completed_at": null,
+      "completed_at": "2026-07-27T02:14:15Z",
       "git_commit_at_start": "f4134eff438f3465656aef4dbcea30ec202deba2",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "fbbe2bf0811f6e8bd58b7e443ea68a52f2aef517",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_nested_ood.py tests/test_nested_ood_artifacts.py tests/test_evaluation_registry.py tests/test_nested_ood_evaluation.py tests/test_logo_protocol.py tests/test_corrected_logo_evaluation.py tests/test_policy_protocol.py tests/test_policy_search_final_evaluation.py tests/test_saved_canonical_splits.py tests/test_autonomous_execution.py",
         "passed": 111,
@@ -523,16 +523,41 @@
     {
       "phase_number": 9,
       "phase_name": "Scaffold, cluster, similarity, and condition OOD splits",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-27T02:14:23Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "fbbe2bf0811f6e8bd58b7e443ea68a52f2aef517",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_scaffold_ood.py tests/test_similarity_ood.py tests/test_condition_ood.py tests/test_chemical_ood_artifacts.py",
+        "passed": 44,
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 625,
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/build_corrected_chemical_ood_splits.py --config configs/corrected_chemical_ood_splits.yaml --output-directory results/autonomous_execution/phase_09/corrected-20260726-fbbe2bf-phase9-v2",
+        "status": "passed",
+        "artifact_semantics_rebuilt": true,
+        "families": 7,
+        "observed_folds": 296,
+        "included_folds": 289,
+        "excluded_folds": 7,
+        "nearest_similarity_rows": 20540,
+        "maximum_similarity_bound": 0.95
+      },
+      "output_paths": [
+        "results/autonomous_execution/phase_09/corrected-20260726-fbbe2bf-phase9-v2"
+      ],
+      "warnings": [
+        "The electrophile scaffold evidence is limited to two broad cores (benzene versus pyridine) and is descriptive fixed-policy evidence, not nested scaffold-policy-selection evidence.",
+        "Amine scaffold OOD is nonviable because all canonical rows share one direct Bemis-Murcko scaffold; the target is explicitly excluded.",
+        "Six reaction-fingerprint clusters with fewer than 10 test rows are explicitly excluded.",
+        "The preliminary v1 outputs are preserved but superseded after adversarial review exposed fail-open semantic validation and incorrect excluded-cluster sizes."
+      ],
       "blockers": [],
       "dependencies": ["phase 7", "phase 8"]
     },

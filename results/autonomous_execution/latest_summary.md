@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T02:12:09Z
+Updated: 2026-07-27T02:58:04Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -186,8 +186,8 @@ Phase 8 repair status:
   semantically validating compact artifacts, and using a repository-global
   identity-addressed per-unit evaluation registry.
 
-Current status: Phase 8 has passed its scientific and engineering gate and is
-awaiting its local checkpoint commit.
+Current status: Phase 8 passed and was checkpointed locally at
+`fbbe2bf0811f6e8bd58b7e443ea68a52f2aef517`.
 
 Phase 8 validation:
 
@@ -209,3 +209,32 @@ Scope limitation: this gate establishes nested OOD protocol and real-only
 model-policy selection evidence on canonical product groups. It does not claim
 typed-transfer OOD benefit, reactant-key Phase 8 empirical execution, or
 unbiased confirmatory evidence.
+
+Current status: Phase 9 is in progress from checkpoint
+`fbbe2bf0811f6e8bd58b7e443ea68a52f2aef517`.
+
+Phase 9 gate validation:
+
+- Focused tests: 44 passed
+- Full suite: 625 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Authoritative canonical output:
+  `results/autonomous_execution/phase_09/corrected-20260726-fbbe2bf-phase9-v2`
+- Seven ordered split families produced 296 fold records: 289 viable and
+  seven explicitly excluded. Every viable fold has complete nearest-training
+  similarity evidence under one canonical seven-role fingerprint contract.
+- The maximum-similarity-bounded split satisfies its configured 0.95 ceiling.
+- Independent validation rebuilds canonical source/key mappings, scaffold,
+  cluster, condition, ligand, base, bounded-similarity assignments,
+  fingerprints, nearest neighbors, lexical ties, and similarity quantiles.
+- Six undersupported reaction-fingerprint clusters are excluded with their
+  true attempted train/test sizes. Amine scaffold OOD is excluded because only
+  one direct scaffold exists.
+
+Scientific limitation: electrophile scaffold OOD contains only two broad
+cores (benzene and pyridine), so it is retained as limited descriptive
+fixed-policy evidence and not represented as broad or nested scaffold
+generalization evidence.
+
+Current status: Phase 9 has passed its gate and is awaiting its local
+checkpoint commit.

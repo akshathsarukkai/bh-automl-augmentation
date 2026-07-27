@@ -1,0 +1,15 @@
+dataset_path: data/processed/bh_canonical_roles_v1.csv
+canonical_split_directory: results/corrected_canonical_splits
+split_config:
+  n_bits_per_role: 256
+  radius: 2
+  cluster_similarity_cutoff: 0.65
+  maximum_similarity_bound: 0.95
+  target_test_fraction: 0.2
+  seed: 0
+  min_train_rows: 100
+  min_test_rows: 10
+  min_train_groups: 2
+  min_test_substrates: 2
+  min_train_substrates: 10
+  scaffold_min_train_groups: 1
