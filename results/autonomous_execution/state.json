@@ -664,7 +664,7 @@
       "started_at": "2026-07-27T07:04:26Z",
       "completed_at": "2026-07-27T08:15:47Z",
       "git_commit_at_start": "a39a3ebfc391b2d5f9bdf50979ccc5b5bc9ce51e",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "3fff5baf284d130b09557064f65a0f99b68a01ca",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_uncertainty_estimators.py tests/test_uncertainty_calibration.py tests/test_hidden_condition_probes.py tests/test_hidden_measured_calibration.py tests/test_saved_canonical_splits.py tests/test_synthetic_identity.py tests/test_role_aware_condition_transfer.py tests/test_condition_ood.py tests/test_featurization.py tests/test_feature_compatibility.py",
         "passed": 177,
@@ -712,16 +712,51 @@
     {
       "phase_number": 13,
       "phase_name": "Low-complexity representation-learning baselines",
-      "status": "not_started",
-      "started_at": null,
-      "completed_at": null,
-      "git_commit_at_start": null,
+      "status": "passed",
+      "started_at": "2026-07-27T08:18:00Z",
+      "completed_at": "2026-07-27T09:27:17Z",
+      "git_commit_at_start": "3fff5baf284d130b09557064f65a0f99b68a01ca",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_low_complexity_representations.py tests/test_isolated_fit_worker.py tests/test_outcome_access.py tests/test_low_complexity_benchmark.py",
+        "passed": 46,
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 839,
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "status": "passed",
+        "smoke_commands": [
+          "python -B scripts/run_low_complexity_benchmark.py --config configs/corrected_low_complexity_benchmark_phase13_smoke.yaml --output-directory results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-a",
+          "python -B scripts/run_low_complexity_benchmark.py --config configs/corrected_low_complexity_benchmark_phase13_smoke.yaml --output-directory results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-b"
+        ],
+        "production_command": "python -B scripts/run_low_complexity_benchmark.py --config configs/corrected_low_complexity_benchmark_phase13.yaml --output-directory results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-production-v1",
+        "evaluation_units": 10,
+        "method_families": 6,
+        "search_candidates": 120,
+        "frozen_policies": 60,
+        "final_prediction_rows": 23760,
+        "final_metric_rows": 240,
+        "single_test_batch_per_unit_method": true,
+        "deterministic_scientific_smoke_artifacts": true,
+        "deterministic_model_refit_validation": true
+      },
+      "output_paths": [
+        "results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-a",
+        "results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-b",
+        "results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-production-v1"
+      ],
+      "warnings": [
+        "The production benchmark covers canonical nested random splits at training fractions 0.2 and 1.0 only; Phase 13 results are development evidence rather than confirmatory or OOD evidence.",
+        "The width search is deliberately narrow at 8 and 16 latent units.",
+        "Evaluation claims prevent repeated outer-test access within a run but are run-local; cross-run immutable claim infrastructure remains Phase 17 work.",
+        "Training time is a fit-transform-prediction upper bound and peak RSS is absolute isolated-child ru_maxrss with baseline and increment recorded; resource comparisons are observational.",
+        "The partial_least_squares baseline uses a PLS latent transform followed by Ridge rather than the end-to-end PLSRegression predictor.",
+        "The production artifact records git_dirty_at_execution because the implementation is checkpointed only after its gate passes."
+      ],
       "blockers": [],
       "dependencies": ["phase 5", "phase 10"]
     },

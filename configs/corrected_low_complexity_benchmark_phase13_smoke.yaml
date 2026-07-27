@@ -1,0 +1,36 @@
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  canonical_directory: results/corrected_canonical_splits
+  random_seeds: [0]
+  random_fractions: [0.2]
+features:
+  kind: bh_role_separated
+  n_bits: 32
+  radius: 2
+  fingerprint_backend: rdkit
+methods:
+  families:
+    - truncated_svd
+    - linear_autoencoder
+    - partial_least_squares
+    - sparse_feature_selection
+    - small_bottleneck_mlp
+    - direct_mlp_regressor
+  latent_widths: [8, 16]
+  ridge_alpha: 1.0
+  linear_autoencoder:
+    epochs: 4
+    learning_rate: 0.01
+  neural:
+    max_epochs: 6
+    patience: 2
+    learning_rate: 0.01
+    weight_decay: 0.0
+    batch_size: 128
+    internal_validation_fraction: 0.2
+metrics: [rmse, mae, r2, spearman]
+selection_metric: rmse
+base_seed: 0
+output:
+  directory: results/corrected_low_complexity_benchmark_phase13_smoke

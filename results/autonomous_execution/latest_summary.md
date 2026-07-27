@@ -239,8 +239,77 @@ generalization evidence.
 Current status: Phase 9 passed and was checkpointed locally at
 `596e65801414c5e77fc63cd59b048bd9e1a12a83`.
 
-Current status: Phase 12 passed its scientific gate and is awaiting its local
-checkpoint.
+Current status: Phase 10 passed and was checkpointed locally at
+`5c2262fef524ae633e00baf9bb224eb4c0800490`.
+
+Phase 10 gate validation:
+
+- Focused tests: 105 passed (8 expected legacy-alias warnings)
+- Full suite: 657 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Small canonical integration smoke:
+  `results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-v4-smoke`
+- Authoritative production evidence:
+  `results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-production-v3`
+- Production uses 2048-bit RDKit role fingerprints, fixed 100-tree XGBoost,
+  five random seeds at each of five nested fractions, all five product LOGO
+  folds, all 15 reactant LOGO folds, and the primary maximum-similarity OOD
+  split.
+- All eight representations are paired over 46 immutable units, yielding
+  148,808 source-level predictions and 736 metric rows. No representation
+  selection occurs.
+- Planning reads identity columns only and freezes split, feature, model, and
+  config hashes before labels load. Saved Phase 7 LOGO and Phase 9 chemical
+  OOD assignments are independently replayed.
+- Validation requires exact test membership and recomputes every metric from
+  canonical outcomes and persisted predictions, then rebuilds every summary.
+  Production-v2 and production-v3 scientific artifacts are byte-identical.
+
+Scientific result: the complete reaction representations are close and their
+small RMSE differences are inconsistent across random and OOD evidence. There
+is no supported representation-superiority conclusion. Product-free is
+slightly better on the random means but slightly worse on product/reactant
+LOGO and bounded-similarity OOD. Substrate-only and condition-only are
+substantially worse. `product_aware` is an intentional exact duplicate control
+of seven-role blocks and is not counted as independent evidence.
+
+Current status: Phase 11 passed and was checkpointed locally at
+`a39a3ebfc391b2d5f9bdf50979ccc5b5bc9ce51e`.
+
+Phase 11 gate validation:
+
+- Focused tests: 139 passed (1 pandas warning)
+- Full suite: 724 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Small canonical integration smoke:
+  `results/autonomous_execution/phase_11/corrected-20260726-5c2262f-phase11-smoke-v11`
+- Authoritative production evidence:
+  `results/autonomous_execution/phase_11/corrected-20260726-5c2262f-phase11-production-v2`
+- The production matrix pairs all 13 predefined controls over the same five
+  canonical saved-split units, fixed 5% training fraction, 2048-bit RDKit
+  features, 100-tree XGBoost protocol, and nominal one-for-one augmentation
+  budget. It persists 25,740 source-level predictions and 130 metric rows.
+- Exact duplication, random oversampling, yield-stratified oversampling,
+  sample reweighting, nearest-neighbor pseudo-labeling, self-training, and
+  feature mixup consume their declared budgets exactly.
+- Strict chemical identity/change rules permit only 2 anonymous, 3 random
+  typed, and 6 context-matched typed candidates across 795 nominal additions;
+  the remaining budget is explicitly underfilled without fallback or backfill.
+
+Scientific result: at this single development fraction, no generic control
+improves mean RMSE over real-only. Anonymous transfer is 0.025 RMSE better on
+average but adds only two rows and wins two of five seeds; this is not evidence
+of transfer benefit. Typed controls are budget-underfilled and are not
+credited with gains.
+
+Independent adversarial review found no Phase 11 gate blocker. Every accepted
+candidate is canonical, role-exact `all`/`reject`, fallback-free,
+train-parent-only, and free of measured, source, canonical-key, and feature
+duplicates. The filtered and unfiltered typed controls share exact prefilter
+pools and accepted sets.
+
+Current status: Phase 12 passed and was checkpointed locally at
+`3fff5baf284d130b09557064f65a0f99b68a01ca`.
 
 Phase 12 validation:
 
@@ -277,85 +346,56 @@ Authoritative outputs:
 - `results/autonomous_execution/phase_12/corrected-20260726-a39a3eb-phase12-smoke-v12-b`
 - `results/autonomous_execution/phase_12/corrected-20260726-a39a3eb-phase12-production-v1`
 
-Current status: Phase 10 is in progress from the Phase 9 checkpoint.
+Current status: Phase 13 is in progress from checkpoint
+`3fff5baf284d130b09557064f65a0f99b68a01ca`.
 
-Phase 10 gate validation:
+Phase 13 plan:
 
-- Focused tests: 105 passed (8 expected legacy-alias warnings)
-- Full suite: 657 passed (36 warnings)
+- Compare SVD, a linear autoencoder, PLS, sparse feature selection, a compact
+  bottleneck MLP, and a parameter-matched direct MLP under the shared frozen
+  search/final-evaluation protocol.
+- Fit representations only on eligible outer-training rows and select
+  hyperparameters from inner validation without outer-test access.
+- Record exact parameter counts, latent width, wall time, peak memory,
+  selection metrics, test metrics, split hashes, and feature metadata.
+- Use the canonical saved nested assignments and refuse incompatible hashes.
+
+Phase 13 gate validation:
+
+- Focused tests: 46 passed
+- Full suite: 839 passed (36 known warnings)
 - Ruff and `git diff --check`: passed
-- Small canonical integration smoke:
-  `results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-v4-smoke`
-- Authoritative production evidence:
-  `results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-production-v3`
-- Production uses 2048-bit RDKit role fingerprints, fixed 100-tree XGBoost,
-  five random seeds at each of five nested fractions, all five product LOGO
-  folds, all 15 reactant LOGO folds, and the primary maximum-similarity OOD
-  split.
-- All eight representations are paired over 46 immutable units, yielding
-  148,808 source-level predictions and 736 metric rows. No representation
-  selection occurs.
-- Planning reads identity columns only and freezes split, feature, model, and
-  config hashes before labels load. Saved Phase 7 LOGO and Phase 9 chemical
-  OOD assignments are independently replayed.
-- Validation requires exact test membership and recomputes every metric from
-  canonical outcomes and persisted predictions, then rebuilds every summary.
-  Production-v2 and production-v3 scientific artifacts are byte-identical,
-  showing that the final label-access repair changed no result.
+- Two fresh end-to-end smokes independently validated and produced
+  byte-identical hashes for all 12 deterministic scientific artifacts
+- Production benchmark: 10 saved split/fraction units, six method families,
+  120 validation candidates, 60 frozen within-family policies, 23,760 final
+  predictions, and 240 final metric rows
+- All 120 search fits and 60 final refits used exactly their saved training
+  subsets, with zero saved-validation or outer-test overlap
+- Every unit/method was claimed before test access and evaluated in exactly
+  one final test-prediction batch
+- An independent full validator replay reproduced every fit state,
+  prediction, selection, metric, and output hash
 
-Scientific result: the complete reaction representations are close and their
-small RMSE differences are inconsistent across random and OOD evidence. There
-is no supported representation-superiority conclusion. Product-free is
-slightly better on the random means but slightly worse on product/reactant
-LOGO and bounded-similarity OOD. Substrate-only and condition-only are
-substantially worse. `product_aware` is an intentional exact duplicate control
-of seven-role blocks and is not counted as independent evidence.
+Development result: at 20% training, direct and bottleneck MLP mean RMSEs were
+13.596 and 13.647; at full training, they were 10.196 and 9.977. The linear
+autoencoder, SVD, PLS-latent-plus-Ridge, and sparse-selection baselines were
+worse in this paired random-split benchmark. Every method remains reported;
+outer-test metrics did not select a representation or setting. Phase 14 must
+decide supervised-AE benchmark status under predefined validation-selected
+comparisons.
 
-Current status: Phase 10 passed and was checkpointed locally at
-`5c2262fef524ae633e00baf9bb224eb4c0800490`.
+Limitations: this phase covers five seeds at fractions 0.2 and 1.0 on random
+canonical splits only, and the width search is limited to 8 and 16. Results
+are descriptive development evidence. Resource measurements are observational
+upper bounds over isolated fit/transform/predict workers, and evaluation
+claims are run-local.
 
-Current status: Phase 11 is testing from the Phase 10 checkpoint.
+Authoritative outputs:
 
-Phase 11 validation in progress:
+- `results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-a`
+- `results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-b`
+- `results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-production-v1`
 
-- Focused tests: 139 passed (1 pandas warning)
-- Full suite: 724 passed (36 warnings)
-- Ruff and `git diff --check`: passed
-- Small canonical integration smoke:
-  `results/autonomous_execution/phase_11/corrected-20260726-5c2262f-phase11-smoke-v11`
-- Candidate production evidence:
-  `results/autonomous_execution/phase_11/corrected-20260726-5c2262f-phase11-production-v2`
-- The production matrix pairs all 13 predefined controls over the same five
-  canonical saved-split units, fixed 5% training fraction, 2048-bit RDKit
-  features, 100-tree XGBoost protocol, and nominal one-for-one augmentation
-  budget. It persists 25,740 source-level predictions and 130 metric rows.
-- Exact duplication, random oversampling, yield-stratified oversampling,
-  sample reweighting, nearest-neighbor pseudo-labeling, self-training, and
-  feature mixup consume their declared budgets exactly.
-- Strict chemical identity/change rules permit only 2 anonymous, 3 random
-  typed, and 6 context-matched typed candidates across 795 nominal additions;
-  the remaining budget is explicitly underfilled without fallback or backfill.
-- Production-v1 remains preserved as a failed artifact. Its own strict
-  validator detected traversal-order versus candidate-rank audit provenance
-  and pre-float32 label mismatches. The fitting arrays were correct; production
-  audit ordering/precision was repaired, regression-tested, and regenerated
-  as production-v2.
-
-Preliminary scientific result: at this single development fraction, no generic
-control improves mean RMSE over real-only. Anonymous transfer is 0.025 RMSE
-better on average but adds only two rows and wins two of five seeds; this is not
-evidence of transfer benefit. Typed controls are budget-underfilled and are not
-credited with gains. Raw teacher standard deviation is explicitly uncalibrated
-and cannot support scientific uncertainty filtering until Phase 12.
-
-Independent adversarial review found no Phase 11 gate blocker. All 23 accepted
-chemical method-rows represent the same six proposal identities per
-context-matched control where applicable; every accepted row is canonical,
-role-exact `all`/`reject`, fallback-free, train-parent-only, and free of
-measured, source, canonical-key, and feature duplicates. The filtered and
-unfiltered typed controls share exact prefilter pools and accepted sets.
-
-Current status: Phase 11 passed and was checkpointed locally at
-`a39a3ebfc391b2d5f9bdf50979ccc5b5bc9ce51e`.
-
-Current status: Phase 12 is in progress from the Phase 11 checkpoint.
+Current status: Phase 13 passed its scientific and engineering gate; local
+checkpoint creation is in progress.
