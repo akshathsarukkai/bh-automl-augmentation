@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T00:29:42Z
+Updated: 2026-07-27T02:12:09Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -127,8 +127,8 @@ identity manifests. The legacy combined runner remains development-only, and
 its test-derived oracle is explicitly marked
 `post_hoc_test_oracle_not_for_selection`.
 
-Current status: Phase 7 has passed its scientific and engineering gate and is
-awaiting its local checkpoint commit.
+Current status: Phase 7 passed and was checkpointed locally at
+`f4134eff438f3465656aef4dbcea30ec202deba2`.
 
 Phase 7 validation:
 
@@ -157,3 +157,55 @@ Canonical dependencies detected:
 - `results/corrected_canonical_splits/split_manifest.json`
 
 No external blockers are currently active.
+
+Current status: Phase 8 is in progress from checkpoint
+`f4134eff438f3465656aef4dbcea30ec202deba2`.
+
+Phase 8 plan:
+
+- Build deterministic nested leave-one-group-out contracts for each outer fold.
+- Evaluate every declared policy across every inner OOD fold using inner labels only.
+- Support explicit sample-weighted and group-weighted policy summaries.
+- Freeze the deterministic inner-validation winner, refit on all outer-training
+  groups, and evaluate the outer group once.
+- Save assignment hashes and fold-level manifests sufficient to reproduce every
+  outer and inner partition exactly.
+
+Phase 8 repair status:
+
+- The first canonical product-group search produced five frozen outer units,
+  but remains preliminary and excluded from gate evidence.
+- Adversarial review demonstrated that consistently rehashed artifacts could
+  switch frozen selection semantics or truthfully report forbidden outer-label
+  access without final rejection.
+- The first exact-once registry was tied to the search artifact directory and
+  could be bypassed by copying that bundle; multi-fold interruption was also
+  not safely distinguishable from completion.
+- Repairs are enforcing search-data roles, structurally isolating each outer
+  search, replaying the configured policy budget and aggregation protocol,
+  semantically validating compact artifacts, and using a repository-global
+  identity-addressed per-unit evaluation registry.
+
+Current status: Phase 8 has passed its scientific and engineering gate and is
+awaiting its local checkpoint commit.
+
+Phase 8 validation:
+
+- Focused tests: 111 passed (1 expected singleton-R2 warning)
+- Full suite: 581 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Canonical product nested OOD: 5 outer groups, 20 group-disjoint inner folds,
+  80 complete inner metric rows, and 40 explicit group/sample weighted rows
+- Frozen model-policy selection was replayed from persisted inner rows before
+  any outer access; every compact table and fold manifest was semantically
+  rebuilt from canonical identities
+- Final evaluation produced one prediction batch per outer group and 10 metric
+  rows; a second final invocation reused all five repository-global records
+  with zero new prediction batches
+- All 10 recorded root artifacts, every fold manifest, and every registry
+  record rehash exactly
+
+Scope limitation: this gate establishes nested OOD protocol and real-only
+model-policy selection evidence on canonical product groups. It does not claim
+typed-transfer OOD benefit, reactant-key Phase 8 empirical execution, or
+unbiased confirmatory evidence.

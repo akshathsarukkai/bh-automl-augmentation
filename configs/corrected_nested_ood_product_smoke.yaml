@@ -1,0 +1,45 @@
+seed: 0
+
+corrected_revalidation:
+  enabled: true
+
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+
+splits:
+  method: nested_group_ood
+  canonical_dependency_directory: results/corrected_canonical_splits
+
+features:
+  kind: bh_role_separated
+  n_bits: 16
+  radius: 2
+  fingerprint_backend: rdkit
+
+metrics:
+  - rmse
+  - mae
+
+nested_ood:
+  targets:
+    - product_key
+  selection_metric: rmse
+  lower_is_better: true
+  selection_weighting: group_weighted
+  policies:
+    - policy_id: ridge-alpha-0.1
+      method: real_only
+      model: ridge
+      params:
+        alpha: 0.1
+    - policy_id: ridge-alpha-1.0
+      method: real_only
+      model: ridge
+      params:
+        alpha: 1.0
+
+output:
+  # Example-only defaults. Pass fresh hash-addressed roots to both commands.
+  nested_ood_search_directory: results/corrected_nested_ood_product_search_example_only
+  nested_ood_final_directory: results/corrected_nested_ood_product_final_example_only
+  example_only: true

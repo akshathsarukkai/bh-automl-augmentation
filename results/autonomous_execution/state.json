@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-27T00:29:42Z",
+  "updated_at": "2026-07-27T02:12:09Z",
   "phases": [
     {
       "phase_number": 1,
@@ -372,11 +372,11 @@
     {
       "phase_number": 7,
       "phase_name": "Rebuild product and reactant LOGO runners",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-27T00:18:08Z",
-      "completed_at": null,
+      "completed_at": "2026-07-27T00:30:47Z",
       "git_commit_at_start": "fc5b59aaae917e20594dff27abf7f48d58644248",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "f4134eff438f3465656aef4dbcea30ec202deba2",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_logo_protocol.py tests/test_corrected_logo_evaluation.py tests/test_logo_runner.py tests/test_splits.py tests/test_result_status.py tests/test_saved_canonical_splits.py tests/test_autonomous_execution.py",
         "passed": 66,
@@ -436,16 +436,87 @@
     {
       "phase_number": 8,
       "phase_name": "Nested group-aware OOD validation",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-27T00:31:16Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "f4134eff438f3465656aef4dbcea30ec202deba2",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_nested_ood.py tests/test_nested_ood_artifacts.py tests/test_evaluation_registry.py tests/test_nested_ood_evaluation.py tests/test_logo_protocol.py tests/test_corrected_logo_evaluation.py tests/test_policy_protocol.py tests/test_policy_search_final_evaluation.py tests/test_saved_canonical_splits.py tests/test_autonomous_execution.py",
+        "passed": 111,
+        "status": "passed",
+        "warnings": 1
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 581,
+        "status": "passed",
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "aggregate_metric_rows": 40,
+        "artifact_semantics_replayed": true,
+        "command": "python -B scripts/run_nested_ood_search.py --config configs/corrected_nested_ood_product_smoke.yaml --output-directory results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search; python -B scripts/run_nested_ood_final.py --config configs/corrected_nested_ood_product_smoke.yaml --frozen-policies results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/frozen_policies.json --search-manifest results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/search_manifest.json --output-directory results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-final",
+        "frozen_outer_units": 5,
+        "inner_fold_definitions": 20,
+        "inner_metric_rows": 80,
+        "outer_metric_rows": 10,
+        "outer_prediction_batches": 5,
+        "output_hashes_validated": 9,
+        "registry_records": 5,
+        "replay_new_prediction_batches": 0,
+        "status": "passed",
+        "target": "product_key",
+        "target_plan_hash": "164b31788854b6ba4f6513ea8fa034fb7905118df19975063628178406f8fcf2"
+      },
+      "output_paths": [
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/search_manifest.json",
+          "sha256": "e5ae32d481ffc783641e8a4825e5a0dda788f4272e62e060b7d65fb428a287df"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/frozen_policies.json",
+          "sha256": "f004051a5352e940d511be56a1da69ae123014318d087bc91d276fb8477b8ae2"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/group_assignments.csv",
+          "sha256": "0ede5456246e71a48b1e1e428e71972c21ebdc2a23640713c8e1f6b33d4f5e5a"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/fold_definitions.csv",
+          "sha256": "fa66e465b86c89633665bc0d36b196fb8286996247a25e92b25b21dd13a5b180"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/inner_metrics.csv",
+          "sha256": "faa12f36028bba497399e95a98d5b4f3c98bdf9ca6bb9b3243e3aaad27890f9f"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-search/aggregate_metrics.csv",
+          "sha256": "7725d403c0153b5689aa9704902268964e7a018a36b457bedb782d505343a8ee"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-final/final_manifest.json",
+          "sha256": "8c54b7888ddcb9ba21712813c677eef967bc16a5dd7f51291d578dda1ebaddfb"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-final/outer_metrics.csv",
+          "sha256": "e33888af90237f3edacd86c17f80ed484e1b062b8a6d8c58c8f873f5d63693aa"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-final/outer_summary.csv",
+          "sha256": "d649751f463a1d468e2e393652b0a0a0a614f08307f431cde472711c9deb3375"
+        },
+        {
+          "path": "results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-v2-final-replay/final_manifest.json",
+          "sha256": "adc01cb49daeb58500a7410bd9b70378311d2a001658729171326f2659064ecf"
+        }
+      ],
+      "warnings": [
+        "The first search-only output at results/autonomous_execution/phase_08/20260726-f4134ef-823bc0ad-search is preserved but excluded after adversarial review; the v2 search/final artifacts are authoritative.",
+        "The canonical integration smoke covers every product_key outer group; reactant_key is supported by the generic API and full example config but was not run as canonical Phase 8 empirical evidence.",
+        "Phase 8 evaluates explicit real-only model policies. It establishes nested OOD selection mechanics only and makes no typed-transfer OOD or augmentation-benefit claim.",
+        "The requested singleton-R2 regression emits one expected sklearn warning before production code rejects the non-finite metric."
+      ],
       "blockers": [],
       "dependencies": ["phase 5", "phase 7"]
     },
