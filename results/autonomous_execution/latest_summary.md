@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T02:58:04Z
+Updated: 2026-07-27T06:06:35Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -236,5 +236,42 @@ cores (benzene and pyridine), so it is retained as limited descriptive
 fixed-policy evidence and not represented as broad or nested scaffold
 generalization evidence.
 
-Current status: Phase 9 has passed its gate and is awaiting its local
+Current status: Phase 9 passed and was checkpointed locally at
+`596e65801414c5e77fc63cd59b048bd9e1a12a83`.
+
+Current status: Phase 10 is in progress from the Phase 9 checkpoint.
+
+Phase 10 gate validation:
+
+- Focused tests: 105 passed (8 expected legacy-alias warnings)
+- Full suite: 657 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Small canonical integration smoke:
+  `results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-v4-smoke`
+- Authoritative production evidence:
+  `results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-production-v3`
+- Production uses 2048-bit RDKit role fingerprints, fixed 100-tree XGBoost,
+  five random seeds at each of five nested fractions, all five product LOGO
+  folds, all 15 reactant LOGO folds, and the primary maximum-similarity OOD
+  split.
+- All eight representations are paired over 46 immutable units, yielding
+  148,808 source-level predictions and 736 metric rows. No representation
+  selection occurs.
+- Planning reads identity columns only and freezes split, feature, model, and
+  config hashes before labels load. Saved Phase 7 LOGO and Phase 9 chemical
+  OOD assignments are independently replayed.
+- Validation requires exact test membership and recomputes every metric from
+  canonical outcomes and persisted predictions, then rebuilds every summary.
+  Production-v2 and production-v3 scientific artifacts are byte-identical,
+  showing that the final label-access repair changed no result.
+
+Scientific result: the complete reaction representations are close and their
+small RMSE differences are inconsistent across random and OOD evidence. There
+is no supported representation-superiority conclusion. Product-free is
+slightly better on the random means but slightly worse on product/reactant
+LOGO and bounded-similarity OOD. Substrate-only and condition-only are
+substantially worse. `product_aware` is an intentional exact duplicate control
+of seven-role blocks and is not counted as independent evidence.
+
+Current status: Phase 10 has passed its gate and is awaiting its local
 checkpoint commit.

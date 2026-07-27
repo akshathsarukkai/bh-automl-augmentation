@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-27T02:58:04Z",
+  "updated_at": "2026-07-27T06:06:35Z",
   "phases": [
     {
       "phase_number": 1,
@@ -523,11 +523,11 @@
     {
       "phase_number": 9,
       "phase_name": "Scaffold, cluster, similarity, and condition OOD splits",
-      "status": "testing",
+      "status": "passed",
       "started_at": "2026-07-27T02:14:23Z",
-      "completed_at": null,
+      "completed_at": "2026-07-27T02:59:34Z",
       "git_commit_at_start": "fbbe2bf0811f6e8bd58b7e443ea68a52f2aef517",
-      "git_commit_at_end": null,
+      "git_commit_at_end": "596e65801414c5e77fc63cd59b048bd9e1a12a83",
       "targeted_tests": {
         "command": "python -B -m pytest -q tests/test_scaffold_ood.py tests/test_similarity_ood.py tests/test_condition_ood.py tests/test_chemical_ood_artifacts.py",
         "passed": 44,
@@ -564,16 +564,48 @@
     {
       "phase_number": 10,
       "phase_name": "No-augmentation representation baselines",
-      "status": "not_started",
-      "started_at": null,
+      "status": "testing",
+      "started_at": "2026-07-27T02:59:34Z",
       "completed_at": null,
-      "git_commit_at_start": null,
+      "git_commit_at_start": "596e65801414c5e77fc63cd59b048bd9e1a12a83",
       "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_phase10_representations.py tests/test_representation_splits.py tests/test_representation_benchmark.py tests/test_saved_canonical_splits.py tests/test_corrected_representation_baselines.py tests/test_featurization.py tests/test_canonical_representation.py tests/test_logo_protocol.py tests/test_chemical_ood_artifacts.py",
+        "passed": 105,
+        "warnings": 8
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 657,
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "status": "passed",
+        "smoke_command": "python -B scripts/run_representation_benchmark.py --config configs/corrected_representation_benchmark_phase10_smoke.yaml --output-directory results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-v4-smoke",
+        "production_command": "python -B scripts/run_representation_benchmark.py --config configs/corrected_representation_benchmark_phase10.yaml --output-directory results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-production-v3",
+        "production_evaluation_units": 46,
+        "representations": 8,
+        "prediction_rows": 148808,
+        "metric_rows": 736,
+        "random_seeds": 5,
+        "random_fractions": 5,
+        "product_logo_folds": 5,
+        "reactant_logo_folds": 15,
+        "chemical_ood_folds": 1,
+        "selection_performed": false,
+        "prediction_metrics_replayed": true
+      },
+      "output_paths": [
+        "results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-v4-smoke",
+        "results/autonomous_execution/phase_10/corrected-20260726-596e658-phase10-production-v3"
+      ],
+      "warnings": [
+        "product_aware is an intentional feature-identical duplicate control of seven_role_blocks and is not independent evidence.",
+        "The preliminary Phase 10 v1-v3 smoke and production-v1-v2 outputs are preserved but superseded after adversarial audits strengthened frozen planning, saved split consumption, and prediction-level metric replay.",
+        "The benchmark does not test-select a representation; all eight predefined methods are reported.",
+        "Among full reaction representations, observed test RMSE differences are small and inconsistent across random and OOD evidence; no representation-superiority claim is supported.",
+        "Substrate-only and condition-only are materially worse in this benchmark, showing that neither information subset is an adequate replacement for the full reaction context under this fixed model."
+      ],
       "blockers": [],
       "dependencies": ["phase 4", "phase 7", "phase 9"]
     },

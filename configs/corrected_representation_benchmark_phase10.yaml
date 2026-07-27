@@ -1,0 +1,35 @@
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  canonical_directory: results/corrected_canonical_splits
+  random_seeds: [0, 1, 2, 3, 4]
+  random_fractions: [0.01, 0.05, 0.10, 0.20, 1.00]
+  logo_targets: [product_key, reactant_key]
+  logo_artifact_directory: results/autonomous_execution/phase_07/20260726-fc5b59a-d6e01b18
+  chemical_ood_directory: results/autonomous_execution/phase_09/corrected-20260726-fbbe2bf-phase9-v2
+  chemical_ood_families: [maximum_similarity_bounded]
+representations:
+  - flat_reaction_sum
+  - reaction_section_concatenation
+  - seven_role_blocks
+  - seven_blocks_plus_deltas
+  - substrate_only
+  - condition_only
+  - product_aware
+  - product_free
+features:
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+model:
+  name: xgboost
+  params:
+    n_estimators: 100
+    max_depth: 4
+    learning_rate: 0.05
+    n_jobs: 1
+    tree_method: hist
+metrics: [rmse, mae]
+base_seed: 0
+output:
+  directory: results/corrected_representation_benchmark_phase10_production

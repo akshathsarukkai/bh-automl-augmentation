@@ -13,16 +13,25 @@ import pandas as pd
 from bh_augmentation.data.reaction_roles import (
     CANONICAL_ROLE_COLUMNS,
     CANONICAL_ROLE_NAMES,
-    reaction_roles_from_row,
+    ROLE_TO_COLUMN,
 )
 from bh_augmentation.features.compatibility import FeatureBlock, FeatureMetadata
 
+BH_ROLE_DERIVED_FEATURE_KINDS = {
+    "bh_flat_reaction_sum",
+    "bh_reaction_section_concat",
+    "bh_role_separated",
+    "bh_role_separated_delta",
+    "bh_substrate_only",
+    "bh_condition_only",
+    "bh_product_aware",
+    "bh_product_free",
+}
 REACTION_FEATURE_KINDS = {
     "reaction_morgan_sum",
     "reaction_section_concat",
     "reaction_section_concat_delta",
-    "bh_role_separated",
-    "bh_role_separated_delta",
+    *BH_ROLE_DERIVED_FEATURE_KINDS,
 }
 DEPRECATED_FEATURE_ALIASES = {
     "reaction_smiles": "reaction_morgan_sum",
@@ -54,6 +63,19 @@ DICT_PRODUCT_KEYS = ["product", "products"]
 _WARNED_HASH_FINGERPRINT_FALLBACK = False
 
 ROLE_SEPARATED_CONDITION_COLUMNS = list(CANONICAL_ROLE_COLUMNS)
+_SUBSTRATE_ROLES = ("reactant_1", "reactant_2")
+_CONDITION_ROLES = ("catalyst", "ligand", "base", "solvent_or_additive")
+_PRODUCT_FREE_ROLES = (*_SUBSTRATE_ROLES, *_CONDITION_ROLES)
+_BH_INCLUDED_ROLES = {
+    "bh_flat_reaction_sum": CANONICAL_ROLE_NAMES,
+    "bh_reaction_section_concat": CANONICAL_ROLE_NAMES,
+    "bh_role_separated": CANONICAL_ROLE_NAMES,
+    "bh_role_separated_delta": CANONICAL_ROLE_NAMES,
+    "bh_substrate_only": _SUBSTRATE_ROLES,
+    "bh_condition_only": _CONDITION_ROLES,
+    "bh_product_aware": CANONICAL_ROLE_NAMES,
+    "bh_product_free": _PRODUCT_FREE_ROLES,
+}
 
 
 def morgan_fingerprint(
@@ -435,7 +457,7 @@ def feature_metadata(
         raise ValueError(
             f"Feature-name count {len(feature_names)} does not match matrix width {width}."
         )
-    role_ordering = CANONICAL_ROLE_NAMES if kind.startswith("bh_role_separated") else ()
+    role_ordering = _BH_INCLUDED_ROLES.get(kind, ())
     return FeatureMetadata(
         representation_kind=kind,
         n_bits=n_bits,
@@ -474,8 +496,8 @@ def _reaction_feature_matrix(
     n_bits: int,
     backend: str,
 ) -> tuple[np.ndarray, list[str]]:
-    if kind in {"bh_role_separated", "bh_role_separated_delta"}:
-        return _role_separated_condition_feature_matrix(
+    if kind in BH_ROLE_DERIVED_FEATURE_KINDS:
+        return _bh_role_derived_feature_matrix(
             df,
             kind=kind,
             radius=radius,
@@ -524,16 +546,16 @@ def _reaction_feature_vector(
     raise ValueError(f"Unknown reaction feature kind: {kind}")
 
 
-def _role_separated_condition_feature_matrix(
+def _bh_role_derived_feature_matrix(
     df: pd.DataFrame,
     kind: str,
     radius: int,
     n_bits: int,
     backend: str,
 ) -> tuple[np.ndarray, list[str]]:
-    _validate_role_separated_condition_columns(df)
+    _validate_bh_role_columns(df, kind=kind)
     rows = [
-        _role_separated_condition_feature_vector(
+        _bh_role_derived_feature_vector(
             row,
             kind=kind,
             radius=radius,
@@ -547,26 +569,46 @@ def _role_separated_condition_feature_matrix(
     return features, _reaction_feature_names(kind, n_bits)
 
 
-def _role_separated_condition_feature_vector(
+def _bh_role_derived_feature_vector(
     row: pd.Series,
     kind: str,
     radius: int,
     n_bits: int,
     backend: str,
 ) -> np.ndarray:
-    roles = reaction_roles_from_row(row)
+    included_roles = _BH_INCLUDED_ROLES[kind]
     fingerprints = {
-        role: morgan_fingerprint(
-            getattr(roles, role),
+        role: _strict_role_fingerprint(
+            _required_role_value(row, role),
+            role=role,
             radius=radius,
             n_bits=n_bits,
-            warn_invalid=False,
             backend=backend,
         )
-        for role in CANONICAL_ROLE_NAMES
+        for role in included_roles
     }
-    role_blocks = [fingerprints[role] for role in CANONICAL_ROLE_NAMES]
-    if kind == "bh_role_separated":
+    if kind == "bh_flat_reaction_sum":
+        return sum(
+            (fingerprints[role] for role in CANONICAL_ROLE_NAMES),
+            start=np.zeros(n_bits, dtype=np.float32),
+        ).astype(np.float32)
+    if kind == "bh_reaction_section_concat":
+        substrate = fingerprints["reactant_1"] + fingerprints["reactant_2"]
+        condition = sum(
+            (fingerprints[role] for role in _CONDITION_ROLES),
+            start=np.zeros(n_bits, dtype=np.float32),
+        )
+        return np.concatenate(
+            [substrate, condition, fingerprints["product"]]
+        ).astype(np.float32)
+    role_blocks = [fingerprints[role] for role in included_roles]
+    if kind in {
+        "bh_role_separated",
+        "bh_substrate_only",
+        "bh_condition_only",
+        "bh_product_aware",
+        "bh_product_free",
+    }:
         return np.concatenate(role_blocks).astype(np.float32)
     if kind == "bh_role_separated_delta":
         product = fingerprints["product"]
@@ -579,19 +621,72 @@ def _role_separated_condition_feature_vector(
             product - reactant_pair,
         ]
         return np.concatenate([*role_blocks, *deltas]).astype(np.float32)
-    raise ValueError(f"Unknown role-separated condition feature kind: {kind}")
+    raise ValueError(f"Unknown BH role-derived feature kind: {kind}")
 
 
-def _validate_role_separated_condition_columns(df: pd.DataFrame) -> None:
-    missing = [column for column in ROLE_SEPARATED_CONDITION_COLUMNS if column not in df.columns]
+def _validate_bh_role_columns(df: pd.DataFrame, *, kind: str) -> None:
+    required = [ROLE_TO_COLUMN[role] for role in _BH_INCLUDED_ROLES[kind]]
+    missing = [column for column in required if column not in df.columns]
     if missing:
         missing_text = ", ".join(missing)
         raise ValueError(
-            "Feature kind 'bh_role_separated' requires recovered condition "
+            f"Feature kind {kind!r} requires recovered canonical role "
             f"columns, but these are missing: {missing_text}. Generate "
             "data/processed/bh_clean_stress_with_conditions.csv first with "
             "bh_condition_reader.py."
         )
+
+
+def _required_role_value(row: pd.Series, role: str) -> str:
+    column = ROLE_TO_COLUMN[role]
+    value = row[column]
+    if value is None:
+        raise ValueError(f"Required molecular role {role!r} is missing.")
+    try:
+        missing = bool(pd.isna(value))
+    except (TypeError, ValueError):
+        missing = False
+    if missing:
+        raise ValueError(f"Required molecular role {role!r} is missing.")
+    text = str(value).strip()
+    if not text or text.upper() in {
+        "UNKNOWN",
+        "NOT_RECOVERABLE",
+        "NAN",
+        "NONE",
+    }:
+        raise ValueError(f"Required molecular role {role!r} is invalid.")
+    return text
+
+
+def _strict_role_fingerprint(
+    smiles: str,
+    *,
+    role: str,
+    radius: int,
+    n_bits: int,
+    backend: str,
+) -> np.ndarray:
+    if _resolve_fingerprint_backend(backend) == "rdkit":
+        try:
+            from rdkit import Chem
+        except ImportError as exc:  # pragma: no cover - resolved backend imports RDKit
+            raise ImportError(
+                "RDKit is required for scientific BH role-derived features."
+            ) from exc
+        with _quiet_rdkit_errors(enabled=True):
+            molecule = Chem.MolFromSmiles(smiles)
+        if molecule is None:
+            raise ValueError(
+                f"RDKit rejected included molecular role {role!r}: {smiles!r}."
+            )
+    return morgan_fingerprint(
+        smiles,
+        radius=radius,
+        n_bits=n_bits,
+        warn_invalid=False,
+        backend=backend,
+    )
 
 
 def _sum_morgan_fingerprints(
@@ -617,8 +712,14 @@ def _reaction_feature_width(kind: str, n_bits: int) -> int:
         "reaction_morgan_sum": 1,
         "reaction_section_concat": 3,
         "reaction_section_concat_delta": 4,
+        "bh_flat_reaction_sum": 1,
+        "bh_reaction_section_concat": 3,
         "bh_role_separated": 7,
         "bh_role_separated_delta": 10,
+        "bh_substrate_only": 2,
+        "bh_condition_only": 4,
+        "bh_product_aware": 7,
+        "bh_product_free": 6,
     }
     return multipliers[kind] * n_bits
 
@@ -633,6 +734,12 @@ def _reaction_feature_names(kind: str, n_bits: int) -> list[str]:
             "products",
             "delta_product_minus_reactant",
         ],
+        "bh_flat_reaction_sum": ["all_roles_sum"],
+        "bh_reaction_section_concat": [
+            "substrate_sum",
+            "condition_sum",
+            "product",
+        ],
         "bh_role_separated": list(CANONICAL_ROLE_NAMES),
         "bh_role_separated_delta": [
             *CANONICAL_ROLE_NAMES,
@@ -640,6 +747,10 @@ def _reaction_feature_names(kind: str, n_bits: int) -> list[str]:
             "delta_product_minus_reactant_2",
             "delta_product_minus_reactant_pair",
         ],
+        "bh_substrate_only": list(_SUBSTRATE_ROLES),
+        "bh_condition_only": list(_CONDITION_ROLES),
+        "bh_product_aware": list(CANONICAL_ROLE_NAMES),
+        "bh_product_free": list(_PRODUCT_FREE_ROLES),
     }
     return [f"{section}__morgan_{bit}" for section in sections[kind] for bit in range(n_bits)]
 

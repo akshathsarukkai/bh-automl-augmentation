@@ -12,7 +12,9 @@ import numpy as np
 import pandas as pd
 
 from bh_augmentation.data.canonicalize_roles import CANONICALIZATION_VERSION
-from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
+from bh_augmentation.data.saved_canonical_splits import (
+    load_saved_canonical_split_identities,
+)
 from bh_augmentation.evaluation.condition_ood import (
     CONDITION_OOD_TARGET_COLUMNS,
     FoldSupportCriteria,
@@ -175,7 +177,9 @@ def build_chemical_ood_artifacts(
     config: ChemicalOODConfig,
 ) -> dict[str, Path]:
     """Build all Phase 9 split families and immutable audit artifacts."""
-    saved = load_saved_canonical_splits(dataset_path, canonical_split_directory)
+    saved = load_saved_canonical_split_identities(
+        dataset_path, canonical_split_directory
+    )
     canonical = saved.canonical.copy()
     canonical["source_row_id"] = canonical["source_row_id"].astype(str)
     canonical["canonical_reaction_key"] = canonical[
@@ -697,7 +701,9 @@ def validate_chemical_ood_artifacts(
         or manifest.get("family_order") != list(FAMILY_ORDER)
     ):
         raise ValueError("Chemical OOD manifest contract mismatch.")
-    saved = load_saved_canonical_splits(dataset_path, canonical_split_directory)
+    saved = load_saved_canonical_split_identities(
+        dataset_path, canonical_split_directory
+    )
     if (
         manifest["dataset_hash"] != saved.dataset_hash
         or manifest["canonical_split_dependency_hash"]

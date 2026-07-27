@@ -15,7 +15,10 @@ from bh_augmentation.data.canonical_splits import (
     split_assignment_hash,
 )
 from bh_augmentation.data.reaction_roles import ReactionRoles, reaction_roles_to_record
-from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
+from bh_augmentation.data.saved_canonical_splits import (
+    load_saved_canonical_split_identities,
+    load_saved_canonical_splits,
+)
 from bh_augmentation.utils.corrected_runs import stable_hash
 
 
@@ -202,3 +205,35 @@ def test_missing_requested_seed_fraction_and_materialization_rows_fail(
     incomplete = saved.canonical.iloc[:-1]
     with pytest.raises(ValueError, match="does not exactly cover"):
         saved.materialize_variants(incomplete, seed=0, train_fractions=[0.1])
+
+
+def test_identity_only_loader_does_not_expose_yields(tmp_path: Path) -> None:
+    canonical, directory = _saved_split_fixture(tmp_path)
+    saved = load_saved_canonical_split_identities(canonical, directory)
+    assert "yield" not in saved.canonical
+    assert saved.dataset_hash
+
+
+def test_identity_only_loader_never_reads_yield_values(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    canonical, directory = _saved_split_fixture(tmp_path)
+    original = pd.read_csv
+    canonical_reads: list[dict[str, object]] = []
+
+    def _observed_read(path: object, *args: object, **kwargs: object) -> pd.DataFrame:
+        if Path(path) == canonical:
+            canonical_reads.append(dict(kwargs))
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(
+        "bh_augmentation.data.saved_canonical_splits.pd.read_csv",
+        _observed_read,
+    )
+    load_saved_canonical_split_identities(canonical, directory)
+    value_reads = [
+        call for call in canonical_reads if call.get("nrows") != 0
+    ]
+    assert len(value_reads) == 1
+    assert "yield" not in value_reads[0]["usecols"]

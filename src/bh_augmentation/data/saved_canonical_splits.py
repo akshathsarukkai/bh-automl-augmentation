@@ -244,6 +244,79 @@ def load_saved_canonical_splits(
     )
 
 
+def load_saved_canonical_split_identities(
+    dataset_path: str | Path,
+    split_directory: str | Path,
+    *,
+    requested_seeds: list[int] | tuple[int, ...] | None = None,
+    requested_fractions: list[float] | tuple[float, ...] | None = None,
+) -> SavedCanonicalSplits:
+    """Validate split identities while reading no canonical yield values."""
+    dataset = Path(dataset_path)
+    directory = Path(split_directory)
+    manifest_path = directory / "split_manifest.json"
+    manifest = _load_manifest(manifest_path)
+    dataset_hash = sha256_file(dataset)
+    if dataset_hash != manifest["canonical_dataset_hash"]:
+        raise ValueError("Canonical dataset hash does not match the saved split manifest.")
+    nrows = manifest["dataset_nrows"]
+    header = pd.read_csv(dataset, nrows=0)
+    identity_columns = [column for column in header.columns if column != "yield"]
+    canonical = pd.read_csv(
+        dataset,
+        nrows=nrows,
+        usecols=identity_columns,
+    )
+    _validate_canonical_dataset(canonical, manifest)
+    outer = _read_assignments(directory / "outer_split_assignments.csv")
+    low = _read_assignments(directory / "low_data_subset_assignments.csv")
+    _validate_assignments(canonical, outer, low, manifest)
+    seeds = [int(value) for value in manifest["seeds"]]
+    fractions = [float(value) for value in manifest["train_fractions"]]
+    _validate_requests(
+        seeds,
+        fractions,
+        requested_seeds=requested_seeds,
+        requested_fractions=requested_fractions,
+    )
+    computed_seed_hashes = {
+        seed: split_assignment_hash(
+            outer.loc[outer["seed"].eq(seed)],
+            low.loc[low["seed"].eq(seed)],
+        )
+        for seed in seeds
+    }
+    expected_seed_hashes = {
+        int(seed): value for seed, value in manifest["split_hashes"].items()
+    }
+    if computed_seed_hashes != expected_seed_hashes:
+        raise ValueError("Saved canonical per-seed split hash mismatch.")
+    aggregate_hash = stable_hash(
+        {str(seed): value for seed, value in computed_seed_hashes.items()}
+    )
+    if aggregate_hash != manifest["split_hash"]:
+        raise ValueError("Saved canonical aggregate split hash mismatch.")
+    return SavedCanonicalSplits(
+        canonical=canonical,
+        outer_assignments=outer,
+        low_data_assignments=low,
+        manifest=manifest,
+        dataset_hash=dataset_hash,
+        aggregate_split_hash=aggregate_hash,
+        per_seed_split_hashes=computed_seed_hashes,
+        split_directory=directory,
+        artifact_hashes={
+            "low_data_subset_assignments.csv": sha256_file(
+                directory / "low_data_subset_assignments.csv"
+            ),
+            "outer_split_assignments.csv": sha256_file(
+                directory / "outer_split_assignments.csv"
+            ),
+            "split_manifest.json": sha256_file(manifest_path),
+        },
+    )
+
+
 def _load_manifest(path: Path) -> dict[str, Any]:
     try:
         value = json.loads(path.read_text())
