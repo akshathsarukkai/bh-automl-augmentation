@@ -132,6 +132,70 @@ def test_strict_condition_transfer_changes_every_requested_role_only() -> None:
     assert set(kept["role_change_requirement"]) == {"all"}
 
 
+def test_strict_variable_role_transfer_preserves_invariant_catalyst_and_is_permutation_deterministic(
+) -> None:
+    train = _strict_role_change_df().copy()
+    train["reaction_smiles"] = train["reaction_smiles"].str.replace(
+        "[Pt]", "[Pd]", regex=False
+    ).str.replace("[Ni]", "[Pd]", regex=False)
+    X, y, _ = build_feature_matrix(train, _feature_config())
+    canonical_roles = ("ligand", "base", "solvent_or_additive")
+    permuted_roles = ("solvent_or_additive", "ligand", "base")
+
+    canonical = generate_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy="random",
+            label_strategy="average_label",
+            role_change_requirement="all",
+            fallback_policy="reject",
+            requested_roles=canonical_roles,
+        ),
+    )
+    permuted = generate_condition_transfer_examples(
+        train,
+        X,
+        y,
+        _config(
+            donor_strategy="random",
+            label_strategy="average_label",
+            role_change_requirement="all",
+            fallback_policy="reject",
+            requested_roles=permuted_roles,
+        ),
+    )
+
+    kept = canonical["candidate_df"].loc[canonical["candidate_df"]["kept"]]
+    assert not kept.empty
+    expected_roles = "|".join(canonical_roles)
+    assert set(kept["requested_roles"]) == {expected_roles}
+    assert set(kept["actual_changed_roles"]) == {expected_roles}
+    assert not kept["unchanged_requested_roles"].any()
+    assert not kept["unexpected_changed_roles"].any()
+    assert set(kept["change_mask"]) == {"0001110"}
+    assert set(kept["recovered_catalyst_smiles"]) == {"[Pd]"}
+    assert canonical["metadata"]["requested_roles"] == expected_roles
+    assert permuted["metadata"]["requested_roles"] == expected_roles
+    deterministic_columns = [
+        "source_row_id",
+        "donor_row_id",
+        "canonical_reaction_key",
+        "canonical_reaction_hash",
+        "feature_hash",
+        "requested_roles",
+        "actual_changed_roles",
+        "change_mask",
+        "rejection_reason",
+        "kept",
+    ]
+    pd.testing.assert_frame_equal(
+        canonical["candidate_df"].loc[:, deterministic_columns],
+        permuted["candidate_df"].loc[:, deterministic_columns],
+    )
+
+
 def test_any_role_change_accepts_partial_condition_changes_and_audits_them() -> None:
     train = _tiny_train_df()
     X, y, _ = build_feature_matrix(train, _feature_config())
@@ -421,6 +485,26 @@ def test_role_change_and_fallback_config_reject_unsupported_values(
         _validate_config(config)
 
 
+@pytest.mark.parametrize(
+    ("requested_roles", "message"),
+    [
+        ([], "nonempty"),
+        (["ligand", "ligand"], "duplicates"),
+        (["product"], "unsupported"),
+        ("ligand", "nonempty tuple or list"),
+    ],
+)
+def test_requested_roles_reject_invalid_or_ambiguous_values(
+    requested_roles: object,
+    message: str,
+) -> None:
+    config = _config(donor_strategy="random", label_strategy="average_label")
+    config.requested_roles = requested_roles  # type: ignore[assignment]
+
+    with pytest.raises(ValueError, match=message):
+        _validate_config(config)
+
+
 def test_condition_transfer_donor_strategies_do_not_select_self() -> None:
     train = _tiny_train_df()
     X, y, _ = build_feature_matrix(train, _feature_config())
@@ -641,6 +725,7 @@ def _config(
     fallback_policy: str = "reject",
     min_similarity: float | None = None,
     max_candidates_per_source: int | None = None,
+    requested_roles: tuple[str, ...] | list[str] | None = None,
 ) -> ConditionTransferConfig:
     return ConditionTransferConfig(
         donor_strategy=donor_strategy,
@@ -658,6 +743,7 @@ def _config(
         role_change_requirement=role_change_requirement,
         fallback_policy=fallback_policy,
         max_candidates_per_source=max_candidates_per_source,
+        requested_roles=requested_roles,
     )
 
 

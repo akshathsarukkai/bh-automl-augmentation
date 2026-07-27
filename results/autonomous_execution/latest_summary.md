@@ -1,6 +1,6 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T06:06:35Z
+Updated: 2026-07-27T07:02:21Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
 Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
@@ -273,5 +273,49 @@ LOGO and bounded-similarity OOD. Substrate-only and condition-only are
 substantially worse. `product_aware` is an intentional exact duplicate control
 of seven-role blocks and is not counted as independent evidence.
 
-Current status: Phase 10 has passed its gate and is awaiting its local
-checkpoint commit.
+Current status: Phase 10 passed and was checkpointed locally at
+`5c2262fef524ae633e00baf9bb224eb4c0800490`.
+
+Current status: Phase 11 is testing from the Phase 10 checkpoint.
+
+Phase 11 validation in progress:
+
+- Focused tests: 139 passed (1 pandas warning)
+- Full suite: 724 passed (36 warnings)
+- Ruff and `git diff --check`: passed
+- Small canonical integration smoke:
+  `results/autonomous_execution/phase_11/corrected-20260726-5c2262f-phase11-smoke-v11`
+- Candidate production evidence:
+  `results/autonomous_execution/phase_11/corrected-20260726-5c2262f-phase11-production-v2`
+- The production matrix pairs all 13 predefined controls over the same five
+  canonical saved-split units, fixed 5% training fraction, 2048-bit RDKit
+  features, 100-tree XGBoost protocol, and nominal one-for-one augmentation
+  budget. It persists 25,740 source-level predictions and 130 metric rows.
+- Exact duplication, random oversampling, yield-stratified oversampling,
+  sample reweighting, nearest-neighbor pseudo-labeling, self-training, and
+  feature mixup consume their declared budgets exactly.
+- Strict chemical identity/change rules permit only 2 anonymous, 3 random
+  typed, and 6 context-matched typed candidates across 795 nominal additions;
+  the remaining budget is explicitly underfilled without fallback or backfill.
+- Production-v1 remains preserved as a failed artifact. Its own strict
+  validator detected traversal-order versus candidate-rank audit provenance
+  and pre-float32 label mismatches. The fitting arrays were correct; production
+  audit ordering/precision was repaired, regression-tested, and regenerated
+  as production-v2.
+
+Preliminary scientific result: at this single development fraction, no generic
+control improves mean RMSE over real-only. Anonymous transfer is 0.025 RMSE
+better on average but adds only two rows and wins two of five seeds; this is not
+evidence of transfer benefit. Typed controls are budget-underfilled and are not
+credited with gains. Raw teacher standard deviation is explicitly uncalibrated
+and cannot support scientific uncertainty filtering until Phase 12.
+
+Independent adversarial review found no Phase 11 gate blocker. All 23 accepted
+chemical method-rows represent the same six proposal identities per
+context-matched control where applicable; every accepted row is canonical,
+role-exact `all`/`reject`, fallback-free, train-parent-only, and free of
+measured, source, canonical-key, and feature duplicates. The filtered and
+unfiltered typed controls share exact prefilter pools and accepted sets.
+
+Current status: Phase 11 has passed its scientific gate and is awaiting its
+local checkpoint commit.

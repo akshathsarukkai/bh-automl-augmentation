@@ -1,0 +1,47 @@
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  canonical_directory: results/corrected_canonical_splits
+  random_seeds: [0]
+  random_fractions: [0.01]
+controls:
+  - real_only
+  - exact_duplication
+  - random_oversampling
+  - yield_stratified_oversampling
+  - sample_reweighting
+  - nearest_neighbor_pseudo_labeling
+  - self_training
+  - feature_mixup
+  - anonymous_condition_transfer
+  - random_typed_transfer
+  - strict_context_matched_typed_transfer
+  - typed_transfer_without_uncertainty_filtering
+  - typed_transfer_with_uncertainty_filtering
+augmentation:
+  nominal_added_multiplier: 1.0
+  n_yield_strata: 4
+  mixup_alpha: 0.5
+  self_training_teacher:
+    name: ridge
+    params:
+      alpha: 1.0
+  chemical_teacher_models: [ridge]
+  raw_teacher_std_threshold: 20.0
+features:
+  kind: bh_role_separated
+  n_bits: 64
+  radius: 2
+  fingerprint_backend: rdkit
+model:
+  name: xgboost
+  params:
+    n_estimators: 5
+    max_depth: 3
+    learning_rate: 0.1
+    n_jobs: 1
+    tree_method: hist
+metrics: [rmse, mae]
+base_seed: 0
+output:
+  directory: results/corrected_augmentation_controls_phase11_smoke

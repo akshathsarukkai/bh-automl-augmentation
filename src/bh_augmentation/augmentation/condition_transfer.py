@@ -90,6 +90,7 @@ class ConditionTransferConfig:
     role_change_requirement: str = "all"
     fallback_policy: str = "reject"
     max_candidates_per_source: int | None = None
+    requested_roles: tuple[str, ...] | list[str] | None = None
 
 
 def parse_condition_transfer_reaction(value: object) -> ParsedReaction | None:
@@ -126,17 +127,24 @@ def build_condition_transfer_reaction(
 def build_anonymous_condition_transfer_roles(
     source_row: pd.Series | dict[str, Any],
     donor_row: pd.Series | dict[str, Any],
+    *,
+    requested_roles: tuple[str, ...] | list[str] | None = None,
 ) -> ReactionRoles:
-    """Transfer all four typed donor conditions while preserving source chemistry."""
+    """Transfer exactly the requested donor conditions and preserve other roles."""
     source = reaction_roles_from_row(source_row)
     donor = reaction_roles_from_row(donor_row)
+    requested = set(_canonical_requested_roles(requested_roles))
     return ReactionRoles(
         reactant_1=source.reactant_1,
         reactant_2=source.reactant_2,
-        catalyst=donor.catalyst,
-        ligand=donor.ligand,
-        base=donor.base,
-        solvent_or_additive=donor.solvent_or_additive,
+        catalyst=donor.catalyst if "catalyst" in requested else source.catalyst,
+        ligand=donor.ligand if "ligand" in requested else source.ligand,
+        base=donor.base if "base" in requested else source.base,
+        solvent_or_additive=(
+            donor.solvent_or_additive
+            if "solvent_or_additive" in requested
+            else source.solvent_or_additive
+        ),
         product=source.product,
     )
 
@@ -154,6 +162,7 @@ def generate_condition_transfer_examples(
 ) -> dict[str, Any]:
     """Generate condition-transfer examples using only low-data training rows."""
     _validate_config(config)
+    requested_roles = _canonical_requested_roles(config.requested_roles)
     if "reaction_smiles" not in df_train.columns:
         raise ValueError("condition transfer requires a reaction_smiles column.")
 
@@ -286,6 +295,7 @@ def generate_condition_transfer_examples(
             synthetic_roles = build_anonymous_condition_transfer_roles(
                 train.loc[source_position],
                 train.loc[donor_position],
+                requested_roles=requested_roles,
             )
             synthetic_record = canonical_candidate_record(synthetic_roles)
             generated_per_source[source_position] += 1
@@ -385,7 +395,7 @@ def generate_condition_transfer_examples(
     candidate_df = audit_role_changes(
         candidate_df,
         source_rows=train_records,
-        requested_roles=ANONYMOUS_TRANSFER_ROLES,
+        requested_roles=requested_roles,
         role_change_requirement=config.role_change_requirement,
     )
     candidate_df["synthetic_was_duplicate"] = (
@@ -517,6 +527,7 @@ def _select_donor_position(
         source_position,
         candidates,
         canonical_roles=canonical_roles,
+        requested_roles=_canonical_requested_roles(config.requested_roles),
         requirement=config.role_change_requirement,
     )
     if not candidates:
@@ -598,6 +609,7 @@ def _role_change_eligible_candidates(
     candidates: list[int],
     *,
     canonical_roles: list[ReactionRoles | None],
+    requested_roles: tuple[str, ...],
     requirement: str,
 ) -> list[int]:
     source = canonical_roles[source_position]
@@ -610,10 +622,10 @@ def _role_change_eligible_candidates(
             continue
         changed = [
             role
-            for role in ANONYMOUS_TRANSFER_ROLES
+            for role in requested_roles
             if getattr(source, role) != getattr(donor, role)
         ]
-        if (requirement == "all" and len(changed) == len(ANONYMOUS_TRANSFER_ROLES)) or (
+        if (requirement == "all" and len(changed) == len(requested_roles)) or (
             requirement == "any" and changed
         ):
             eligible.append(position)
@@ -941,6 +953,9 @@ def _metadata_from_candidates(
         "donor_strategy": config.donor_strategy,
         "role_change_requirement": config.role_change_requirement,
         "fallback_policy": config.fallback_policy,
+        "requested_roles": "|".join(
+            _canonical_requested_roles(config.requested_roles)
+        ),
         "label_strategy": config.label_strategy,
         "synthetic_multiplier": float(config.synthetic_multiplier),
         "n_neighbors": int(config.n_neighbors),
@@ -980,6 +995,7 @@ def _metadata_from_candidates(
 
 
 def _validate_config(config: ConditionTransferConfig) -> None:
+    config.requested_roles = _canonical_requested_roles(config.requested_roles)
     if config.donor_strategy not in DONOR_STRATEGIES:
         raise ValueError(f"Unsupported donor strategy: {config.donor_strategy}")
     if config.label_strategy not in LABEL_STRATEGIES:
@@ -1004,6 +1020,31 @@ def _validate_config(config: ConditionTransferConfig) -> None:
         raise ValueError("max_candidates_per_source must be at least 1.")
     if config.clip_y_min > config.clip_y_max:
         raise ValueError("clip_y_min must be less than or equal to clip_y_max.")
+
+
+def _canonical_requested_roles(
+    requested_roles: tuple[str, ...] | list[str] | None,
+) -> tuple[str, ...]:
+    """Validate and normalize anonymous roles to canonical condition order."""
+    if requested_roles is None:
+        return ANONYMOUS_TRANSFER_ROLES
+    if not isinstance(requested_roles, (tuple, list)) or not requested_roles:
+        raise ValueError("requested_roles must be a nonempty tuple or list.")
+    if any(not isinstance(role, str) for role in requested_roles):
+        raise ValueError("requested_roles must contain only role names.")
+    roles = tuple(requested_roles)
+    if len(roles) != len(set(roles)):
+        raise ValueError("requested_roles must not contain duplicates.")
+    unsupported = sorted(set(roles) - set(ANONYMOUS_TRANSFER_ROLES))
+    if unsupported:
+        raise ValueError(
+            "requested_roles contains unsupported anonymous condition roles: "
+            + ", ".join(unsupported)
+        )
+    selected = set(roles)
+    return tuple(
+        role for role in ANONYMOUS_TRANSFER_ROLES if role in selected
+    )
 
 
 def _synthetic_columns() -> list[str]:
