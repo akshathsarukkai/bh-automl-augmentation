@@ -397,5 +397,59 @@ Authoritative outputs:
 - `results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-smoke-v1-b`
 - `results/autonomous_execution/phase_13/corrected-20260726-3fff5ba-phase13-production-v1`
 
-Current status: Phase 13 passed its scientific and engineering gate; local
-checkpoint creation is in progress.
+Current status: Phase 13 passed and was checkpointed locally at
+`58613dd0907602ce295958ca81aa70b9ed618d54`.
+
+## Handoff reconciliation
+
+Phase 13 passed its gate and was committed at
+`58613dd0907602ce295958ca81aa70b9ed618d54`, but the ledger updates recording
+that fact were never checkpointed. Two bookkeeping defects were found and
+repaired without rewriting any historical event:
+
+1. `phases[13].git_commit_at_end` was `null` even though `events.jsonl`
+   already recorded the `phase_passed` event with the correct ending commit.
+2. Phases 9 through 13 wrote `targeted_tests` and `full_suite_result` without
+   the `status` key that `_passed_phase_issues` requires. Under the repository's
+   own verifier this silently reopened every phase from 9 onward. The recorded
+   `phase_gate_validated` events establish that all ten results did pass, so
+   the missing key was restored rather than the phases being rerun.
+
+Reconciliation evidence:
+
+- `verify_passed_phases` now reports zero issues across phases 1-13.
+- All five canonical dependency hashes still match `state.json`
+  (`dataset`, `split_manifest`, `outer_assignments`, `low_data_assignments`,
+  and the aggregate `split_hash`).
+- Every phase 1-13 ending commit exists in `git log` on `main`.
+- The Phase 13 production bundle was independently replayed with
+  `validate_low_complexity_benchmark`, not merely checksum-compared.
+
+Phase 14 was already started by the previous session and left mid-flight. Its
+implementation modules and configs exist but were never committed, and its
+three output bundles are retained on disk and marked invalid in place:
+
+- `phase_14/corrected-20260726-58613dd-phase14-smoke-v1-a` and `-b` are
+  pre-hardening smokes that both evaluated the same outer-test unit.
+- `phase_14/corrected-20260726-58613dd-phase14-production-v1` was interrupted
+  before any outer-test access and has no manifest.
+
+None of the three are Phase 14 evidence. Phase 14 restarts from fresh output
+directories against the hardened implementation.
+
+Current status: Phase 14 is in progress from checkpoint
+`58613dd0907602ce295958ca81aa70b9ed618d54`.
+
+Phase 14 plan:
+
+- Implement compact supervised-autoencoder architectures for canonical input
+  widths with exact parameter accounting and measured-only target scaling.
+- Add synthetic supervised and reconstruction weighting, fingerprint-aware
+  reconstruction objectives, role balancing, masking/denoising, and separate
+  positive-bit and zero-bit reconstruction diagnostics.
+- Compare the redesigned AE against predefined SVD, linear bottleneck, direct
+  XGBoost, direct MLP, anonymous transfer without AE, and typed transfer
+  without AE controls using validation-only policy selection.
+- Retain the AE as a primary benchmark only if its validation-selected policy
+  consistently beats the predefined simple controls; otherwise classify it
+  as a secondary ablation without weakening the gate.
