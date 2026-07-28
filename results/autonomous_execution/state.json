@@ -10,7 +10,7 @@
     "split_manifest_sha256": "70b11ef0d5ecf3517f92b47113132f081e94236911b821519a1dd9a40a6977bd"
   },
   "created_at": "2026-07-26T22:43:20Z",
-  "updated_at": "2026-07-28T04:45:00Z",
+  "updated_at": "2026-07-28T06:45:00Z",
   "phases": [
     {
       "phase_number": 1,
@@ -807,17 +807,49 @@
     {
       "phase_number": 16,
       "phase_name": "External dataset generalization",
-      "status": "not_started",
-      "started_at": null,
-      "completed_at": null,
-      "git_commit_at_start": null,
-      "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
-      "blockers": [],
+      "status": "passed",
+      "started_at": "2026-07-28T05:15:00Z",
+      "completed_at": "2026-07-28T06:45:00Z",
+      "git_commit_at_start": "71b80ca73f25dc0ffdc9d19f26829dd92f03bac9",
+      "git_commit_at_end": "a173ea12a52f78c126d461ea4e188e876dbb9b58",
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_reaction_family_adapter.py tests/test_suzuki_family_pipeline.py tests/test_suzuki_external_config.py tests/test_suzuki_external_validation_smoke.py",
+        "passed": 75,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 1049,
+        "status": "passed",
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "command": "python -B -m pytest -q tests/test_suzuki_external_validation_smoke.py",
+        "status": "passed",
+        "search_and_final_evaluation_smoke": true,
+        "runs_in_temporary_directory": true,
+        "validation_and_test_leakage_detected": false,
+        "policies_frozen_before_test_access": true,
+        "test_evaluations_per_unit": 1,
+        "outputs_hash_verified": true,
+        "typed_transfer_candidates_accepted": 33,
+        "typed_transfer_candidates_rejected_already_measured": 37
+      },
+      "output_paths": [
+        "docs/EXTERNAL_DATASETS.md",
+        "configs/suzuki_external_validation.yaml",
+        "src/bh_augmentation/data/reaction_family.py"
+      ],
+      "warnings": [
+        "Every Suzuki artifact is exercised against a synthetic fixture whose yields are a deterministic function of the row index. No empirical Suzuki result is claimed, produced, or implied.",
+        "Dataset citations, URLs and license terms in docs/EXTERNAL_DATASETS.md are marked verify-before-use and must be confirmed against the primary source before any config records them.",
+        "The Suzuki production config uses features.representation_kind and smiles_<role> columns to avoid colliding with deprecated Buchwald-Hartwig component-column names; external-family configs actively reject features.kind.",
+        "Committed ahead of phase 14 because its empirical arm is externally blocked and it is independent of the phase 14 outcome."
+      ],
+      "blockers": [
+        "External empirical validation blocked: no licensed Suzuki-Miyaura dataset is present locally and acquisition requires a human with network access."
+      ],
       "dependencies": ["phase 5", "phase 12"]
     },
     {

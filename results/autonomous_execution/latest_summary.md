@@ -1,10 +1,14 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-27T07:04:26Z
+Updated: 2026-07-28T06:45:00Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
-Batch 3 and Phases 1–3 are checkpointed locally; Phase 4 has passed its gate
-and is awaiting its local checkpoint.
+Phases 1–13 and Phase 16 are passed and checkpointed locally. Phase 14 is in
+progress. Phases 15, 17 and 18 are outstanding. Phase 16's empirical arm is
+externally blocked; see `blockers.md`.
+
+This file is append-oriented: each phase's section reflects what was known when
+that phase closed. The most recent sections are at the end.
 
 Current status: Phase 1 passed and was checkpointed locally at
 `5268df37a39ba443fdf26ee15dc0a09d3bcb59ae`.
@@ -453,3 +457,99 @@ Phase 14 plan:
 - Retain the AE as a primary benchmark only if its validation-selected policy
   consistently beats the predefined simple controls; otherwise classify it
   as a secondary ablation without weakening the gate.
+
+Phase 14 pre-run review (no outer-test access has occurred):
+
+The inherited implementation was reviewed adversarially before being run.
+The protocol backbone is sound — search, then placement on the untouched
+saved validation split, then freeze, then retention, then exactly one
+outer-test read per unit and family; non-transductivity is enforced by
+refitting for the test batch and requiring an identical state hash; AE epoch
+selection and target scaling are measured-only on a group-disjoint
+train-derived split; and the selection, partition, and metric replays
+re-derive their quantities rather than trusting written flags.
+
+Four defects would have compromised the scientific claim and are being
+repaired before the run:
+
+1. The AE family received 11 candidate policies per unit while every control
+   received 2. Because within-family selection is a minimum over inner
+   validation RMSE, this favours the AE by winner's curse alone.
+2. Only the AE family could choose its data protocol. The parameter-matched
+   direct MLP was forced to real-only data, so any AE win would conflate
+   architecture with access to the teacher-labelled synthetic pool.
+3. The outer-test evaluation identity embedded the git commit and float
+   placement metrics, so an unrelated commit or a one-ULP metric difference
+   would have minted a fresh claim and permitted a second outer-test read.
+4. The runner could not redirect the shared evaluation registry, so the same
+   config could never be run twice and determinism was not demonstrable.
+
+Measured cost: one AE fit takes 21.7 s at fraction 0.2 and 286.3 s at
+fraction 1.0 on real-only rows at hidden width 128; synthetic augmentation
+roughly doubles the training rows.
+
+Current status: Phase 14 implementation hardening in progress from commit
+`71b80ca`. No Phase 14 outer-test outcome has been read.
+
+## Phase 16 — external typed-reaction dataset adapter
+
+Passed and checkpointed locally at
+`a173ea12a52f78c126d461ea4e188e876dbb9b58`.
+
+    implementation passed
+    external empirical validation blocked
+
+Committed ahead of Phase 14 because its empirical arm is externally blocked and
+its implementation is independent of the Phase 14 outcome, which the roadmap's
+ordering rule permits. Phase 14's production benchmark was running concurrently.
+
+Scientific question: can the canonical typed-reaction, transfer and evaluation
+framework be applied to a chemically distinct reaction family without
+redesigning the system around that dataset?
+
+Implementation answer: yes, and the seam is one object.
+`ReactionFamilyAdapter` holds the family id, the ordered typed role names, the
+role-to-column mapping, the substrate/condition/product partition, the
+transferable condition subset, the family-scoped canonicalization and
+reaction-key schema versions, the reaction-SMILES assembly order, a required
+`DatasetProvenance` record, and a family-specific eligibility hook. Everything
+else is reused unchanged: RDKit canonicalization, stable identity encodings,
+grouped split construction with complete group separation, validation-only
+policy search with single-shot outer-test evaluation, metrics, hashing and
+manifests. Two tests assert the reuse positively — the splitter is asserted to
+be the same object the Buchwald-Hartwig path uses, and the policy-protocol
+source is asserted to contain no family vocabulary.
+
+The Buchwald-Hartwig adapter is constructed from the existing constants and is
+asserted to reproduce the current canonicalization key-for-key and hash-for-hash,
+so it is definitionally today's behaviour. No existing file was modified.
+
+Typed Suzuki-Miyaura roles: `organohalide`, `organoboron`, `catalyst`, `ligand`,
+`base`, `solvent_or_additive`, `product`. Buchwald-Hartwig terminology was not
+reused where the chemistry differs — there is no nitrogen nucleophile, and
+"aryl halide" would wrongly exclude heteroaryl and alkenyl electrophiles and
+triflate/tosylate/mesylate pseudohalides. The boron reagent is classified as a
+substrate rather than a transferable condition because it contributes the carbon
+fragment that ends up in the product skeleton, so transferring it would fabricate
+a different reaction and attach a donor's yield to it.
+
+Gate: 75 focused tests, full suite 1049 passed, ruff clean, and an end-to-end
+search plus final-evaluation smoke in a temporary directory asserting no
+validation or test leakage into fitting, policies frozen before test access, one
+test evaluation per unit, and hash-verifiable outputs. On the fixture, typed
+transfer accepted 33 candidates and rejected 37 as already-measured, so the
+duplicate-rejection path is genuinely exercised.
+
+Blocked-arm statement: no Suzuki-Miyaura dataset exists anywhere in this
+repository and nothing here downloads one. Every Suzuki artifact is exercised
+against a clearly labelled synthetic fixture whose yields are a deterministic
+function of the row index. No empirical Suzuki result is claimed, produced, or
+implied. `docs/EXTERNAL_DATASETS.md` records candidate datasets, acquisition
+steps, required columns, mandatory provenance fields and exact run commands,
+with every URL, DOI and license marked verify-before-use rather than asserted.
+
+Authoritative outputs:
+
+- `docs/EXTERNAL_DATASETS.md`
+- `configs/suzuki_external_validation.yaml`
+- `src/bh_augmentation/data/reaction_family.py`
