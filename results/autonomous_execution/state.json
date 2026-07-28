@@ -855,16 +855,50 @@
     {
       "phase_number": 17,
       "phase_name": "Complete reproducibility infrastructure",
-      "status": "not_started",
-      "started_at": null,
-      "completed_at": null,
-      "git_commit_at_start": null,
-      "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "status": "passed",
+      "started_at": "2026-07-28T06:55:00Z",
+      "completed_at": "2026-07-28T17:20:00Z",
+      "git_commit_at_start": "851d64edf59dab310af2e8113d715b433020b0e8",
+      "git_commit_at_end": "07479aeb9d0973c78a840de8a960c8685c3e2ee7",
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_strict_config.py tests/test_scientific_manifest.py tests/test_evaluation_claim_protection.py tests/test_reproducibility_tooling.py",
+        "passed": 85,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 1164,
+        "status": "passed",
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/run_production_path_smoke.py --output-directory <tmp> --rows 300",
+        "status": "passed",
+        "clean_checkout_reproduction": "two git worktrees and one git archive export at 851d64e",
+        "byte_identical_benchmark_artifacts": 12,
+        "total_benchmark_artifacts": 15,
+        "differing_artifacts_are_non_scientific": ["resource_metrics.csv", "manifest.json", "scientific_manifest.json"],
+        "phase_13_bundle_revalidated_by_full_replay": true,
+        "phase_13_manifest_hash": "f58ffad9c9d974ac4539b5bba515e3cc42cf6fd2b7f1ad941ec8b43630e033fa",
+        "manifest_tamper_detection_proven": true,
+        "config_validation_rejections_covered": 28
+      },
+      "output_paths": [
+        "docs/REPRODUCIBILITY.md",
+        "RESULT_STATUS.md",
+        "src/bh_augmentation/utils/strict_config.py",
+        "src/bh_augmentation/utils/scientific_manifest.py",
+        ".github/workflows/tests.yml"
+      ],
+      "warnings": [
+        "Outer-test claim protection hole found and fixed: the evaluation registry root was cwd-relative, so running a runner from another working directory created a fresh registry and permitted a second outer-test evaluation. Now anchored to the checkout, with no environment-variable override.",
+        "redesigned_ae_benchmark.py still carries the cwd-relative registry constant because its phase 14 production benchmark was executing; that run was launched with an explicit absolute registry directory. The one-line fix must be applied once phase 14 lands.",
+        "Residual limit: deleting a registry record file from the filesystem does release its claim. This is not addressable in-process and is why state.json remains the root of trust.",
+        "The canonical dataset and canonical split directory are gitignored, so full-scale phase 10-18 bundles are not directly reproducible from a clean checkout. Regeneration commands and expected hashes are documented; the full-scale regeneration was not executed.",
+        "Bit-identical results across different hardware are explicitly not claimed.",
+        "hidden_measured_calibration.py still carries a duplicate config validator and was deliberately not consolidated, because every passed-phase runner touched needs its production bundle re-validated."
+      ],
       "blockers": [],
       "dependencies": ["phases 1-16 implementation artifacts"]
     },

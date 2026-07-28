@@ -1,10 +1,10 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-28T16:55:00Z
+Updated: 2026-07-28T17:20:00Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
-Phases 1–13, 16 and 18 are passed and checkpointed locally. Phase 14 is in
-progress; Phases 15 and 17 are outstanding. Phase 16's empirical arm is
+Phases 1–13, 16, 17 and 18 are passed and checkpointed locally. Phase 14 is
+in progress; Phase 15 is outstanding. Phase 16's empirical arm is
 externally blocked; see `blockers.md`.
 
 This file is append-oriented: each phase's section reflects what was known when
@@ -637,3 +637,75 @@ Authoritative outputs:
 
 - `results/autonomous_execution/phase_18/corrected-20260727-phase18-production-v1`
 - `results/autonomous_execution/phase_18/corrected-20260728-phase18-prospective-package-v1`
+
+## Phase 17 — reproducibility and tamper-evidence
+
+Passed and checkpointed locally at `07479aeb9d09` (full hash in state.json).
+Committed ahead of Phases 14 and 15 because it is infrastructure, asserts no
+Phase 14 outcome, and the Phase 14 production benchmark was running.
+
+The phase consolidated the existing manifest, config, claim and hashing
+machinery rather than layering a second system beside it.
+
+Security finding, real and fixed: the outer-test evaluation registry root was
+declared as a working-directory-relative path in both `nested_ood_final.py`
+and `redesigned_ae_benchmark.py`. Running a scientific runner from any other
+directory therefore created a fresh, empty registry and silently permitted a
+completed outer-test identity to be evaluated a second time — defeating the
+repository-global property the registry exists to provide. The root is now
+anchored to the checkout containing `pyproject.toml`, with no
+environment-variable override, because an override would itself be a bypass.
+`redesigned_ae_benchmark.py` still carries the old constant because its
+benchmark was executing; that run was launched with an explicit absolute
+registry directory, and the one-line fix must be applied once Phase 14 lands.
+
+Tests prove that relocating or deleting a result directory does not release a
+claim, that completed and failed identities cannot be re-reserved, and that the
+registry exposes no delete, release, reset or unclaim operation. One residual
+limit is documented rather than papered over: deleting a record file from the
+filesystem does release its claim, which is not addressable in-process and is
+why `state.json` remains the root of trust.
+
+Clean-checkout reproduction, actually executed: two `git worktree` checkouts
+and one `git archive` export at `851d64e`, nothing installed globally, running
+the real canonical audit, the real group-safe split builder and the real Phase
+13 benchmark on committed fixture rows. Twelve of fifteen benchmark artifacts
+were byte-identical between independent checkouts, including every plan,
+policy, claim, prediction and metric file. The three that differed are resource
+timings and the manifests that hash them. No predicted value, metric, split,
+policy or claim differed.
+
+What cannot be reproduced is stated plainly rather than glossed: the canonical
+dataset and the canonical split directory are gitignored and absent from a
+clean checkout, so the full-scale Phase 10-18 bundles are not directly
+reproducible. `docs/REPRODUCIBILITY.md` gives the regeneration commands and
+pins the expected SHA-256 of each from `state.json`, and records that the
+full-scale regeneration was not executed rather than implying it was observed.
+Bit-identical results across different hardware are explicitly not claimed.
+
+The reproduction exercise found three real defects, all fixed: the shared
+config validator imported an uncommitted module at import scope and so could
+not be imported from a clean checkout at all; absolute paths leaked into
+`config_hash` and `plan_hash`; and `git archive` exports cannot run the
+scientific runners, which correctly refuse without a resolvable git commit.
+
+The Phase 13 production bundle was re-validated by full replay against the
+consolidated runner and still validates at manifest hash
+`f58ffad9c9d974ac4539b5bba515e3cc42cf6fd2b7f1ad941ec8b43630e033fa`.
+
+`RESULT_STATUS.md` now classifies every method and result family. The
+confirmatory-evidence class is explicitly empty because Phase 15 has not run,
+and Phase 14 is marked in progress with no result asserted in either direction;
+a test enforces that.
+
+Gate: 85 focused tests, full suite 1164 passed, ruff clean, 28 covered
+config-validation rejections, and a CI job that proves a one-byte mutation of a
+completed artifact is detected.
+
+Authoritative outputs:
+
+- `docs/REPRODUCIBILITY.md`
+- `RESULT_STATUS.md`
+- `src/bh_augmentation/utils/strict_config.py`
+- `src/bh_augmentation/utils/scientific_manifest.py`
+- `.github/workflows/tests.yml`
