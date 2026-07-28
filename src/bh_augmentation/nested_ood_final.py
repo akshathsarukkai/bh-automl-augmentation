@@ -14,6 +14,7 @@ from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_spl
 from bh_augmentation.evaluation.evaluation_registry import (
     EvaluationIdentity,
     EvaluationRegistry,
+    default_evaluation_registry_root,
 )
 from bh_augmentation.evaluation.nested_ood import (
     NESTED_OOD_SCHEMA_VERSION,
@@ -41,9 +42,9 @@ from bh_augmentation.utils.config import load_config
 from bh_augmentation.utils.corrected_runs import sha256_file, stable_hash
 
 NESTED_OOD_FINAL_SCHEMA_VERSION = "bh-nested-ood-final-v1"
-EVALUATION_REGISTRY_DIRECTORY = Path(
-    "results/autonomous_execution/evaluation_registry"
-)
+# Anchored to the checkout root so the outer-test claim cannot be bypassed by
+# launching the runner from a different working directory.
+EVALUATION_REGISTRY_DIRECTORY = default_evaluation_registry_root()
 
 
 def run_nested_ood_final(

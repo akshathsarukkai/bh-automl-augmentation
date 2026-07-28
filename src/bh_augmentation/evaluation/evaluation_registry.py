@@ -18,6 +18,11 @@ from typing import Any
 from bh_augmentation.utils.corrected_runs import stable_hash
 
 EVALUATION_REGISTRY_SCHEMA_VERSION = "bh-outer-evaluation-registry-v1"
+
+#: Canonical registry location, expressed relative to the repository root.
+REPOSITORY_RELATIVE_REGISTRY_DIRECTORY = Path(
+    "results/autonomous_execution/evaluation_registry"
+)
 _HASH_PATTERN = re.compile(r"[0-9a-f]{64}")
 _STATUSES = {
     "reserved",
@@ -54,6 +59,31 @@ class EvaluationTransitionError(EvaluationRegistryError):
 
 class EvaluationRegistryCorruptionError(EvaluationRegistryError):
     """Raised when a persisted registry record fails validation."""
+
+
+def repository_root() -> Path:
+    """Return the checkout root that anchors the repository-global registry.
+
+    The registry is only repository-global if its location does not depend on
+    the working directory a runner happens to be launched from.  The root is
+    resolved from the installed package location by walking up to the checkout
+    that contains ``pyproject.toml`` and ``src/bh_augmentation``.
+    """
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "src" / "bh_augmentation"
+        ).is_dir():
+            return candidate
+    return Path.cwd().resolve()
+
+
+def default_evaluation_registry_root() -> Path:
+    """Return the absolute, working-directory-independent registry root.
+
+    There is deliberately no environment-variable override: an override would
+    itself be a way to bypass an existing outer-test claim.
+    """
+    return repository_root() / REPOSITORY_RELATIVE_REGISTRY_DIRECTORY
 
 
 @dataclass(frozen=True, slots=True)

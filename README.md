@@ -117,8 +117,58 @@ python -m pip install -e ".[dev]"
 ruff check src tests
 ```
 
-GitHub Actions runs the fixture-based test suite on push and pull requests. The
-base CI install does not require RDKit, TDC, XGBoost, CatBoost, or Optuna.
+GitHub Actions runs three jobs on push and pull requests:
+
+- **lint** — `python -B -m ruff check .` over the whole repository.
+- **tests** — the full `pytest` suite.
+- **production_path_smoke** — a bounded end-to-end run of the real scientific
+  production path (canonical data audit → canonical group-safe splits → the
+  Phase 13 low-complexity benchmark) on a 300-row slice of the committed
+  `data/processed/bh_clean_stress.csv` fixture, followed by a
+  reproducibility-bundle build and a tamper-evidence assertion. It requires no
+  gitignored artifact and no network access, and exists because unit tests alone
+  cannot catch an end-to-end break in a scientific runner.
+
+Run the smoke locally with:
+
+```bash
+python -B scripts/run_production_path_smoke.py --output-directory /tmp/bh-smoke --rows 300
+```
+
+## Reproducibility And Result Integrity
+
+Every completed scientific bundle carries a hash-addressed manifest binding the
+result to its code commit, dataset, split, features, configuration, plan,
+outputs, dependency versions, and hardware/threading environment. Verify any
+bundle with:
+
+```bash
+python -B - <<'PY'
+from bh_augmentation.utils.scientific_manifest import verify_manifest
+print(verify_manifest("results/<some-corrected-bundle>").to_dict())
+PY
+```
+
+Build a local, non-publishing reproducibility bundle for a result:
+
+```bash
+python -B scripts/build_reproducibility_bundle.py \
+    --result-directory results/<some-corrected-bundle> \
+    --bundle-directory /tmp/my-bundle \
+    --config configs/<the-config-used>.yaml
+```
+
+Inspect outer-test evaluation claims (read-only; there is deliberately no way to
+delete or release a claim):
+
+```bash
+python -B scripts/inspect_evaluation_registry.py list
+```
+
+`docs/REPRODUCIBILITY.md` records an actually executed clean-checkout
+reproduction, exactly what it verified, and what a human must supply for the
+full-scale canonical inputs (which are gitignored). `RESULT_STATUS.md` classifies
+every method and result family.
 
 ## Dataset Setup Options
 

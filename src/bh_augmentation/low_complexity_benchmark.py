@@ -13,7 +13,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-import yaml
 
 from bh_augmentation.data.outcome_access import read_allowed_outcomes
 from bh_augmentation.data.saved_canonical_splits import (
@@ -31,12 +30,28 @@ from bh_augmentation.representations.low_complexity import (
     LowComplexityConfig,
     fit_low_complexity_representation,
 )
-from bh_augmentation.results.status import assert_result_directory_allowed
 from bh_augmentation.utils.corrected_runs import (
     feature_contract_record,
     resolve_corrected_feature_config,
     sha256_file,
     stable_hash,
+)
+from bh_augmentation.utils.scientific_manifest import (
+    build_scientific_manifest,
+    write_scientific_manifest,
+)
+from bh_augmentation.utils.strict_config import (
+    load_strict_config,
+    require_exact_keys,
+    require_fresh_output_directory,
+    require_int,
+    require_mapping,
+    require_nonnegative_float,
+    require_open_unit,
+    require_positive_float,
+    require_positive_int,
+    require_unique_fractions,
+    require_unique_ints,
 )
 
 LOW_COMPLEXITY_BENCHMARK_SCHEMA_VERSION = "bh-low-complexity-benchmark-v1"
@@ -213,11 +228,7 @@ def run_low_complexity_benchmark(
         if output_directory is not None
         else contract["output_directory"]
     )
-    assert_result_directory_allowed(output)
-    if output.exists():
-        raise FileExistsError(
-            f"Refusing to overwrite low-complexity output: {output}"
-        )
+    require_fresh_output_directory(output, name="low-complexity output directory")
     output.mkdir(parents=True, exist_ok=False)
     paths = {
         name.removesuffix(".json").removesuffix(".csv"): output / name
@@ -587,6 +598,37 @@ def run_low_complexity_benchmark(
     }
     manifest["manifest_hash"] = stable_hash(manifest)
     _write_json(paths["manifest"], manifest)
+    paths["scientific_manifest"] = write_scientific_manifest(
+        output,
+        build_scientific_manifest(
+            status="corrected_revalidation_complete",
+            output_directory=output,
+            outputs=(*_OUTPUTS, "manifest.json"),
+            dataset_path=contract["dataset_path"],
+            dataset_hash=saved.dataset_hash,
+            split_hash=saved.aggregate_split_hash,
+            feature_metadata_hash=plan["feature_metadata_hash"],
+            config_hash=plan["config_hash"],
+            plan_hash=plan["plan_hash"],
+            resolved_scientific_config=scientific_config,
+            row_counts={
+                "evaluation_units": len(units),
+                "candidates": len(candidate_rows),
+                "frozen_policies": len(selected_records),
+                "search_predictions": len(search_prediction_rows),
+                "search_metrics": len(search_metric_rows),
+                "final_predictions": len(final_predictions),
+                "final_test_metrics": len(final_metrics),
+                "summary": len(summary),
+            },
+            command=_command_record(config, output),
+            extra={
+                "runner": "bh_augmentation.low_complexity_benchmark",
+                "runner_schema_version": LOW_COMPLEXITY_BENCHMARK_SCHEMA_VERSION,
+                "runner_manifest_hash": manifest["manifest_hash"],
+            },
+        ),
+    )
     validate_low_complexity_benchmark(output)
     return paths
 
@@ -2026,87 +2068,19 @@ def _nullable_scalar_equal(series: pd.Series, expected: Any) -> bool:
 def _load_config(
     config: str | Path | Mapping[str, Any],
 ) -> Mapping[str, Any]:
-    if isinstance(config, Mapping):
-        return dict(config)
-    with Path(config).open() as handle:
-        loaded = yaml.safe_load(handle)
-    if not isinstance(loaded, Mapping):
-        raise ValueError("Low-complexity config must be a mapping.")
-    return loaded
+    return load_strict_config(config)
 
 
-def _mapping(value: Any, name: str) -> Mapping[str, Any]:
-    if not isinstance(value, Mapping):
-        raise ValueError(f"{name} must be a mapping.")
-    return value
-
-
-def _exact_keys(
-    value: Mapping[str, Any], expected: set[str], name: str
-) -> None:
-    if set(value) != expected:
-        raise ValueError(
-            f"{name} keys mismatch: expected={sorted(expected)}, "
-            f"observed={sorted(value)}."
-        )
-
-
-def _unique_ints(value: Any, name: str) -> tuple[int, ...]:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{name} must be a nonempty list.")
-    result = tuple(_int(item, name) for item in value)
-    if len(result) != len(set(result)):
-        raise ValueError(f"{name} must contain unique values.")
-    return result
-
-
-def _unique_fractions(value: Any, name: str) -> tuple[float, ...]:
-    if not isinstance(value, list) or not value:
-        raise ValueError(f"{name} must be a nonempty list.")
-    result = tuple(float(item) for item in value)
-    if (
-        len(result) != len(set(result))
-        or any(
-            not math.isfinite(item) or not 0.0 < item <= 1.0
-            for item in result
-        )
-    ):
-        raise ValueError(f"{name} must contain unique values in (0, 1].")
-    return result
-
-
-def _int(value: Any, name: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"{name} must be an integer.")
-    return value
-
-
-def _positive_int(value: Any, name: str) -> int:
-    result = _int(value, name)
-    if result < 1:
-        raise ValueError(f"{name} must be positive.")
-    return result
-
-
-def _positive_float(value: Any, name: str) -> float:
-    result = float(value)
-    if not math.isfinite(result) or result <= 0.0:
-        raise ValueError(f"{name} must be finite and positive.")
-    return result
-
-
-def _nonnegative_float(value: Any, name: str) -> float:
-    result = float(value)
-    if not math.isfinite(result) or result < 0.0:
-        raise ValueError(f"{name} must be finite and nonnegative.")
-    return result
-
-
-def _open_unit(value: Any, name: str) -> float:
-    result = float(value)
-    if not math.isfinite(result) or not 0.0 < result < 1.0:
-        raise ValueError(f"{name} must be in (0, 1).")
-    return result
+# Strict configuration validation is shared with every other scientific runner.
+_mapping = require_mapping
+_exact_keys = require_exact_keys
+_unique_ints = require_unique_ints
+_unique_fractions = require_unique_fractions
+_int = require_int
+_positive_int = require_positive_int
+_positive_float = require_positive_float
+_nonnegative_float = require_nonnegative_float
+_open_unit = require_open_unit
 
 
 def _derived_seed(base_seed: int, *parts: str) -> int:

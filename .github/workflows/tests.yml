@@ -5,7 +5,29 @@ on:
   pull_request:
 
 jobs:
+  lint:
+    name: Ruff lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install lint dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff
+
+      - name: Run ruff
+        run: python -B -m ruff check .
+
   tests:
+    name: Unit tests
     runs-on: ubuntu-latest
 
     steps:
@@ -25,3 +47,68 @@ jobs:
 
       - name: Run tests
         run: pytest
+
+  production_path_smoke:
+    name: Bounded production-path smoke
+    runs-on: ubuntu-latest
+    # Unit tests alone cannot catch a scientific runner that has been broken end
+    # to end. This job runs the real canonical data audit, the real canonical
+    # group-safe split builder, and the real Phase 13 low-complexity benchmark
+    # on a small slice of the committed data/processed/bh_clean_stress.csv
+    # fixture, then replays the bundle with the production validator and
+    # verifies every recorded output hash. It needs no gitignored artifact: the
+    # canonical dataset and the canonical split directory are regenerated from
+    # committed data inside the job's own scratch directory.
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # The scientific runners refuse to execute without a resolvable git
+          # commit, so the checkout must retain its .git directory.
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+          python -m pip install rdkit
+
+      - name: Confirm the committed smoke fixture is present
+        run: |
+          test -f data/processed/bh_clean_stress.csv
+          git ls-files --error-unmatch data/processed/bh_clean_stress.csv
+
+      - name: Run the bounded production path
+        run: |
+          python -B scripts/run_production_path_smoke.py \
+            --output-directory "${RUNNER_TEMP}/bh-production-smoke" \
+            --rows 300
+
+      - name: Build a local reproducibility bundle for the smoke result
+        run: |
+          python -B scripts/build_reproducibility_bundle.py \
+            --result-directory "${RUNNER_TEMP}/bh-production-smoke/corrected_low_complexity_smoke" \
+            --bundle-directory "${RUNNER_TEMP}/bh-production-smoke-bundle"
+
+      - name: Prove the completed manifest is tamper-evident
+        run: |
+          python -B scripts/assert_manifest_tamper_evident.py \
+            --result-directory "${RUNNER_TEMP}/bh-production-smoke/corrected_low_complexity_smoke" \
+            --output-name summary.csv
+
+      - name: Upload smoke artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-path-smoke
+          path: |
+            ${{ runner.temp }}/bh-production-smoke/smoke_summary.json
+            ${{ runner.temp }}/bh-production-smoke-bundle
+          if-no-files-found: warn
