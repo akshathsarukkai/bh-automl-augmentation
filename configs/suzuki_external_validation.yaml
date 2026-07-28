@@ -1,0 +1,102 @@
+# Suzuki-Miyaura external validation.
+#
+# STATUS
+#   implementation passed
+#   external empirical validation blocked
+#
+# THIS CONFIG CANNOT RUN AS SHIPPED.
+# `dataset.path` below points at a file that does not exist in this repository,
+# and it is not going to be created by any code here. No licensed Suzuki-Miyaura
+# dataset is present locally; obtaining one requires a human with network access
+# who can accept the source license. See docs/EXTERNAL_DATASETS.md for exactly
+# which dataset to obtain, where to put it, and what to fill in below.
+#
+# Running this config as-is raises FileNotFoundError before any output directory
+# is created. Running it after supplying the data but before updating
+# `reaction_family.provenance.raw_file_sha256` raises a provenance mismatch: the
+# runner refuses to proceed unless the file on disk hashes to the declared digest.
+#
+# Command once the data is present:
+#   python -B -m bh_augmentation.run_external_family_validation \
+#       --config configs/suzuki_external_validation.yaml
+
+scientific_run: true
+allow_hash_fingerprint_fallback: false
+
+reaction_family:
+  family_id: suzuki_miyaura
+  # Map each typed role onto the column name used by the dataset you obtained.
+  # These defaults match the schema documented in docs/EXTERNAL_DATASETS.md.
+  role_columns:
+    - smiles_organohalide
+    - smiles_organoboron
+    - smiles_catalyst
+    - smiles_ligand
+    - smiles_base
+    - smiles_solvent_or_additive
+    - smiles_product
+  # The organoboron reagent is a SUBSTRATE and is deliberately absent here:
+  # transferring it would change the product constitution.
+  transferable_roles:
+    - ligand
+    - base
+    - solvent_or_additive
+  provenance:
+    # ALL SIX FIELDS ARE REQUIRED. Config validation rejects this file if any of
+    # them is missing or blank. Do not guess: if you cannot confirm a value,
+    # record "verify before use" rather than inventing one.
+    source_name: "FILL IN: named dataset, e.g. the Suzuki-Miyaura HTE dataset accompanying Perera et al., Science 2018"
+    source_url: "FILL IN: the exact URL you downloaded from (verify before use)"
+    license: "FILL IN: the license or terms of use that actually apply (verify before use)"
+    citation: "FILL IN: full citation of the primary publication and of any redistribution"
+    retrieved_date: "FILL IN: ISO-8601 date on which you downloaded the file"
+    # PLACEHOLDER. Replace with the real sha256 of the file you downloaded:
+    #   shasum -a 256 data/external/suzuki_miyaura/suzuki_miyaura_hte.csv
+    # The runner compares this to the file on disk and refuses to run on a mismatch.
+    raw_file_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+
+canonicalization:
+  backend: rdkit
+  isomeric_smiles: true
+  preserve_role_order: true
+
+dataset:
+  # THIS FILE DOES NOT EXIST. Nothing in this repository creates it.
+  path: data/external/suzuki_miyaura/suzuki_miyaura_hte.csv
+  yield_column: yield
+
+splits:
+  group_column: canonical_reaction_key
+  seeds: [0, 1, 2]
+  train_size: 0.7
+  valid_size: 0.15
+  test_size: 0.15
+  train_fractions: [0.1, 0.2, 1.0]
+
+# `representation_kind`, not `kind`: `features.kind` is reserved for the
+# Buchwald-Hartwig representation vocabulary enumerated in
+# tests/test_canonical_representation.py, and this is a family-scoped
+# representation belonging to the Suzuki adapter, not a BH feature kind.
+features:
+  representation_kind: suzuki_miyaura_role_separated
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+
+condition_transfer:
+  enabled: true
+  transferable_roles:
+    - ligand
+    - base
+    - solvent_or_additive
+  max_candidates_per_source: 4
+  synthetic_multipliers: [0.25, 0.5, 1.0]
+
+selection:
+  metric: rmse
+  lower_is_better: true
+
+output:
+  # Must not already exist and must not be reused; the runner refuses to
+  # overwrite a non-empty directory.
+  directory: results/external/suzuki_miyaura_external_validation
