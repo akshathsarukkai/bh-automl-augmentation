@@ -871,16 +871,48 @@
     {
       "phase_number": 18,
       "phase_name": "Recommendation evaluation and prospective preparation",
-      "status": "not_started",
-      "started_at": null,
-      "completed_at": null,
-      "git_commit_at_start": null,
-      "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "status": "passed",
+      "started_at": "2026-07-28T06:20:00Z",
+      "completed_at": "2026-07-28T16:50:00Z",
+      "git_commit_at_start": "851d64edf59dab310af2e8113d715b433020b0e8",
+      "git_commit_at_end": "085649cb428a2ad4999d1a5a09a5e01de4e7fa24",
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_recommendation_simulation.py tests/test_prospective_package.py",
+        "passed": 37,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q tests/test_recommendation.py tests/test_topk.py tests/test_uncertainty_estimators.py tests/test_uncertainty_calibration.py tests/test_saved_canonical_splits.py tests/test_representation_splits.py tests/test_outcome_access.py",
+        "passed": 75,
+        "status": "passed",
+        "warnings": 0,
+        "note": "Adjacent-suite gate. The complete full-suite run is deferred to the final audit because the phase 14 production benchmark is executing concurrently."
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/run_recommendation_simulation.py --config configs/corrected_recommendation_simulation_phase18_smoke.yaml",
+        "status": "passed",
+        "determinism_smokes": 2,
+        "identical_scientific_artifacts": 10,
+        "expected_differing_manifest_fields": ["command", "manifest_hash"],
+        "future_label_access_events": 0,
+        "random_replicates": 256,
+        "campaigns": 1310,
+        "artifact_hashes_independently_verified": 21
+      },
+      "output_paths": [
+        "results/autonomous_execution/phase_18/corrected-20260727-phase18-production-v1",
+        "results/autonomous_execution/phase_18/corrected-20260728-phase18-prospective-package-v1"
+      ],
+      "warnings": [
+        "best_yield_discovered is a weak discriminator on this dataset (99.9 informed vs 98.4 random) because random already finds near-maximal yield in a dense grid; it must not be quoted as evidence.",
+        "unique_substrate_keys is uninformative: only 15 substrate pairs exist and every strategy saturates.",
+        "Negative result retained: informed strategies acquire fewer unique condition blocks than random, at the 0th percentile in all units.",
+        "Conformal coverage degrades on acquisition-selected batches (0.82 empirical vs 0.90 nominal for exploitative policies) because a selected batch is not exchangeable.",
+        "The 256-bit representation matches phase 12's calibration evidence rather than phase 13's 2048-bit benchmark, so the acquisition model is weaker than the repository's best validated predictor and the reported margins are conservative.",
+        "The eligible prospective candidate space is exactly five reactions because the dataset is a near-complete factorial (3955 of 3960 cells measured). The list was not padded.",
+        "Prospective laboratory validation has not been performed."
+      ],
       "blockers": [],
       "dependencies": ["phase 12", "phase 15", "phase 17"]
     }

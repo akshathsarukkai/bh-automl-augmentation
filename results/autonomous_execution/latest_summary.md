@@ -553,3 +553,87 @@ Authoritative outputs:
 - `docs/EXTERNAL_DATASETS.md`
 - `configs/suzuki_external_validation.yaml`
 - `src/bh_augmentation/data/reaction_family.py`
+
+## Phase 18 — sequential experiment selection
+
+Passed and checkpointed locally at `085649cb428a` (see state.json for the full
+hash). Committed ahead of Phases 14, 15 and 17 because it does not depend on
+the Phase 14 outcome and deliberately excludes the supervised autoencoder,
+whose status was still being decided by a concurrently running benchmark.
+
+Scientific question: does the validated prediction system select useful
+experiments more efficiently than realistic baselines?
+
+Model, chosen from evidence rather than preference: `bootstrap_extra_trees`
+with split-conformal intervals at 0.9 coverage. Phase 12 recorded only two
+estimators passing calibrated selection and chose this one in 26 of its 30
+frozen policies. The config validator hard-rejects any other estimator, and the
+supervised autoencoder is never imported.
+
+Protocol: at round t an acquisition function sees only the seed pool and labels
+acquired strictly before t; pool outcomes are loaded only after every campaign
+completes. Seed pool, candidate pool, rounds, batch size and total budget are
+identical across all seven strategies. The random baseline is a complete
+256-replicate distribution, not one trajectory. The manifest records
+`future_label_access_events = 0`.
+
+Result: informed acquisition beats random by a practically meaningful margin,
+but the margin lives in how much useful chemistry a fixed budget buys, not in
+whether the single best reaction is eventually found. Over 320 experiments,
+diversity-aware and greedy returned about 4.3 times the high-yield hits (229.8
+and 222.2 against 51.6), about 2.2 times the mean acquired yield (73.6 and 72.3
+against 33.2), and recovered roughly 80% of the true top-50 against 13% for
+random — at the 100th percentile of the random distribution in every evaluation
+unit, and the 0th percentile for cumulative regret.
+
+Null and negative findings, retained rather than suppressed:
+
+- `best_yield_discovered` improves only 99.9 against 98.4 and reaches only the
+  76th to 93rd percentile. Random with 320 draws from a dense 3164-cell grid
+  already finds near-maximal yield. This metric is a weak discriminator on this
+  dataset and must not be quoted as evidence.
+- `unique_substrate_keys` is uninformative: only 15 substrate pairs exist and
+  every strategy saturates at 15.
+- Condition diversity is a negative result. Every informed strategy acquires
+  fewer unique condition blocks than random (139-197 against 207), at the 0th
+  percentile in all units. Exploiting predicted yield narrows the explored
+  condition space. Only the support-distance policy beats random on support
+  coverage, and it pays for that with much worse yield outcomes.
+- Conformal coverage degrades on acquisition-selected batches: 0.82 empirical
+  against 0.90 nominal for the exploitative policies, because a selected batch
+  is not exchangeable.
+
+Structural finding that constrains the whole project: the eligible prospective
+candidate space contains exactly five reactions. The canonical dataset is a
+near-complete factorial — 15 canonical substrate groups times 264 canonical
+condition groups is 3960 cells, of which 3955 are measured. This was confirmed
+independently. It also explains the recurring zero-accepted-candidate null
+results recorded in Phases 1 through 4: there is almost no novel chemistry to
+propose by recombining measured role values. The candidate list was not padded,
+because lengthening it would require inventing molecules outside the measured
+inventory or relaxing chemical eligibility.
+
+The prospective package carries seven explicit canonical roles per candidate,
+per-role provenance, calibrated intervals reported unclipped so the coverage
+guarantee is preserved, support distances, 24 held-out measured controls whose
+observed interval coverage was 0.918 against a nominal 0.900, diversity and
+uncertainty rationales, and a protocol draft that lists what the canonical
+dataset cannot supply rather than inventing it: temperature, time,
+stoichiometry, concentration, scale, atmosphere, work-up and analytical method.
+
+    Prospective laboratory validation has not been performed.
+
+Every candidate's practical accessibility is recorded as unknown. No claim is
+made about synthesis feasibility, safety, cost or likelihood of laboratory
+success.
+
+Limitation: the 256-bit representation matches Phase 12, whose calibration
+evidence this reuses, rather than Phase 13's 2048-bit benchmark. The acquisition
+policies are therefore driven by a weaker predictor than the repository's best
+validated one, which makes the reported margins conservative rather than
+inflated. Whether they would grow with a stronger model is untested.
+
+Authoritative outputs:
+
+- `results/autonomous_execution/phase_18/corrected-20260727-phase18-production-v1`
+- `results/autonomous_execution/phase_18/corrected-20260728-phase18-prospective-package-v1`
