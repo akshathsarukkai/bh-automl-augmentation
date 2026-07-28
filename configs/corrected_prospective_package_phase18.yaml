@@ -1,0 +1,38 @@
+# Phase 18 prospective-experiment package.
+#
+# Prospective laboratory validation has not been performed.
+#
+# The estimator, coverage, representation and strategy parameters are identical
+# to the validated Phase 18 recommendation simulation so the package inherits its
+# evidence rather than introducing new, unvalidated machinery. The supervised
+# autoencoder is not used.
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+features:
+  kind: bh_role_separated
+  n_bits: 256
+  radius: 2
+  fingerprint_backend: rdkit
+model:
+  uncertainty_method: bootstrap_extra_trees
+  coverage: 0.9
+  calibration_fraction: 0.2
+  control_pool_fraction: 0.1
+  estimator_params:
+    bootstrap_members: 5
+    bootstrap_trees_per_member: 8
+controls:
+  measured_replicate_anchors: 12
+  model_high_anchors: 6
+  model_low_anchors: 6
+strategies:
+  ucb_beta: 1.0
+  expected_improvement_xi: 0.0
+  diversity_penalty: 20.0
+  support_distance_yield_weight: 0.001
+evidence:
+  recommendation_simulation_directory: results/autonomous_execution/phase_18/corrected-20260727-phase18-production-v1
+  recommendation_simulation_manifest_hash: ae8b6a8b20fcb6d83654789d6006496f3245de1bd916c827581f9a1894f8a744
+base_seed: 0
+output:
+  directory: results/corrected_prospective_package_phase18

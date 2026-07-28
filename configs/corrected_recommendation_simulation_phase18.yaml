@@ -1,0 +1,41 @@
+# Phase 18 production configuration.
+#
+# The prediction model and its uncertainty come from the Phase 12 estimator that
+# survived calibrated selection (bootstrap_extra_trees won 26 of 30 frozen
+# policies; heterogeneous_disagreement won the remaining 4). Estimator sizing and
+# the 256-bit role-separated representation match the Phase 12 production run so
+# the calibration evidence transfers. The supervised autoencoder is not used.
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  canonical_directory: results/corrected_canonical_splits
+  random_seeds: [0, 1, 2, 3, 4]
+  pool_train_fraction: 1.0
+campaign:
+  seed_pool_size: 64
+  rounds: 10
+  batch_size: 32
+  random_replicates: 256
+  top_k: 50
+  high_yield_threshold: 70.0
+model:
+  uncertainty_method: bootstrap_extra_trees
+  coverage: 0.9
+  calibration_fraction: 0.3
+  minimum_calibration_rows: 12
+  estimator_params:
+    bootstrap_members: 5
+    bootstrap_trees_per_member: 8
+strategies:
+  ucb_beta: 1.0
+  expected_improvement_xi: 0.0
+  diversity_penalty: 20.0
+  support_distance_yield_weight: 0.001
+features:
+  kind: bh_role_separated
+  n_bits: 256
+  radius: 2
+  fingerprint_backend: rdkit
+base_seed: 0
+output:
+  directory: results/corrected_recommendation_simulation_phase18
