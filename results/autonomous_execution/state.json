@@ -773,17 +773,57 @@
     {
       "phase_number": 14,
       "phase_name": "Redesign and reassess the supervised AE",
-      "status": "in_progress",
+      "status": "passed",
       "started_at": "2026-07-27T09:29:46Z",
-      "completed_at": null,
+      "completed_at": "2026-07-29T00:45:00Z",
       "git_commit_at_start": "58613dd0907602ce295958ca81aa70b9ed618d54",
-      "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
+      "git_commit_at_end": "6a618ed139c8d6870592208b0c8046f7624ad65c",
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_redesigned_ae_benchmark.py tests/test_redesigned_supervised_autoencoder.py tests/test_phase14_methods.py tests/test_matched_direct_mlp.py tests/test_ae_retention.py tests/test_reconstruction_contract.py tests/test_scientific_transfer_pool.py",
+        "passed": 135,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 1164,
+        "status": "passed",
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/run_redesigned_ae_benchmark.py --config configs/redesigned_ae_benchmark_phase14_smoke.yaml --output-directory <fresh> --evaluation-registry-directory <temp>",
+        "status": "passed",
+        "determinism_smokes": 2,
+        "identical_scientific_artifacts": 18,
+        "total_artifacts": 20,
+        "expected_differing_artifacts": ["resource_metrics.csv", "test_evaluation_registry.json"],
+        "production_command": "python -B scripts/run_redesigned_ae_benchmark.py --config configs/redesigned_ae_benchmark_phase14.yaml --output-directory results/autonomous_execution/phase_14/corrected-20260728-851d64e-phase14-production-v3",
+        "candidate_policies": 480,
+        "evaluation_units": 10,
+        "method_families": 7,
+        "frozen_policies": 70,
+        "evaluation_claims": 70,
+        "final_prediction_rows": 27720,
+        "final_metric_rows": 280,
+        "independent_replay_validation": true,
+        "retention_placement": "secondary_ablation",
+        "test_used_for_selection_or_retention": false,
+        "test_evaluation_count_per_unit_family": 1
+      },
+      "output_paths": [
+        "results/autonomous_execution/phase_14/corrected-20260727-71b80ca-phase14-smoke-v2-a",
+        "results/autonomous_execution/phase_14/corrected-20260727-71b80ca-phase14-smoke-v2-b",
+        "results/autonomous_execution/phase_14/corrected-20260728-851d64e-phase14-production-v3"
+      ],
       "warnings": [
-        "Pre-hardening Phase 14 bundles corrected-20260726-58613dd-phase14-smoke-v1-a, -smoke-v1-b, and the interrupted corrected-20260726-58613dd-phase14-production-v1 attempt are retained on disk and marked invalid in place; they are not Phase 14 evidence."
+        "Pre-hardening Phase 14 bundles corrected-20260726-58613dd-phase14-smoke-v1-a, -smoke-v1-b, the interrupted corrected-20260726-58613dd-phase14-production-v1 attempt, and the session-killed corrected-20260727-71b80ca-phase14-production-v2 attempt are retained on disk and marked invalid in place; none is Phase 14 evidence.",
+        "The search budget deliberately favoured the AE (11 candidates against 3 to 10 for the controls). Because within-family selection is a minimum over inner-validation RMSE, this makes the negative result conservative; it would have made a positive result untrustworthy.",
+        "Outer-test metrics are descriptive only and were not used to reach the retention decision. The paired AE-minus-matched-MLP gap is small and changes sign across seeds.",
+        "Aggregate reconstruction MSE is dominated by 5.6 million zero bits against 65 thousand positive bits; positive-bit reconstruction is 13 to 32 times worse and is the diagnostic that explains the outcome.",
+        "AE validation selection was unstable: six different candidates won across ten units.",
+        "This phase covers canonical random splits at fractions 0.2 and 1.0 only. It is development evidence, not confirmatory or OOD evidence.",
+        "The production artifact records git_dirty_at_execution because the implementation is checkpointed only after its gate passes, following the phase 13 convention.",
+        "redesigned_ae_benchmark.py still declares a cwd-relative evaluation registry root. This run was launched with an explicit absolute registry directory; the phase 17 one-line fix must now be applied."
       ],
       "blockers": [],
       "dependencies": ["phase 6", "phase 12", "phase 13"]

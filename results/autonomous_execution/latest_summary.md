@@ -1,10 +1,10 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-28T17:20:00Z
+Updated: 2026-07-29T00:45:00Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
-Phases 1–13, 16, 17 and 18 are passed and checkpointed locally. Phase 14 is
-in progress; Phase 15 is outstanding. Phase 16's empirical arm is
+Phases 1–14 and 16–18 are passed and checkpointed locally. Only Phase 15
+remains. Phase 16's empirical arm is
 externally blocked; see `blockers.md`.
 
 This file is append-oriented: each phase's section reflects what was known when
@@ -709,3 +709,85 @@ Authoritative outputs:
 - `src/bh_augmentation/utils/strict_config.py`
 - `src/bh_augmentation/utils/scientific_manifest.py`
 - `.github/workflows/tests.yml`
+
+## Phase 14 — supervised autoencoder reassessment
+
+Passed and checkpointed locally at `6a618ed139c8` (full hash in state.json).
+
+Scientific question: under the corrected split, scaling, selection and
+evaluation protocols, does a compact supervised autoencoder add reproducible
+value beyond simpler representation-learning and prediction baselines?
+
+**Answer: no. The AE is classified as a secondary ablation and is not carried
+into the primary confirmatory hypothesis.**
+
+The retention decision used placement-validation RMSE only, against a criterion
+fixed in the config before any outer-test outcome existed, and was frozen before
+the first outer-test read. All five criteria failed:
+
+| Fraction | Mean delta | Median delta | Margin wins | Practical losses |
+| --- | --- | --- | --- | --- |
+| 0.2 | -0.999 | -1.099 | 0 of 5 | 4 of 5 |
+| 1.0 | -0.453 | -0.237 | 0 of 5 | 1 of 5 |
+
+Delta is best-control RMSE minus AE RMSE, so negative means the AE is worse.
+The pooled seed-cluster bootstrap gives mean -0.726 with 95% CI
+[-1.101, -0.395], excluding zero on the wrong side. The AE lost to the best
+simple control in 9 of the 10 evaluation units.
+
+The negative result is conservative because the protocol was tilted toward the
+AE. Per-unit search budgets were AE 11, matched direct MLP 10, each transfer
+control 6, truncated SVD 6, linear autoencoder 6, direct XGBoost 3. Within-family
+selection is a minimum over inner-validation RMSE, so the family with the largest
+budget benefits most from winner's curse. The AE had the largest budget and still
+lost. The same asymmetry would have made a positive result untrustworthy.
+
+Diagnostics beyond aggregate loss explain the outcome. Aggregate reconstruction
+MSE looks excellent — 0.0034 at fraction 0.2 and 0.0006 at 1.0 — but it is
+dominated by 5.6 million zero bits against only 65 thousand positive bits. On
+the chemically meaningful set bits, reconstruction is 13 to 32 times worse:
+positive-bit MSE 0.0799 against zero-bit MSE 0.0025 at fraction 0.2, and 0.0066
+against 0.0005 at fraction 1.0. The decoder is largely learning to emit zeros.
+An aggregate-loss-only view would have made this representation look healthy.
+
+Validation selection was unstable: six different AE candidates won across the
+ten units, with no configuration reliably best.
+
+The AE is also the most expensive family. Mean final-fit cost was 136.7 s and
+1.24 GB peak RSS increment, against 57.3 s and 0.52 GB for the parameter-matched
+direct MLP and 12.0 s and 0.81 GB for direct XGBoost.
+
+Outer-test metrics, reported for completeness and used for none of the above:
+at fraction 0.2 the AE ranks fifth of seven families (10.758 against 10.461 for
+the best); at fraction 1.0 it ranks second behind the matched direct MLP (6.096
+against 5.994). The paired AE-minus-MLP gap is small and changes sign across
+seeds (+0.249 and +0.103 mean). Truncated SVD and the linear autoencoder are far
+worse everywhere at roughly 15.7 to 16.1 RMSE, consistent with Phase 13.
+
+Fairness and protocol repairs made before the run, after adversarial review:
+controls received real hyperparameter grids; the parameter-matched MLP now
+selects its data protocol exactly like the AE, so an AE win could not be an
+artifact of the AE alone reaching the synthetic pool; the outer-test evaluation
+identity no longer embeds the git commit, float placement metrics, or which
+policy won the search; transfer pools no longer consume canonical identity keys
+from validation or test rows; the retention bootstrap now tests against the
+practical margin rather than zero; a zero-row transfer pool is a loud failure
+rather than a silent degradation to plain XGBoost; and structural validation
+runs before the outer test is consumed.
+
+Gate: 480 candidate policies over the 10 Phase 13 canonical random units, two
+determinism smokes with 18 of 20 byte-identical artifacts, independent replay
+validation of the production bundle, full suite 1164 passed, ruff clean, and
+`git diff --check` clean. Exactly one outer-test evaluation per unit and family,
+70 evaluation claims all created after the retention freeze, and
+`test_used_for_selection_or_retention` recorded false.
+
+Authoritative outputs:
+
+- `results/autonomous_execution/phase_14/corrected-20260727-71b80ca-phase14-smoke-v2-a`
+- `results/autonomous_execution/phase_14/corrected-20260727-71b80ca-phase14-smoke-v2-b`
+- `results/autonomous_execution/phase_14/corrected-20260728-851d64e-phase14-production-v3`
+
+Current status: Phase 14 passed. Phase 15 may now define its primary
+confirmatory hypothesis. The supervised autoencoder failed its Phase 14
+criterion and is therefore ineligible for confirmation.
