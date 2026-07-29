@@ -18,9 +18,12 @@ Every method and result family below carries **exactly one** status.
 | **Deprecated** | Superseded and not to be used for new work. Not necessarily wrong; simply replaced. |
 | **Externally blocked** | Cannot progress without something a human must supply (licensed data, network access). No result is claimed either way. |
 
-**The confirmatory-evidence class is currently empty.** Phase 15 — freeze and
-execute the primary confirmatory hypothesis — has not been executed. Nothing in
-this repository is a confirmatory result today.
+**The confirmatory-evidence class contains exactly one result, and it is a
+null.** Phase 15 preregistered and executed one primary confirmatory hypothesis:
+anonymous condition-transfer augmentation against a matched real-only XGBoost
+baseline. The verdict was null — no practically meaningful change in either
+direction. Everything else in this repository is development evidence,
+experimental, invalidated, deprecated, or externally blocked.
 
 ## Infrastructure and contracts
 
@@ -137,13 +140,17 @@ Suzuki–Miyaura dataset is present locally and acquisition requires a human wit
 network access. **No external-generalization result is claimed in either
 direction.** See `docs/EXTERNAL_DATASETS.md`.
 
-## In progress — no status asserted
+## Completed since this table was first written
 
 | Phase | State |
 | --- | --- |
-| Phase 14 — redesign and reassess the supervised autoencoder | **In progress. The production benchmark is still executing and its outcome is unknown. No Phase 14 result, positive or negative, is asserted anywhere in this repository.** |
-| Phase 15 — freeze and execute the primary confirmatory hypothesis | Not started. No confirmatory result exists. |
-| Phase 18 — prospective preparation | The recommendation simulation and the prospective package are both committed and are classified as development evidence above. **Prospective laboratory validation has not been performed**, so no phase claims a wet-lab outcome. |
+| Phase 14 — reassess the supervised autoencoder | **Complete. Development evidence.** The supervised autoencoder **failed** its predefined retention criterion and is classified as a **secondary ablation**. It is not a supported method and was excluded from confirmation. Authoritative output: `results/autonomous_execution/phase_14/corrected-20260728-851d64e-phase14-production-v3`. |
+| Phase 15 — primary confirmatory hypothesis | **Complete. Confirmatory evidence — the only entry in that class.** Verdict **null**: anonymous condition-transfer augmentation produces no practically meaningful change relative to a matched real-only XGBoost baseline. Preregistered at `13fbfde` before any result existed. Authoritative output: `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`. |
+| Phase 18 — prospective preparation | The recommendation simulation and the prospective package are both committed and classified as development evidence above. **Prospective laboratory validation has not been performed**, so no phase claims a wet-lab outcome. |
+
+The confirmatory-evidence class contains exactly one result, and that result is
+a null. Its scope is training fraction 0.2, canonical grouped random splits, one
+dataset. It is **not** OOD evidence and must not be quoted as one.
 
 No prospective laboratory claim is made by any phase.
 

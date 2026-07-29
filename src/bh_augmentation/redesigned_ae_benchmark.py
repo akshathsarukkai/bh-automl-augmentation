@@ -38,6 +38,7 @@ from bh_augmentation.evaluation.ae_retention import (
 from bh_augmentation.evaluation.evaluation_registry import (
     EvaluationIdentity,
     EvaluationRegistry,
+    default_evaluation_registry_root,
 )
 from bh_augmentation.evaluation.isolated_fit_worker import run_isolated_fit
 from bh_augmentation.evaluation.metrics import mae, r2, rmse, spearman_corr
@@ -105,9 +106,11 @@ _FROZEN_POLICY_IDENTITY_FIELDS = frozenset(
         "feature_metadata_hash",
     }
 )
-PHASE14_EVALUATION_REGISTRY_DIRECTORY = Path(
-    "results/autonomous_execution/evaluation_registry"
-)
+#: Outer-test claim registry root, anchored to the checkout rather than to the
+#: working directory. A relative path here would mean that launching this runner
+#: from any other directory created a fresh, empty registry and silently
+#: permitted a completed outer-test identity to be evaluated a second time.
+PHASE14_EVALUATION_REGISTRY_DIRECTORY = default_evaluation_registry_root()
 _METRICS = {"rmse": rmse, "mae": mae, "r2": r2, "spearman": spearman_corr}
 _OUTPUTS = (
     "benchmark_plan.json",

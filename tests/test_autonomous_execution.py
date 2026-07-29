@@ -14,15 +14,44 @@ from bh_augmentation.autonomous_execution import (
 
 
 def test_repository_state_has_all_required_phases() -> None:
+    """The resume pointer must agree with the ledger, including when it is done.
+
+    This previously assumed at least one phase was unfinished and raised
+    ``StopIteration`` the moment every phase passed - that is, it broke on
+    success. ``first_resumable_phase`` returns ``None`` in the terminal state,
+    and the test now asserts that explicitly.
+    """
     state = load_and_validate_state("results/autonomous_execution/state.json")
 
     assert len(state["phases"]) == 18
-    expected = next(
+    unfinished = [
         phase["phase_number"]
         for phase in state["phases"]
         if phase["status"] != "passed"
-    )
+    ]
+    expected = unfinished[0] if unfinished else None
     assert first_resumable_phase(state) == expected
+
+
+def test_first_resumable_phase_is_none_when_every_phase_has_passed() -> None:
+    """Regression: the terminal state must be representable, not an exception."""
+    state = load_and_validate_state("results/autonomous_execution/state.json")
+    finished = copy.deepcopy(state)
+    for phase in finished["phases"]:
+        phase["status"] = "passed"
+
+    assert first_resumable_phase(finished) is None
+
+
+def test_first_resumable_phase_reports_the_earliest_unfinished_phase() -> None:
+    state = load_and_validate_state("results/autonomous_execution/state.json")
+    fixture = copy.deepcopy(state)
+    for phase in fixture["phases"]:
+        phase["status"] = "passed"
+    fixture["phases"][11]["status"] = "in_progress"
+    fixture["phases"][15]["status"] = "not_started"
+
+    assert first_resumable_phase(fixture) == 12
 
 
 def test_missing_passed_artifact_reopens_phase(tmp_path: Path) -> None:

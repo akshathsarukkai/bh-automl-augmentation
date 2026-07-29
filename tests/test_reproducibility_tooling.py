@@ -293,7 +293,7 @@ def test_tamper_assertion_fails_when_verification_is_disabled(
 # --- result-family classification document ----------------------------------
 
 
-def test_result_status_document_classifies_and_asserts_no_phase_14_outcome() -> None:
+def test_result_status_document_classifies_every_result_family() -> None:
     text = Path("RESULT_STATUS.md").read_text()
     for status in (
         "Supported",
@@ -311,6 +311,49 @@ def test_result_status_document_classifies_and_asserts_no_phase_14_outcome() -> 
     assert "results/stress/logo_reactant/` outputs | **Invalidated**" in text
     # Phase 16 is externally blocked; no external result is claimed.
     assert "Phase 16 external typed-reaction dataset adapter | Externally blocked" in text
-    # Phase 14 is still executing: its outcome must not be asserted anywhere.
-    assert "No Phase 14 result, positive or negative, is asserted" in text
-    assert "The confirmatory-evidence class is currently empty." in text
+
+
+def test_result_status_reports_the_phase_14_and_phase_15_outcomes_accurately() -> None:
+    """Both outcomes are now known and must be stated, and stated correctly.
+
+    This replaces an earlier assertion that no Phase 14 outcome was asserted
+    anywhere, which was correct only while that benchmark was still executing.
+    The discipline it enforced has not been relaxed, only moved: the document
+    must now report the real verdicts rather than overclaim them.
+    """
+    text = Path("RESULT_STATUS.md").read_text()
+
+    # Phase 14: the autoencoder failed and must not be presented as supported.
+    assert "secondary ablation" in text
+    assert "failed" in text
+
+    # Phase 15: exactly one confirmatory result exists and it is a null.
+    assert "confirmatory-evidence class contains exactly one result" in text
+    assert "it is a\nnull" in text or "and it is a null" in text
+    assert "null" in text
+
+    # A null must not be dressed up as a positive finding.
+    for overclaim in (
+        "augmentation improves",
+        "augmentation is supported",
+        "confirmed benefit",
+        "significant improvement",
+    ):
+        assert overclaim.lower() not in text.lower()
+
+    # The scope limits must travel with the confirmatory claim.
+    assert "not** OOD evidence" in text or "not OOD evidence" in text
+
+
+def test_no_document_claims_prospective_laboratory_validation() -> None:
+    for path in (Path("RESULT_STATUS.md"), Path("AUTONOMOUS_COMPLETION_REPORT.md")):
+        if not path.exists():
+            continue
+        text = path.read_text()
+        assert "Prospective laboratory validation has not been performed" in text
+        for overclaim in (
+            "validated in the laboratory",
+            "experimentally validated",
+            "wet-lab confirmed",
+        ):
+            assert overclaim.lower() not in text.lower()

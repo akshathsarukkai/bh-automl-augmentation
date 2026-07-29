@@ -130,6 +130,35 @@ def test_nested_ood_final_registry_directory_is_anchored_to_the_checkout() -> No
     assert directory == default_evaluation_registry_root()
 
 
+def test_redesigned_ae_benchmark_registry_directory_is_anchored_to_the_checkout() -> None:
+    """A relative default here would silently release consumed outer-test claims.
+
+    The Phase 14 and Phase 15 runners share this constant. If it were resolved
+    against the working directory, launching either from anywhere other than the
+    checkout root would create a fresh, empty registry, and an evaluation unit
+    that had already been consumed could be evaluated a second time.
+    """
+    from bh_augmentation import redesigned_ae_benchmark
+
+    directory = redesigned_ae_benchmark.PHASE14_EVALUATION_REGISTRY_DIRECTORY
+    assert directory.is_absolute()
+    assert directory == default_evaluation_registry_root()
+
+
+def test_every_scientific_runner_anchors_its_registry_directory() -> None:
+    """No scientific runner may declare a working-directory-relative registry."""
+    from bh_augmentation import nested_ood_final as _nested
+    from bh_augmentation import redesigned_ae_benchmark as _ae
+
+    for module, attribute in (
+        (_nested, "EVALUATION_REGISTRY_DIRECTORY"),
+        (_ae, "PHASE14_EVALUATION_REGISTRY_DIRECTORY"),
+    ):
+        directory = getattr(module, attribute)
+        assert directory.is_absolute(), f"{module.__name__}.{attribute} is relative"
+        assert directory == default_evaluation_registry_root()
+
+
 def test_registry_exposes_no_delete_or_release_operation() -> None:
     forbidden = ("delete", "remove", "release", "unclaim", "reset", "clear", "purge")
     public = [name for name in dir(EvaluationRegistry) if not name.startswith("_")]
