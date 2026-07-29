@@ -1,0 +1,188 @@
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+splits:
+  canonical_directory: results/corrected_canonical_splits
+  seeds: [0, 1, 2, 3, 4]
+  fractions: [0.2, 1.0]
+features:
+  kind: bh_role_separated
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+policy_split:
+  valid_fraction: 0.2
+transfer:
+  anonymous:
+    donor_strategy: nearest_substrate
+    synthetic_multiplier: 1.0
+    n_neighbors: 10
+    label_strategy: teacher_ensemble
+    teacher_models: [extra_trees, random_forest]
+    max_teacher_std: null
+    min_similarity: 0.0
+    high_yield_threshold: 80.0
+    clip_y_min: 0.0
+    clip_y_max: 100.0
+    candidates_per_real: 2
+    donor_similarity_n_bits: 2048
+    donor_similarity_radius: 2
+    donor_similarity_backend: rdkit
+    role_change_requirement: all
+    fallback_policy: reject
+    max_candidates_per_source: 1
+    requested_roles: [ligand, base]
+  typed:
+    role_transfer_mode: ligand_base
+    donor_strategy: same_substrate_different_role
+    label_strategy: teacher_ensemble
+    synthetic_multiplier: 1.0
+    max_candidates_per_source: 1
+    teacher_models: [extra_trees, random_forest]
+    max_teacher_std: null
+    min_similarity: 0.0
+    clip_y_min: 0.0
+    clip_y_max: 100.0
+    max_resample_attempts: 10
+    donor_similarity_n_bits: 2048
+    donor_similarity_radius: 2
+    donor_similarity_backend: rdkit
+    role_change_requirement: all
+    fallback_policy: reject
+methods:
+  ae_candidates:
+    - candidate_id: ae-baseline-128-16-rec025-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-rec0-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.0
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-rec01-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.1
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-rec05-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.5
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-rec1-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 1.0
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-bce-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: binary_cross_entropy
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-256-32-anonymous
+      data_protocol: anonymous
+      hidden_dim: 256
+      latent_dim: 32
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-mask01-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.1
+    - candidate_id: ae-supervised1-anonymous
+      data_protocol: anonymous
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 1.0
+      masking_probability: 0.0
+    - candidate_id: ae-typed
+      data_protocol: typed
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+    - candidate_id: ae-real-only
+      data_protocol: real_only
+      hidden_dim: 128
+      latent_dim: 16
+      reconstruction_objective: positive_bit_weighted_mse
+      role_balanced_reconstruction: true
+      positive_bit_weight: 5.0
+      synthetic_reconstruction_weight: 0.25
+      synthetic_supervised_weight: 0.25
+      masking_probability: 0.0
+  control_latent_dims: [16, 32]
+  ridge_alphas: [0.1, 1.0, 10.0]
+  xgboost_candidates:
+    - {n_estimators: 300, max_depth: 6, learning_rate: 0.05, n_jobs: 1}
+    - {n_estimators: 500, max_depth: 4, learning_rate: 0.03, n_jobs: 1}
+    - {n_estimators: 800, max_depth: 3, learning_rate: 0.02, n_jobs: 1}
+  transfer_supervised_weights: [0.25, 1.0]
+  training:
+    max_epochs: 200
+    patience: 20
+    learning_rate: 0.001
+    weight_decay: 0.00001
+    batch_size: 64
+    internal_valid_fraction: 0.2
+retention:
+  practical_margin: 1.0
+  required_margin_wins_per_fraction: 4
+  no_practical_loss_threshold: 1.0
+  bootstrap_reps: 10000
+  bootstrap_alpha: 0.05
+  bootstrap_seed: 1401
+metrics: [rmse, mae, r2, spearman]
+selection_metric: rmse
+base_seed: 1400
+fit_timeout_seconds: 3600
+output: results/redesigned_ae_benchmark/phase14-production
