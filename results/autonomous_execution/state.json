@@ -831,16 +831,65 @@
     {
       "phase_number": 15,
       "phase_name": "Freeze primary hypothesis and statistical confirmation",
-      "status": "not_started",
-      "started_at": null,
-      "completed_at": null,
-      "git_commit_at_start": null,
-      "git_commit_at_end": null,
-      "targeted_tests": null,
-      "full_suite_result": null,
-      "smoke_test_result": null,
-      "output_paths": [],
-      "warnings": [],
+      "status": "passed",
+      "started_at": "2026-07-29T01:00:00Z",
+      "completed_at": "2026-07-29T05:10:00Z",
+      "git_commit_at_start": "6a618ed139c8",
+      "git_commit_at_end": "253e70e601e2fac7cf3846fa37935c4fdfdd61a3",
+      "preregistration_commit": "13fbfdef7ac0cfd05dda2c1c33bb6a59b4d64fff",
+      "targeted_tests": {
+        "command": "python -B -m pytest -q tests/test_primary_confirmatory_analysis.py tests/test_redesigned_ae_benchmark.py",
+        "passed": 109,
+        "status": "passed",
+        "warnings": 0
+      },
+      "full_suite_result": {
+        "command": "python -B -m pytest -q",
+        "passed": 1185,
+        "status": "passed",
+        "warnings": 36
+      },
+      "smoke_test_result": {
+        "command": "python -B scripts/run_redesigned_ae_benchmark.py --config configs/primary_confirmatory_phase15_smoke.yaml --output-directory <tmp> --evaluation-registry-directory <tmp>",
+        "status": "passed",
+        "determinism_smokes": 2,
+        "identical_scientific_artifacts": 19,
+        "expected_differing_artifacts": ["resource_metrics.csv"],
+        "production_command": "python -B scripts/run_redesigned_ae_benchmark.py --config configs/primary_confirmatory_phase15.yaml --output-directory results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1",
+        "evaluation_units": 10,
+        "candidate_policies": 420,
+        "arm_search_budgets": {"anonymous_transfer_without_ae": 3, "direct_xgboost": 3},
+        "registry_claims_metrics_complete": 70,
+        "test_evaluation_count_per_unit_family": 1,
+        "test_used_for_selection_or_retention": false,
+        "independent_replay_validation": true,
+        "verdict": "null"
+      },
+      "primary_result": {
+        "verdict": "null",
+        "rule": "PRIMARY_EXPERIMENT.md section 6 interpretation table",
+        "mean_paired_effect_rmse": -0.6609,
+        "bootstrap_ci": [-0.8446, -0.4778],
+        "improved_units": 0,
+        "worsened_units": 10,
+        "wilcoxon_p_secondary": 0.001953,
+        "units_included": 10,
+        "units_degenerate": 0,
+        "units_failed": 0,
+        "interpretation": "The interval excludes zero but lies entirely inside the plus/minus 1.0 RMSE practical-equivalence band, so both a practically meaningful benefit and a practically meaningful harm are excluded."
+      },
+      "output_paths": [
+        "PRIMARY_EXPERIMENT.md",
+        "results/corrected_canonical_splits_phase15",
+        "results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1"
+      ],
+      "warnings": [
+        "The confirmation is directionally worse than phase 14's near-tie of -0.006 because phase 14 gave the augmented arm 6 candidate policies against the comparator's 3, including a synthetic-downweighting knob with no real-only analogue. Section 4 of the preregistration requires equal budgets, so part of what looked like augmentation parity in development evidence was the augmented arm searching harder.",
+        "Equalizing budgets required one optional config key because the hard-coded AE one-factor-at-a-time grid forces at least two augmented supervised weights. The change is backward compatible and phase 14's resolved config hash recomputes bit-identically.",
+        "Fraction 1.0 is described in the preregistration as secondary and descriptive only and was not run; phase 14 supplies that descriptive evidence.",
+        "This confirmation covers canonical grouped random splits only. It is not OOD evidence.",
+        "git_dirty_at_execution is true because the phase 15 implementation is checkpointed only after its gate passes, following the phase 13 and 14 convention."
+      ],
       "blockers": [],
       "dependencies": ["phase 10", "phase 11", "phase 12", "phase 14"]
     },

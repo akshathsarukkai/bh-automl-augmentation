@@ -1,10 +1,10 @@
 # Autonomous Execution Summary
 
-Updated: 2026-07-29T00:45:00Z
+Updated: 2026-07-29T05:10:00Z
 
 The resumable 18-phase ledger was initialized from verified Batch 3 state.
-Phases 1–14 and 16–18 are passed and checkpointed locally. Only Phase 15
-remains. Phase 16's empirical arm is
+All 18 phases are passed and checkpointed locally.
+Phase 16's empirical arm is
 externally blocked; see `blockers.md`.
 
 This file is append-oriented: each phase's section reflects what was known when
@@ -791,3 +791,81 @@ Authoritative outputs:
 Current status: Phase 14 passed. Phase 15 may now define its primary
 confirmatory hypothesis. The supervised autoencoder failed its Phase 14
 criterion and is therefore ineligible for confirmation.
+
+## Phase 15 — primary confirmatory experiment
+
+Preregistered at `13fbfdef7ac0cfd05dda2c1c33bb6a59b4d64fff` and executed at
+`253e70e601e2`. The preregistration was committed before any confirmatory
+outer-test result existed, and was not modified afterwards. No amendment was
+required.
+
+Question: does anonymous condition-transfer augmentation improve low-data
+Buchwald–Hartwig yield prediction relative to a matched real-only XGBoost
+baseline, under the corrected canonical protocol? This is the project's central
+thesis.
+
+**Result: NULL.**
+
+| Quantity | Value |
+| --- | --- |
+| Mean paired effect | −0.6609 RMSE (comparator minus augmented; negative means augmentation is worse) |
+| 95% bootstrap CI | [−0.8446, −0.4778] |
+| Units improved / worsened | 0 of 10 / 10 of 10 |
+| Wilcoxon two-sided p (secondary) | 0.001953 |
+| Units included / degenerate / failed | 10 / 0 / 0 |
+
+Per-seed paired deltas (seeds 5–14): −0.6087, −0.8666, −0.6264, −0.6273,
+−0.3134, −0.3402, −0.2061, −1.1212, −0.8566, −1.0429.
+
+The verdict is null under section 6 of the preregistration — not negative, and
+not positive. The interval excludes zero and the Wilcoxon p is 0.002, so a
+results-first reading would report significant harm. But the whole interval lies
+inside the ±1.0 RMSE practical-equivalence band fixed in advance, which section 6
+defines as null: a practically meaningful benefit and a practically meaningful
+harm are both excluded. This is precisely the case the preregistration was
+written to adjudicate, and it is why the rule was pinned before any data was
+seen. Statistical significance alone does not establish an effect in either
+direction.
+
+The null is not an artifact of the treatment failing to apply. Every unit had a
+healthy pool — 335 to 362 accepted synthetic rows against 633 measured rows,
+roughly 55% augmentation, consistent with Phase 14's 340.
+
+A protocol fact worth recording. The confirmation is directionally worse than
+Phase 14's near-tie of −0.006, and the reason is search-budget asymmetry rather
+than anything discovered after the fact. In Phase 14 the augmented arm
+enumerated 6 candidate policies against the comparator's 3, and that extra
+budget included a synthetic-downweighting knob for which the real-only arm has
+no analogue. Section 4 requires equal budgets, so under a genuinely matched
+comparison the augmented arm is pinned to a single weight and loses on all ten
+seeds. Part of what looked like augmentation parity in development evidence was
+the augmented arm being allowed to search harder.
+
+Equalizing the budgets required one optional config key, because it was
+impossible through configuration alone: the AE grid is hard-coded to a
+one-factor-at-a-time design that forces at least two augmented supervised
+weights. The change is backward compatible — Phase 14's resolved config hash
+recomputes bit-identically — and both arms enumerated 3 policies here.
+
+Ten fresh seeds, 5 through 14, were built into
+`results/corrected_canonical_splits_phase15/` with aggregate hash
+`9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c`. Zero
+train/validation/test group overlap on `canonical_reaction_key` in every seed.
+The existing five-seed artifacts were not mutated, not extended and not re-read;
+Phase 14 had already consumed the outer-test claims on seeds 0 through 4.
+
+Scope limits: training fraction 0.2 only, canonical grouped random splits only.
+This is not OOD evidence, and fraction 1.0 was preregistered as secondary and
+descriptive only and was not run.
+
+Gate: 19 of 19 scientific artifacts byte-identical across two determinism smokes
+against temporary registries, independent replay validation, the analysis
+re-deriving to an identical hash, 70 of 70 registry claims metrics_complete with
+exactly one outer-test batch each, `test_used_for_selection_or_retention` false,
+full suite 1185 passed, ruff clean, `git diff --check` clean.
+
+Authoritative outputs:
+
+- `PRIMARY_EXPERIMENT.md`
+- `results/corrected_canonical_splits_phase15`
+- `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`
