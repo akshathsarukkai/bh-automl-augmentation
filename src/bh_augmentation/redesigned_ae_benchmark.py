@@ -1397,7 +1397,13 @@ def _resolve_contract(raw: Mapping[str, Any]) -> dict[str, Any]:
         "transfer_supervised_weights",
         "training",
     }
-    if set(methods) != expected_methods:
+    # ``transfer_xgboost_supervised_weights`` is optional and defaults to
+    # ``transfer_supervised_weights``. It exists so the two XGBoost transfer
+    # families can enumerate a grid of a declared size independently of the
+    # AE grid, which forces at least two AE supervised weights and therefore
+    # forced those families to search twice the ``direct_xgboost`` budget.
+    optional_methods = {"transfer_xgboost_supervised_weights"}
+    if not expected_methods <= set(methods) <= expected_methods | optional_methods:
         raise ValueError("methods keys mismatch.")
     ridge_alphas = [float(value) for value in methods["ridge_alphas"]]
     if (
@@ -1652,6 +1658,29 @@ def _candidate_configs(
     transfer_weights = [float(value) for value in methods["transfer_supervised_weights"]]
     if any(value < 0.0 for value in transfer_weights):
         raise ValueError("Transfer supervised weights cannot be negative.")
+    # The AE grid pins two augmented supervised weights by construction, so the
+    # AE-matched weight list cannot also equalize the XGBoost transfer families
+    # against direct_xgboost. Declaring the XGBoost transfer weights separately
+    # lets a configuration give both XGBoost arms the same search budget.
+    transfer_xgboost_weights = [
+        float(value)
+        for value in methods.get(
+            "transfer_xgboost_supervised_weights",
+            methods["transfer_supervised_weights"],
+        )
+    ]
+    if (
+        not transfer_xgboost_weights
+        or len(transfer_xgboost_weights) != len(set(transfer_xgboost_weights))
+        or any(
+            not math.isfinite(value) or value < 0.0
+            for value in transfer_xgboost_weights
+        )
+    ):
+        raise ValueError(
+            "methods.transfer_xgboost_supervised_weights must be unique, finite "
+            "and nonnegative."
+        )
 
     def direct_mlp(
         hidden: int,
@@ -1697,7 +1726,7 @@ def _candidate_configs(
                     )
                 )
     for index, xgb in enumerate(methods["xgboost_candidates"]):
-        for value in transfer_weights:
+        for value in transfer_xgboost_weights:
             for family, protocol in (
                 ("anonymous_transfer_without_ae", "anonymous"),
                 ("typed_transfer_without_ae", "typed"),

@@ -225,6 +225,96 @@ def test_starved_control_search_budget_is_rejected_at_plan_time() -> None:
         _candidate_configs(raw)
 
 
+def test_ae_grid_forces_two_ae_matched_transfer_weights() -> None:
+    # The identifiable AE grid requires ae-supervised1-anonymous to differ from
+    # the baseline in exactly synthetic_supervised_weight, and every augmented
+    # AE weight must appear in transfer_supervised_weights. Two distinct
+    # AE-matched weights are therefore unavoidable, which is why the XGBoost
+    # transfer families need their own declared weight list to reach parity
+    # with direct_xgboost.
+    raw = copy.deepcopy(yaml.safe_load(PRODUCTION_CONFIG.read_text()))
+    augmented = {
+        candidate["synthetic_supervised_weight"]
+        for candidate in raw["methods"]["ae_candidates"]
+        if candidate["data_protocol"] != "real_only"
+    }
+    assert len(augmented) == 2
+    raw["methods"]["transfer_supervised_weights"] = [1.0]
+    with pytest.raises(ValueError, match="matched no-AE control"):
+        _candidate_configs(raw)
+
+
+def test_transfer_xgboost_weight_list_can_equalize_the_two_xgboost_arms() -> None:
+    raw = copy.deepcopy(yaml.safe_load(PRODUCTION_CONFIG.read_text()))
+    baseline = search_budget_by_family(
+        config.method_family for _, config in _candidate_configs(raw)
+    )
+    assert baseline["anonymous_transfer_without_ae"] == 6
+    assert baseline["direct_xgboost"] == 3
+
+    raw["methods"]["transfer_xgboost_supervised_weights"] = [1.0]
+    configs = _candidate_configs(raw)
+    budget = search_budget_by_family(
+        config.method_family for _, config in configs
+    )
+    assert (
+        budget["anonymous_transfer_without_ae"]
+        == budget["typed_transfer_without_ae"]
+        == budget["direct_xgboost"]
+        == 3
+    )
+    # Equal counts are not enough: both arms must enumerate the identical
+    # XGBoost hyperparameter grid, differing only in synthetic rows.
+    grids = {}
+    for family in ("anonymous_transfer_without_ae", "direct_xgboost"):
+        grids[family] = sorted(
+            json.dumps(dict(config.xgboost_params), sort_keys=True)
+            for _policy_id, config in configs
+            if config.method_family == family
+        )
+    assert grids["anonymous_transfer_without_ae"] == grids["direct_xgboost"]
+    assert {
+        config.synthetic_supervised_weight
+        for _policy_id, config in configs
+        if config.method_family == "anonymous_transfer_without_ae"
+    } == {1.0}
+    # The AE-matched control weights are untouched by the decoupled list.
+    assert {
+        config.synthetic_supervised_weight
+        for _policy_id, config in configs
+        if config.method_family == "matched_direct_mlp"
+        and config.data_protocol != "real_only"
+    } == set(raw["methods"]["transfer_supervised_weights"])
+
+
+def test_transfer_xgboost_weight_list_defaults_to_the_ae_matched_list() -> None:
+    raw = copy.deepcopy(yaml.safe_load(PRODUCTION_CONFIG.read_text()))
+    explicit = copy.deepcopy(raw)
+    explicit["methods"]["transfer_xgboost_supervised_weights"] = raw["methods"][
+        "transfer_supervised_weights"
+    ]
+    assert [policy_id for policy_id, _ in _candidate_configs(raw)] == [
+        policy_id for policy_id, _ in _candidate_configs(explicit)
+    ]
+
+
+@pytest.mark.parametrize("weights", [[], [1.0, 1.0], [-1.0]])
+def test_invalid_transfer_xgboost_weight_lists_are_rejected(
+    weights: list[float],
+) -> None:
+    raw = copy.deepcopy(yaml.safe_load(PRODUCTION_CONFIG.read_text()))
+    raw["methods"]["transfer_xgboost_supervised_weights"] = weights
+    with pytest.raises(ValueError, match="transfer_xgboost_supervised_weights"):
+        _candidate_configs(raw)
+
+
+def test_unknown_methods_keys_are_still_rejected() -> None:
+    raw = copy.deepcopy(yaml.safe_load(PRODUCTION_CONFIG.read_text()))
+    raw["methods"]["not_a_real_key"] = [1.0]
+    with pytest.raises(ValueError, match="methods keys mismatch"):
+        _candidate_configs(raw)
+
+
 def test_missing_canonical_ae_architecture_is_rejected() -> None:
     raw = copy.deepcopy(yaml.safe_load(PRODUCTION_CONFIG.read_text()))
     for candidate in raw["methods"]["ae_candidates"]:
