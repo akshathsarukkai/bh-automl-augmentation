@@ -869,3 +869,25 @@ Authoritative outputs:
 - `PRIMARY_EXPERIMENT.md`
 - `results/corrected_canonical_splits_phase15`
 - `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`
+
+## Roadmap complete
+
+All 18 phases are passed and checkpointed locally at `432c1a5`. Nothing has been
+pushed. See `AUTONOMOUS_COMPLETION_REPORT.md` for the full audit, the scientific
+findings, the retained null and negative results, external and prospective
+status, remaining debt, and reproduction and resume instructions.
+
+Final gate: full suite 1191 passed, ruff clean, `git diff --check` clean.
+`first_resumable_phase` returns `None`, the terminal state.
+
+Two headline results, both obtained under protocols frozen before the outcomes
+were visible, and both negative or null:
+
+- the supervised autoencoder adds no reproducible value and is a secondary
+  ablation;
+- condition-transfer augmentation produces no practically meaningful change,
+  with a preregistered verdict of null.
+
+A structural finding bounds both: the canonical dataset is a near-complete
+factorial, 3955 of 3960 cells measured, leaving exactly five eligible unmeasured
+reactions.
