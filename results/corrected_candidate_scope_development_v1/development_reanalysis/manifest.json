@@ -1,0 +1,187 @@
+{
+  "candidate_scope_modes": [
+    "observed_only_low_data",
+    "globally_unmeasured_prospective"
+  ],
+  "command": "scripts/run_candidate_scope_reanalysis.py --config configs/corrected_candidate_scope_reanalysis.yaml --output-directory /private/tmp/claude-501/-Users-ankitsarukkai-bh-automl-augmentation/b0d31069-0300-4d65-8757-1433a80b0216/scratchpad/corrected_dev_v3",
+  "config_hash": "f977f91f412dde866ea1f827f1a51ba5dcdbe5ee55eda25bec5918163747ac18",
+  "config_path": "configs/corrected_candidate_scope_reanalysis.yaml",
+  "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+  "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+  "dependency_versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.12.12",
+    "rdkit": "2023.9.6",
+    "scikit-learn": "1.2.2",
+    "xgboost": "3.3.0"
+  },
+  "feature_metadata_hash": {
+    "seed=0|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=0|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=0|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=1|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=1|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=1|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=2|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=2|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=2|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=3|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=3|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=3|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=4|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=4|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=4|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe"
+  },
+  "git_commit": "dfbef2bd8c49bba4ab87f8b0a12a91633b43f25a",
+  "git_dirty": true,
+  "historical_results_loaded": false,
+  "output_directory": "/private/tmp/claude-501/-Users-ankitsarukkai-bh-automl-augmentation/b0d31069-0300-4d65-8757-1433a80b0216/scratchpad/corrected_dev_v3",
+  "output_hashes": {
+    "candidate_audit.csv": "7486531c91d2c4071db49c8edf682c0eb70964a47542971c024eb595041e6917",
+    "candidate_pool_statistics.csv": "19dd0d63dbaff66d756ebb039025c41e13a3a3e8f1bc99c8d539381323a31ff6",
+    "candidate_scope_comparison.csv": "f5617f6e2103b80aef1eba8e024a3c3e70a38860d340df570c23d83816553221",
+    "leakage_contracts.json": "9d01092d0a9f305a78a2751bb347e184c9e908c3a2114fded0f0b357d3e48ccc",
+    "partition_audit.csv": "e363bd5da4fec0fac579b77f2743533118477517250440a73af8df04f30e8e38",
+    "validation_metrics.csv": "448a9164ca31f33759f411cbe8fae5f1823cc4e2cdbd5b9610bf7f19d36d0843",
+    "withheld_cell_oracle.csv": "203b9dc9d03961097e0306416af282e5e1ab5dfa56d8f5e99f33f333c5bcbdc0",
+    "withheld_cell_oracle_by_change_type.csv": "21a52174d4b82c4ea89c8bff7511fc9864c94a19021be12a8aa9e7b1ee579b8d"
+  },
+  "resolved_config": {
+    "candidate_scope": {
+      "modes": [
+        "observed_only_low_data",
+        "globally_unmeasured_prospective"
+      ]
+    },
+    "dataset": {
+      "path": "data/processed/bh_canonical_roles_v1.csv"
+    },
+    "features": {
+      "fingerprint_backend": "rdkit",
+      "kind": "bh_role_separated",
+      "n_bits": 2048,
+      "radius": 2
+    },
+    "metrics": [
+      "rmse",
+      "mae",
+      "r2",
+      "spearman"
+    ],
+    "models": [
+      {
+        "name": "xgboost",
+        "params": {
+          "learning_rate": 0.05,
+          "max_depth": 4,
+          "n_estimators": 300,
+          "n_jobs": 1,
+          "tree_method": "hist"
+        }
+      }
+    ],
+    "oracle": {
+      "high_yield_threshold": 80.0,
+      "top_k_fractions": [
+        0.1,
+        0.2
+      ]
+    },
+    "output": {
+      "directory": "results/corrected_candidate_scope_reanalysis"
+    },
+    "scientific_run": true,
+    "splits": {
+      "directory": "results/corrected_canonical_splits",
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "train_fractions": [
+        0.01,
+        0.05,
+        0.1
+      ]
+    },
+    "transfer": {
+      "anonymous": {
+        "candidates_per_real": 2,
+        "clip_y_max": 100.0,
+        "clip_y_min": 0.0,
+        "donor_similarity_backend": "rdkit",
+        "donor_similarity_n_bits": 2048,
+        "donor_similarity_radius": 2,
+        "donor_strategy": "nearest_substrate",
+        "fallback_policy": "reject",
+        "high_yield_threshold": 80.0,
+        "label_strategy": "teacher_ensemble",
+        "max_candidates_per_source": 1,
+        "max_teacher_std": null,
+        "min_similarity": 0.0,
+        "n_neighbors": 10,
+        "requested_roles": [
+          "ligand",
+          "base"
+        ],
+        "role_change_requirement": "all",
+        "synthetic_multiplier": 1.0,
+        "teacher_models": [
+          "extra_trees",
+          "random_forest"
+        ]
+      },
+      "typed": {
+        "clip_y_max": 100.0,
+        "clip_y_min": 0.0,
+        "donor_similarity_backend": "rdkit",
+        "donor_similarity_n_bits": 2048,
+        "donor_similarity_radius": 2,
+        "donor_strategy": "same_substrate_different_role",
+        "fallback_policy": "reject",
+        "label_strategy": "teacher_ensemble",
+        "max_candidates_per_source": 1,
+        "max_resample_attempts": 10,
+        "max_teacher_std": null,
+        "min_similarity": 0.0,
+        "role_change_requirement": "all",
+        "role_transfer_mode": "ligand_base",
+        "synthetic_multiplier": 1.0,
+        "teacher_models": [
+          "extra_trees",
+          "random_forest"
+        ]
+      }
+    }
+  },
+  "result_status": "corrected_revalidation",
+  "run_id": "corrected-20260826T014602Z",
+  "schema_version": "bh-candidate-scope-reanalysis-v1",
+  "seeds": [
+    42
+  ],
+  "split_hashes": {
+    "seed=0|fraction=0.01": "415c01b174d6fc8ca80e85e3950181021483fe43a0a950be5705e0dbaf65e0c4",
+    "seed=0|fraction=0.05": "d69d047da108225abaf5a85e68e4c63d1fcf3a83a5f1766651e4cbd4d08059a6",
+    "seed=0|fraction=0.1": "db08f64d9820b706155f3ab924f51044ffdb67b3ced88b77f8d721df3fbd827e",
+    "seed=1|fraction=0.01": "bdec5aa0a52ea7c31d9ad5c39467d0eebc98881c2a808a3dea7539d7940f25f0",
+    "seed=1|fraction=0.05": "e7dd27cd4e437e149e8f987b6263ff444aee00106116f20f0df5381f3aaafb4a",
+    "seed=1|fraction=0.1": "b44944e76998470e337f79e3b4397a198d04b9bc28f418bd1b1b32b7545f4111",
+    "seed=2|fraction=0.01": "7751b1ca52f833eeb95bc608fd2d68a0b745876dc08078a09c8973f5ce63e085",
+    "seed=2|fraction=0.05": "eaa095dac4fb8a4934e6cd156ae2201e9a05ef9cd25a8f6ec6d4dec1b966421c",
+    "seed=2|fraction=0.1": "21d1043acd23b637388915631abaa726aba9003475c6b11bbc076565b154643d",
+    "seed=3|fraction=0.01": "4cbd171de71c3e4f28607c06cad4c9a928c7e0fd6498402828c820feb013505c",
+    "seed=3|fraction=0.05": "5535cff77688cc11d58fa42a915129c012046fae71b8f4a78c88a41c6e0594e8",
+    "seed=3|fraction=0.1": "b49fe86412c819e4f0ef9de4d290daf56381ba25e8efd8d749076d6dfb78bbba",
+    "seed=4|fraction=0.01": "d1a58dfec36d114840cdf49189f1954f6d8bbe4930737d0071792d29c707d0af",
+    "seed=4|fraction=0.05": "d206227464b6872cb8b5bc71bf9c5e3602f10f04e562c7a47df69a0c163252eb",
+    "seed=4|fraction=0.1": "7d0e72096afc160873ad4b48e02c8da689200661cb7624f9958bbcc14f6b8759"
+  },
+  "timestamp": "2026-08-26T01:46:02.241444+00:00",
+  "train_fractions": [
+    1.0
+  ]
+}

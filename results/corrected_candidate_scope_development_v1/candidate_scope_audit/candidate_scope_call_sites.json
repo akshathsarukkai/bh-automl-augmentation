@@ -1,0 +1,1597 @@
+{
+  "call_site_count": 103,
+  "classification_counts": {
+    "globally_unmeasured_prospective": 5,
+    "not_applicable": 24,
+    "observed_only_low_data": 12,
+    "representation_augmentation": 5
+  },
+  "classifications": [
+    "observed_only_low_data",
+    "globally_unmeasured_prospective",
+    "representation_augmentation",
+    "not_applicable"
+  ],
+  "declarations": [
+    {
+      "affects": [
+        "phase_01_identity_smoke"
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "scripts/run_phase1_identity_smoke.py",
+      "rationale": "Determinism smoke for the identity gate. It rejects against the complete measured dataset, so its recorded zero-accepted result is a statement about GLOBAL discovery headroom on a near-complete factorial matrix -- not a statement about how much a low-data learner could generate. Retained under its executed protocol."
+    },
+    {
+      "affects": [
+        "phase_02_role_change_smoke"
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "scripts/run_phase2_role_change_smoke.py",
+      "rationale": "Role-change contract smoke under the same global rule; its null-eligibility finding is a global-novelty statement."
+    },
+    {
+      "affects": [
+        "phase_03_ranking_smoke"
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "scripts/run_phase3_ranking_smoke.py",
+      "rationale": "Candidate-ranking smoke under the same global rule; its zero-accepted result is a global-novelty statement."
+    },
+    {
+      "affects": [
+        "supervised_ae_condition_transfer"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/ae_final_evaluation.py",
+      "rationale": "AE refit; resolves the same rule the AE search froze."
+    },
+    {
+      "affects": [
+        "supervised_ae_condition_transfer"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/ae_policy_search.py",
+      "rationale": "Joint AE + transfer search on the same low-data protocol."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/candidate_scope.py",
+      "rationale": "Defines the taxonomy and the typed policy; performs no generation."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/chemical_controls.py",
+      "rationale": "Builds one chemical control from whichever rule its caller declares, and records the resolved mode in the control's frozen config."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/condition_recombine.py",
+      "rationale": "Recombination generator. The resolved policy also bounds the generation budget, so the scope decides pool size as well as acceptance."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/condition_transfer.py",
+      "rationale": "Anonymous generator. Resolves the caller's policy and folds in the labeled training frame's own identities; the scientific choice belongs to the caller."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/ensemble_filter.py",
+      "rationale": "Wraps the recombination generator and forwards its caller's rule."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/family_condition_transfer.py",
+      "rationale": "External-family typed transfer. Rejects against whatever key set the adapter caller supplies; defaults to the training frame's identities."
+    },
+    {
+      "affects": [],
+      "classification": "representation_augmentation",
+      "mechanism": "identity_not_evaluable_recorded_as_null",
+      "module": "src/bh_augmentation/augmentation/latent_interpolation.py",
+      "rationale": "A latent coordinate has no seven-role reaction identity. Chemical duplicate questions are recorded as null, not false: they are not answerable, which is a different statement from 'answered no'."
+    },
+    {
+      "affects": [],
+      "classification": "representation_augmentation",
+      "mechanism": "no_chemical_identity_gate",
+      "module": "src/bh_augmentation/augmentation/order_permutation.py",
+      "rationale": "Reaction-component reordering within a role. Identity-preserving only while the caller passes same-role columns; the module documents that it does not infer chemical exchangeability and refuses an empty column list rather than guessing."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/role_aware_condition_transfer.py",
+      "rationale": "Typed generator; same conduit contract as the anonymous generator."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/scientific_transfer_pool.py",
+      "rationale": "Pool builder. Accepts either an explicit policy or the historical global key contract, and binds the resolved mode into the pool hash."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/search.py",
+      "rationale": "Dispatcher; propagates the callee's semantics unchanged."
+    },
+    {
+      "affects": [],
+      "classification": "representation_augmentation",
+      "mechanism": "identity_not_evaluable_recorded_as_null",
+      "module": "src/bh_augmentation/augmentation/simple_controls.py",
+      "rationale": "Duplication and reweighting controls reuse measured chemistry by design; the feature-space controls (nearest-neighbour pseudo-labelling, self-training, feature mixup) create coordinates with no seven-role identity and record chemical_identity_applicable=False."
+    },
+    {
+      "affects": [],
+      "classification": "representation_augmentation",
+      "mechanism": "no_chemical_identity_gate",
+      "module": "src/bh_augmentation/augmentation/smiles_randomization.py",
+      "rationale": "RDKit atom renumbering produces a different SMILES string for the same molecule and copies the measured label. Canonicalization is an involution over this transform, so an identity gate would reject 100% of the output by definition. The gate must not apply."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/synthetic_identity.py",
+      "rationale": "The shared identity gate. It applies whichever CandidateScopePolicy it is handed and has no eligibility opinion of its own."
+    },
+    {
+      "affects": [],
+      "classification": "representation_augmentation",
+      "mechanism": "identity_not_evaluable_recorded_as_null",
+      "module": "src/bh_augmentation/augmentation/utility_guided_feature_gan.py",
+      "rationale": "Generated feature coordinates carry no asserted chemical identity; feature-hash deduplication is applied, chemical-identity rejection is not."
+    },
+    {
+      "affects": [
+        "augmentation_controls_matched_budget"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/augmentation_control_benchmark.py",
+      "rationale": "Phase 11 matched-budget controls. Asks whether chemical augmentation helps a low-data learner, so it defaults to observed-only and the post-hoc validator applies the same declared rule."
+    },
+    {
+      "affects": [
+        "observed_only_condition_transfer",
+        "globally_unmeasured_condition_transfer",
+        "withheld_cell_transfer_oracle"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "explicit_candidate_scope_policy",
+      "module": "src/bh_augmentation/candidate_scope_reanalysis.py",
+      "rationale": "Development reanalysis. Runs both modes side by side and freezes each pool before the withheld-cell oracle reads any hidden yield."
+    },
+    {
+      "affects": [
+        "corrected_anonymous_condition_transfer",
+        "corrected_role_aware_condition_transfer"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/corrected_condition_transfer.py",
+      "rationale": "Matched corrected anonymous/typed transfer at low data fractions."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/evaluation/low_data_partitions.py",
+      "rationale": "Defines the four partitions and builds typed policies from them. Has no field that can carry hidden outer-training identities into generation."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "no_generation_performed",
+      "module": "src/bh_augmentation/evaluation/withheld_cell_oracle.py",
+      "rationale": "Reads hidden outer-training yields only after candidates and pseudo-labels are frozen and hash-verified. Performs no generation."
+    },
+    {
+      "affects": [
+        "observed_only_condition_transfer",
+        "globally_unmeasured_condition_transfer"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/final_evaluation.py",
+      "rationale": "Refit and single outer-test batch. Must resolve the same rule the search froze, or the refit pool would differ from the selected one."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "no_generation_performed",
+      "module": "src/bh_augmentation/hidden_measured_calibration.py",
+      "rationale": "Phase 12 pseudo-label accuracy and interval calibration. Its withheld cells are a condition group carved out of the labeled training subset rather than the hidden outer-training partition, so it measures a proxy population; the withheld-cell oracle covers the population this audit is about."
+    },
+    {
+      "affects": [
+        "observed_only_condition_transfer",
+        "globally_unmeasured_condition_transfer"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/policy_search.py",
+      "rationale": "Frozen-policy search. Reads candidate_scope.mode and binds it into the scientific config hash, so the declared rule is part of the frozen policy identity. Defaults to the historical prospective rule so a pre-audit config reproduces exactly."
+    },
+    {
+      "affects": [
+        "prospective_discovery_package"
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "src/bh_augmentation/prospective_package.py",
+      "rationale": "Phase 18 prospective discovery. A proposed reaction must never have been measured anywhere in the complete historical dataset, so global membership is the correct and intended eligibility rule."
+    },
+    {
+      "affects": [
+        "recommendation_simulation"
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "src/bh_augmentation/recommendation_simulation.py",
+      "rationale": "Recommendation simulation ranks reactions for prospective execution; a recommendation that is already measured is not a recommendation."
+    },
+    {
+      "affects": [
+        "redesigned_supervised_ae",
+        "anonymous_transfer_without_ae",
+        "typed_transfer_without_ae"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "complete_measured_universe",
+      "module": "src/bh_augmentation/redesigned_ae_benchmark.py",
+      "rationale": "Phase 14/15. Already correct before this audit: its key set is the phase's own visible rows (inner policy-fit rows during search, saved training rows during placement and final), never the complete dataset, and a hash guard hard-fails if a pool consumes anything else. The `global_measured_identity_keys` parameter name is historical; the value passed is observed-only."
+    },
+    {
+      "affects": [],
+      "classification": "not_applicable",
+      "mechanism": "no_generation_performed",
+      "module": "src/bh_augmentation/representation_benchmark.py",
+      "rationale": "Compares feature encodings with no augmentation at all."
+    },
+    {
+      "affects": [
+        "condition_transfer_legacy"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_condition_transfer.py",
+      "rationale": "Legacy anonymous transfer runner on a low-data protocol."
+    },
+    {
+      "affects": [
+        "condition_transfer_supervised_ae"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_condition_transfer_supervised_ae.py",
+      "rationale": "Supervised-AE runner whose training pool depends on transferred candidates."
+    },
+    {
+      "affects": [
+        "external_family_validation"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_external_family_validation.py",
+      "rationale": "External reaction-family adapter. Low-data augmentation benefit on a second family; eligibility follows the labeled training partition. The empirical datasets remain blocked, so only the semantics change."
+    },
+    {
+      "affects": [
+        "role_aware_condition_transfer_legacy"
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_role_aware_condition_transfer.py",
+      "rationale": "Legacy typed transfer runner on a low-data protocol."
+    }
+  ],
+  "declared_without_call_site_count": 16,
+  "module_count": 46,
+  "modules": [
+    {
+      "affects": [
+        "phase_01_identity_smoke"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "scripts/run_phase1_identity_smoke.py",
+          "line": 87,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "scripts/run_phase1_identity_smoke.py",
+          "line": 94,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "scripts/run_phase1_identity_smoke.py",
+      "rationale": "Determinism smoke for the identity gate. It rejects against the complete measured dataset, so its recorded zero-accepted result is a statement about GLOBAL discovery headroom on a near-complete factorial matrix -- not a statement about how much a low-data learner could generate. Retained under its executed protocol."
+    },
+    {
+      "affects": [
+        "phase_02_role_change_smoke"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "scripts/run_phase2_role_change_smoke.py",
+          "line": 180,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "scripts/run_phase2_role_change_smoke.py",
+          "line": 217,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "scripts/run_phase2_role_change_smoke.py",
+      "rationale": "Role-change contract smoke under the same global rule; its null-eligibility finding is a global-novelty statement."
+    },
+    {
+      "affects": [
+        "phase_03_ranking_smoke"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "scripts/run_phase3_ranking_smoke.py",
+          "line": 180,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "scripts/run_phase3_ranking_smoke.py",
+      "rationale": "Candidate-ranking smoke under the same global rule; its zero-accepted result is a global-novelty statement."
+    },
+    {
+      "affects": [
+        "supervised_ae_condition_transfer"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/ae_final_evaluation.py",
+          "line": 769,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/ae_final_evaluation.py",
+      "rationale": "AE refit; resolves the same rule the AE search froze."
+    },
+    {
+      "affects": [
+        "supervised_ae_condition_transfer"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/ae_policy_search.py",
+          "line": 588,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/ae_policy_search.py",
+      "rationale": "Joint AE + transfer search on the same low-data protocol."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/candidate_scope.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Defines the taxonomy and the typed policy; performs no generation."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "src/bh_augmentation/augmentation/chemical_controls.py",
+          "line": 220,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "src/bh_augmentation/augmentation/chemical_controls.py",
+          "line": 242,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "src/bh_augmentation/augmentation/chemical_controls.py",
+          "line": 261,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/chemical_controls.py",
+      "rationale": "Builds one chemical control from whichever rule its caller declares, and records the resolved mode in the control's frozen config."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation/condition_recombine.py",
+          "line": 242,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        },
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation/condition_recombine.py",
+          "line": 406,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/condition_recombine.py",
+      "rationale": "Recombination generator. The resolved policy also bounds the generation budget, so the scope decides pool size as well as acceptance."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation/condition_transfer.py",
+          "line": 396,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/condition_transfer.py",
+      "rationale": "Anonymous generator. Resolves the caller's policy and folds in the labeled training frame's own identities; the scientific choice belongs to the caller."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "src/bh_augmentation/augmentation/ensemble_filter.py",
+          "line": 47,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/ensemble_filter.py",
+      "rationale": "Wraps the recombination generator and forwards its caller's rule."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/family_condition_transfer.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "External-family typed transfer. Rejects against whatever key set the adapter caller supplies; defaults to the training frame's identities."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "representation_augmentation",
+      "mechanism": "identity_not_evaluable_recorded_as_null",
+      "module": "src/bh_augmentation/augmentation/latent_interpolation.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "A latent coordinate has no seven-role reaction identity. Chemical duplicate questions are recorded as null, not false: they are not answerable, which is a different statement from 'answered no'."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "representation_augmentation",
+      "mechanism": "no_chemical_identity_gate",
+      "module": "src/bh_augmentation/augmentation/order_permutation.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Reaction-component reordering within a role. Identity-preserving only while the caller passes same-role columns; the module documents that it does not infer chemical exchangeability and refuses an empty column list rather than guessing."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation/role_aware_condition_transfer.py",
+          "line": 406,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/role_aware_condition_transfer.py",
+      "rationale": "Typed generator; same conduit contract as the anonymous generator."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation/scientific_transfer_pool.py",
+          "line": 199,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation/scientific_transfer_pool.py",
+          "line": 252,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/scientific_transfer_pool.py",
+      "rationale": "Pool builder. Accepts either an explicit policy or the historical global key contract, and binds the resolved mode into the pool hash."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/search.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Dispatcher; propagates the callee's semantics unchanged."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "representation_augmentation",
+      "mechanism": "identity_not_evaluable_recorded_as_null",
+      "module": "src/bh_augmentation/augmentation/simple_controls.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Duplication and reweighting controls reuse measured chemistry by design; the feature-space controls (nearest-neighbour pseudo-labelling, self-training, feature mixup) create coordinates with no seven-role identity and record chemical_identity_applicable=False."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "representation_augmentation",
+      "mechanism": "no_chemical_identity_gate",
+      "module": "src/bh_augmentation/augmentation/smiles_randomization.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "RDKit atom renumbering produces a different SMILES string for the same molecule and copies the measured label. Canonicalization is an involution over this transform, so an identity gate would reject 100% of the output by definition. The gate must not apply."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/augmentation/synthetic_identity.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "The shared identity gate. It applies whichever CandidateScopePolicy it is handed and has no eligibility opinion of its own."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "representation_augmentation",
+      "mechanism": "identity_not_evaluable_recorded_as_null",
+      "module": "src/bh_augmentation/augmentation/utility_guided_feature_gan.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Generated feature coordinates carry no asserted chemical identity; feature-hash deduplication is applied, chemical-identity rejection is not."
+    },
+    {
+      "affects": [
+        "augmentation_controls_matched_budget"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/augmentation_control_benchmark.py",
+          "line": 343,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/augmentation_control_benchmark.py",
+      "rationale": "Phase 11 matched-budget controls. Asks whether chemical augmentation helps a low-data learner, so it defaults to observed-only and the post-hoc validator applies the same declared rule."
+    },
+    {
+      "affects": [
+        "observed_only_condition_transfer",
+        "globally_unmeasured_condition_transfer",
+        "withheld_cell_transfer_oracle"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/candidate_scope_reanalysis.py",
+          "line": 422,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/candidate_scope_reanalysis.py",
+          "line": 437,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "explicit_candidate_scope_policy",
+      "module": "src/bh_augmentation/candidate_scope_reanalysis.py",
+      "rationale": "Development reanalysis. Runs both modes side by side and freezes each pool before the withheld-cell oracle reads any hidden yield."
+    },
+    {
+      "affects": [
+        "corrected_anonymous_condition_transfer",
+        "corrected_role_aware_condition_transfer"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "src/bh_augmentation/corrected_condition_transfer.py",
+          "line": 469,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "src/bh_augmentation/corrected_condition_transfer.py",
+          "line": 474,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/corrected_condition_transfer.py",
+      "rationale": "Matched corrected anonymous/typed transfer at low data fractions."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "conduit_forwards_callers_policy",
+      "module": "src/bh_augmentation/evaluation/low_data_partitions.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Defines the four partitions and builds typed policies from them. Has no field that can carry hidden outer-training identities into generation."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "no_generation_performed",
+      "module": "src/bh_augmentation/evaluation/withheld_cell_oracle.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Reads hidden outer-training yields only after candidates and pseudo-labels are frozen and hash-verified. Performs no generation."
+    },
+    {
+      "affects": [
+        "observed_only_condition_transfer",
+        "globally_unmeasured_condition_transfer"
+      ],
+      "call_sites": [],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/final_evaluation.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Refit and single outer-test batch. Must resolve the same rule the search froze, or the refit pool would differ from the selected one."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "no_generation_performed",
+      "module": "src/bh_augmentation/hidden_measured_calibration.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Phase 12 pseudo-label accuracy and interval calibration. Its withheld cells are a condition group carved out of the labeled training subset rather than the hidden outer-training partition, so it measures a proxy population; the withheld-cell oracle covers the population this audit is about."
+    },
+    {
+      "affects": [
+        "observed_only_condition_transfer",
+        "globally_unmeasured_condition_transfer"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/policy_search.py",
+          "line": 515,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/policy_search.py",
+          "line": 529,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/policy_search.py",
+      "rationale": "Frozen-policy search. Reads candidate_scope.mode and binds it into the scientific config hash, so the declared rule is part of the frozen policy identity. Defaults to the historical prospective rule so a pre-audit config reproduces exactly."
+    },
+    {
+      "affects": [
+        "prospective_discovery_package"
+      ],
+      "call_sites": [],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "src/bh_augmentation/prospective_package.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Phase 18 prospective discovery. A proposed reaction must never have been measured anywhere in the complete historical dataset, so global membership is the correct and intended eligibility rule."
+    },
+    {
+      "affects": [
+        "recommendation_simulation"
+      ],
+      "call_sites": [],
+      "classification": "globally_unmeasured_prospective",
+      "mechanism": "complete_measured_universe",
+      "module": "src/bh_augmentation/recommendation_simulation.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Recommendation simulation ranks reactions for prospective execution; a recommendation that is already measured is not a recommendation."
+    },
+    {
+      "affects": [
+        "redesigned_supervised_ae",
+        "anonymous_transfer_without_ae",
+        "typed_transfer_without_ae"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "src/bh_augmentation/redesigned_ae_benchmark.py",
+          "line": 2044,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "src/bh_augmentation/redesigned_ae_benchmark.py",
+          "line": 2054,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_strict_context_matched_typed_transfer_pool"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "complete_measured_universe",
+      "module": "src/bh_augmentation/redesigned_ae_benchmark.py",
+      "rationale": "Phase 14/15. Already correct before this audit: its key set is the phase's own visible rows (inner policy-fit rows during search, saved training rows during placement and final), never the complete dataset, and a hash guard hard-fails if a pool consumes anything else. The `global_measured_identity_keys` parameter name is historical; the value passed is observed-only."
+    },
+    {
+      "affects": [],
+      "call_sites": [],
+      "classification": "not_applicable",
+      "mechanism": "no_generation_performed",
+      "module": "src/bh_augmentation/representation_benchmark.py",
+      "note": "Declared semantics with no located identity-gate call site.",
+      "rationale": "Compares feature encodings with no augmentation at all."
+    },
+    {
+      "affects": [
+        "condition_transfer_legacy"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/run_condition_transfer.py",
+          "line": 142,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_condition_transfer.py",
+      "rationale": "Legacy anonymous transfer runner on a low-data protocol."
+    },
+    {
+      "affects": [
+        "condition_transfer_supervised_ae"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/run_condition_transfer_supervised_ae.py",
+          "line": 572,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_condition_transfer_supervised_ae.py",
+      "rationale": "Supervised-AE runner whose training pool depends on transferred candidates."
+    },
+    {
+      "affects": [
+        "external_family_validation"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "src/bh_augmentation/run_external_family_validation.py",
+          "line": 414,
+          "references_global_universe": false,
+          "role": "external_family_generator",
+          "symbol": "build_condition_transfer_candidates"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_external_family_validation.py",
+      "rationale": "External reaction-family adapter. Low-data augmentation benefit on a second family; eligibility follows the labeled training partition. The empirical datasets remain blocked, so only the semantics change."
+    },
+    {
+      "affects": [
+        "role_aware_condition_transfer_legacy"
+      ],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "src/bh_augmentation/run_role_aware_condition_transfer.py",
+          "line": 147,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "observed_only_low_data",
+      "mechanism": "configured_candidate_scope_mode",
+      "module": "src/bh_augmentation/run_role_aware_condition_transfer.py",
+      "rationale": "Legacy typed transfer runner on a low-data protocol."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "tests/test_candidate_scope.py",
+          "line": 296,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        },
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "tests/test_candidate_scope.py",
+          "line": 309,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_candidate_scope.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "explicit_candidate_scope_policy",
+          "file": "tests/test_candidate_scope_leakage.py",
+          "line": 285,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_candidate_scope_leakage.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 150,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 186,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 204,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 241,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 266,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 272,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 307,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 330,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 342,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 350,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_chemical_augmentation_controls.py",
+          "line": 355,
+          "references_global_universe": false,
+          "role": "chemical_control",
+          "symbol": "build_chemical_augmentation_control"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_chemical_augmentation_controls.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_recombine.py",
+          "line": 62,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_recombine.py",
+          "line": 128,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_recombine.py",
+          "line": 135,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_condition_recombine.py",
+          "line": 184,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_condition_recombine.py",
+          "line": 185,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_recombine.py",
+          "line": 215,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_recombine.py",
+          "line": 238,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_condition_recombine.py",
+          "line": 247,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_recombine.py",
+          "line": 284,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_condition_recombine.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 91,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 112,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 145,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 157,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 203,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 275,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 344,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 383,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 512,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 527,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 548,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 572,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 578,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_condition_transfer.py",
+          "line": 607,
+          "references_global_universe": false,
+          "role": "anonymous_generator",
+          "symbol": "generate_condition_transfer_examples"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_condition_transfer.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_ensemble_filter.py",
+          "line": 41,
+          "references_global_universe": false,
+          "role": "recombination_generator",
+          "symbol": "generate_condition_recombined_candidates"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_ensemble_filter.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 100,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 133,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 148,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 160,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 194,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 200,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 220,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 245,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 292,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 362,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 425,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 447,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 482,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 516,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 517,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 537,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 561,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_role_aware_condition_transfer.py",
+          "line": 582,
+          "references_global_universe": false,
+          "role": "typed_generator",
+          "symbol": "generate_role_aware_condition_transfer_examples"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_role_aware_condition_transfer.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 117,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 158,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_strict_context_matched_typed_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 181,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 182,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 197,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 202,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_strict_context_matched_typed_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 258,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 265,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        },
+        {
+          "eligibility_supply": "forwarded_keyword_arguments",
+          "file": "tests/test_scientific_transfer_pool.py",
+          "line": 284,
+          "references_global_universe": false,
+          "role": "scientific_pool",
+          "symbol": "build_anonymous_transfer_pool"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_scientific_transfer_pool.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_suzuki_family_pipeline.py",
+          "line": 235,
+          "references_global_universe": false,
+          "role": "external_family_generator",
+          "symbol": "build_condition_transfer_candidates"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_suzuki_family_pipeline.py",
+          "line": 296,
+          "references_global_universe": false,
+          "role": "external_family_generator",
+          "symbol": "build_condition_transfer_candidates"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_suzuki_family_pipeline.py",
+          "line": 310,
+          "references_global_universe": false,
+          "role": "external_family_generator",
+          "symbol": "build_condition_transfer_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_suzuki_family_pipeline.py",
+          "line": 336,
+          "references_global_universe": false,
+          "role": "external_family_generator",
+          "symbol": "build_condition_transfer_candidates"
+        },
+        {
+          "eligibility_supply": "generator_default_observed_only",
+          "file": "tests/test_suzuki_family_pipeline.py",
+          "line": 345,
+          "references_global_universe": false,
+          "role": "external_family_generator",
+          "symbol": "build_condition_transfer_candidates"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_suzuki_family_pipeline.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    },
+    {
+      "affects": [],
+      "call_sites": [
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_synthetic_identity.py",
+          "line": 89,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_synthetic_identity.py",
+          "line": 119,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        },
+        {
+          "eligibility_supply": "legacy_key_set_keyword",
+          "file": "tests/test_synthetic_identity.py",
+          "line": 125,
+          "references_global_universe": false,
+          "role": "identity_gate",
+          "symbol": "audit_candidate_identities"
+        }
+      ],
+      "classification": "not_applicable",
+      "mechanism": "test_fixture",
+      "module": "tests/test_synthetic_identity.py",
+      "rationale": "Test module. Fixtures exercise the gate directly and are not a scientific claim."
+    }
+  ],
+  "registry_version": "bh-candidate-scope-registry-v1",
+  "schema_version": "bh-candidate-scope-audit-v1",
+  "undeclared_modules": [],
+  "violations": []
+}

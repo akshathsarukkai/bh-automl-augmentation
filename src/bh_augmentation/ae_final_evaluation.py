@@ -22,11 +22,14 @@ from bh_augmentation.ae_policy_search import (
     _transfer_key_from_policy,
     scientific_ae_config_projection,
 )
+from bh_augmentation.augmentation.candidate_scope import (
+    CandidateScopePolicy,
+    observed_only_scope,
+)
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
 )
-from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
 from bh_augmentation.evaluation.ae_policy_protocol import make_ae_inner_split
 from bh_augmentation.evaluation.policy_protocol import (
@@ -46,6 +49,7 @@ from bh_augmentation.policy_search import (
     _build_partition,
     _materialize_search_frames,
     _metric_rows,
+    _resolve_candidate_scope,
     _resolve_run_contract,
     current_commit,
 )
@@ -149,11 +153,17 @@ def run_ae_final_evaluation_command(
         config.get("features", {}),
         required_kind="bh_role_separated",
     )
-    global_identity_keys = frozenset(measured_canonical_keys(saved.canonical))
+    candidate_scope = _resolve_candidate_scope(
+        config,
+        saved,
+        seed=seed,
+        train_fraction=fraction,
+        dataset_path=dataset_path,
+    )
     refit, refit_contract = _build_partition(
         refit_frame,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     audit = saved.audit_record(seed=seed, train_fraction=fraction)
     expected_binding = ScientificBinding(
@@ -178,7 +188,7 @@ def run_ae_final_evaluation_command(
         assignment_rows=assignment_rows,
         memberships=memberships,
         feature_config=feature_config,
-        global_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
         search_config=search_config,
         seed=seed,
         fraction=fraction,
@@ -300,7 +310,16 @@ def run_ae_final_evaluation_command(
     test_frame = saved.canonical.loc[
         saved.canonical["source_row_id"].astype(str).isin(memberships["test"])
     ].copy()
-    outer_test, test_contract = _build_partition(test_frame, feature_config)
+    outer_test, test_contract = _build_partition(
+        test_frame,
+        feature_config,
+        candidate_scope=observed_only_scope(
+            labeled_train_identity_keys=(
+                str(value)
+                for value in test_frame["canonical_reaction_key"].dropna()
+            ),
+        ),
+    )
     if refit_contract != test_contract:
         raise ValueError("Refit and outer-test feature contracts differ.")
     if set(outer_test.source_row_ids) != memberships["test"]:
@@ -510,7 +529,7 @@ def _rebuild_search_context(
     assignment_rows: pd.DataFrame,
     memberships: dict[str, set[str]],
     feature_config: dict[str, Any],
-    global_identity_keys: frozenset[str],
+    candidate_scope: CandidateScopePolicy,
     search_config: dict[str, Any],
     seed: int,
     fraction: float,
@@ -534,17 +553,17 @@ def _rebuild_search_context(
     ae_fit, fit_contract = _build_partition(
         inner_split.ae_train,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     internal_validation, internal_contract = _build_partition(
         inner_split.internal_validation,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     policy_validation, policy_contract = _build_partition(
         policy_validation_frame,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     if fit_contract != internal_contract or fit_contract != policy_contract:
         raise ValueError("Runtime joint AE search feature contracts differ.")
@@ -755,7 +774,7 @@ def _generate_frozen_transfer(
         feature_config=partition.feature_config,
         real_feature_names=list(partition.feature_names),
         real_feature_metadata=partition.feature_metadata,
-        measured_identity_keys=partition.measured_identity_keys,
+        candidate_scope=partition.candidate_scope,
     )
     _validate_synthetic_parent_ids(
         generation,

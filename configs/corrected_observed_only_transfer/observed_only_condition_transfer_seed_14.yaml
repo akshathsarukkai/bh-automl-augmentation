@@ -1,0 +1,133 @@
+# Preregistered confirmatory experiment: observed-only condition transfer.
+# Frozen by PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md. Do not edit after any
+# confirmatory outer-test outcome exists for this unit.
+#
+# One evaluation unit per file: the v1 frozen-policy protocol requires exactly
+# one seed and one training fraction so that the scientific binding names a
+# single outer test.
+
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+
+splits:
+  method: canonical_saved
+  directory: results/corrected_canonical_splits_phase15
+
+seeds: [14]
+
+low_data:
+  train_fractions: [0.05]
+
+candidate_scope:
+  # Bound into config_hash, and therefore into the scientific binding, the
+  # search manifest and the frozen policy. A frozen policy from a differently
+  # scoped search cannot be replayed against this configuration.
+  mode: observed_only_low_data
+
+evaluation_registry:
+  family: observed_only_condition_transfer
+
+features:
+  kind: bh_role_separated
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+
+metrics: [rmse, mae, r2, spearman]
+
+policy_search:
+  selection_metric: rmse
+  lower_is_better: true
+  metrics: [rmse, mae, r2, spearman]
+  model_policies:
+    - policy_id: anonymous-xgb-0
+      method: anonymous
+      model: xgboost
+      params:
+        n_estimators: 300
+        max_depth: 6
+        learning_rate: 0.05
+        n_jobs: 1
+        tree_method: hist
+      transfer_config:
+        donor_strategy: nearest_substrate
+        synthetic_multiplier: 1.0
+        n_neighbors: 10
+        label_strategy: teacher_ensemble
+        teacher_models: [extra_trees, random_forest]
+        max_teacher_std: null
+        min_similarity: 0.0
+        high_yield_threshold: 80.0
+        clip_y_min: 0.0
+        clip_y_max: 100.0
+        candidates_per_real: 2
+        random_state: 14
+        donor_similarity_n_bits: 2048
+        donor_similarity_radius: 2
+        donor_similarity_backend: rdkit
+        role_change_requirement: all
+        fallback_policy: reject
+        max_candidates_per_source: 1
+        requested_roles: [ligand, base]
+    - policy_id: anonymous-xgb-1
+      method: anonymous
+      model: xgboost
+      params:
+        n_estimators: 500
+        max_depth: 4
+        learning_rate: 0.03
+        n_jobs: 1
+        tree_method: hist
+      transfer_config:
+        donor_strategy: nearest_substrate
+        synthetic_multiplier: 1.0
+        n_neighbors: 10
+        label_strategy: teacher_ensemble
+        teacher_models: [extra_trees, random_forest]
+        max_teacher_std: null
+        min_similarity: 0.0
+        high_yield_threshold: 80.0
+        clip_y_min: 0.0
+        clip_y_max: 100.0
+        candidates_per_real: 2
+        random_state: 14
+        donor_similarity_n_bits: 2048
+        donor_similarity_radius: 2
+        donor_similarity_backend: rdkit
+        role_change_requirement: all
+        fallback_policy: reject
+        max_candidates_per_source: 1
+        requested_roles: [ligand, base]
+    - policy_id: anonymous-xgb-2
+      method: anonymous
+      model: xgboost
+      params:
+        n_estimators: 800
+        max_depth: 3
+        learning_rate: 0.02
+        n_jobs: 1
+        tree_method: hist
+      transfer_config:
+        donor_strategy: nearest_substrate
+        synthetic_multiplier: 1.0
+        n_neighbors: 10
+        label_strategy: teacher_ensemble
+        teacher_models: [extra_trees, random_forest]
+        max_teacher_std: null
+        min_similarity: 0.0
+        high_yield_threshold: 80.0
+        clip_y_min: 0.0
+        clip_y_max: 100.0
+        candidates_per_real: 2
+        random_state: 14
+        donor_similarity_n_bits: 2048
+        donor_similarity_radius: 2
+        donor_similarity_backend: rdkit
+        role_change_requirement: all
+        fallback_policy: reject
+        max_candidates_per_source: 1
+        requested_roles: [ligand, base]
+
+output:
+  search_directory: results/corrected_observed_only_transfer/observed_only_condition_transfer/seed_14/search
+  final_directory: results/corrected_observed_only_transfer/observed_only_condition_transfer/seed_14/final

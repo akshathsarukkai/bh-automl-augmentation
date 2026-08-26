@@ -10,8 +10,14 @@ from typing import Any
 
 import pandas as pd
 
-from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
+from bh_augmentation.augmentation.candidate_scope import observed_only_scope
 from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
+from bh_augmentation.evaluation.evaluation_registry import (
+    EvaluationAlreadyClaimedError,
+    EvaluationIdentity,
+    EvaluationRegistry,
+    default_evaluation_registry_root,
+)
 from bh_augmentation.evaluation.policy_protocol import (
     FinalEvaluationInputs,
     FrozenPolicyEnvelope,
@@ -26,6 +32,7 @@ from bh_augmentation.policy_search import (
     _evaluation_unit,
     _fit_resolved_model,
     _metric_rows,
+    _resolve_candidate_scope,
     _resolve_run_contract,
     _resolved_model_policies,
     _selection_contract,
@@ -75,11 +82,17 @@ def run_final_evaluation_command(
         config.get("features", {}),
         required_kind="bh_role_separated",
     )
-    global_identity_keys = frozenset(measured_canonical_keys(saved.canonical))
+    candidate_scope = _resolve_candidate_scope(
+        config,
+        saved,
+        seed=seed,
+        train_fraction=fraction,
+        dataset_path=dataset_path,
+    )
     refit, refit_contract = _build_partition(
         refit_frame,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     audit = saved.audit_record(seed=seed, train_fraction=fraction)
     expected_binding = ScientificBinding(
@@ -131,7 +144,27 @@ def run_final_evaluation_command(
         frozen_policy_hash=frozen.frozen_policy_hash,
         binding=expected_binding,
     )
-    model = _fit_resolved_model(frozen.resolved_policy, refit)
+    # Reserve the repository-global outer-test identity before the refit, so a
+    # crash between refit and prediction can never leave the unit re-runnable.
+    # The local directory claim above is filesystem-scoped; this one is not, and
+    # it is what makes "never reuse a consumed outer-test identity" a mechanism
+    # rather than a discipline.
+    registry, registry_identity = _reserve_outer_test_identity(
+        config,
+        evaluation_unit=evaluation_unit,
+        dataset_hash=saved.dataset_hash,
+        search_manifest_hash=str(frozen.search_manifest_hash),
+        frozen_policy_hash=frozen.frozen_policy_hash,
+    )
+    try:
+        model = _fit_resolved_model(frozen.resolved_policy, refit)
+    except Exception as exc:  # noqa: BLE001 - the registry must record any doubt
+        if registry is not None and registry_identity is not None:
+            registry.mark_failed_or_uncertain(
+                registry_identity,
+                reason=f"refit_failed:{type(exc).__name__}",
+            )
+        raise
     _update_claim(
         claim_path,
         status="refit_complete",
@@ -140,7 +173,16 @@ def run_final_evaluation_command(
     test_frame = saved.canonical.loc[
         saved.canonical["source_row_id"].isin(test_ids)
     ].copy()
-    outer_test, test_contract = _build_partition(test_frame, feature_config)
+    outer_test, test_contract = _build_partition(
+        test_frame,
+        feature_config,
+        candidate_scope=observed_only_scope(
+            labeled_train_identity_keys=(
+                str(value)
+                for value in test_frame["canonical_reaction_key"].dropna()
+            ),
+        ),
+    )
     if refit_contract != test_contract:
         raise ValueError("Refit and outer-test feature contracts differ.")
     inputs = FinalEvaluationInputs(
@@ -180,6 +222,22 @@ def run_final_evaluation_command(
     )
     metrics_bytes = metrics.to_csv(index=False).encode("utf-8")
     metrics_hash = hashlib.sha256(metrics_bytes).hexdigest()
+    if registry is not None and registry_identity is not None:
+        registry.mark_prediction_complete(
+            registry_identity,
+            prediction_hash=metrics_hash,
+        )
+        registry.mark_metrics_complete(
+            registry_identity,
+            metrics_payload=[
+                {
+                    "split": str(row["split"]),
+                    "metric": str(row["metric"]),
+                    "value": float(row["value"]),
+                }
+                for row in metrics.to_dict(orient="records")
+            ],
+        )
     manifest_payload = {
         "run_type": "final_evaluation",
         "scientific_binding": expected_binding.to_dict(),
@@ -336,6 +394,45 @@ def _replay_policy_selection(
         or manifest_payload["selected_policy_hash"] != winner_policy.policy_hash
     ):
         raise ValueError("Frozen policy does not match the recomputed validation winner.")
+
+
+def _reserve_outer_test_identity(
+    config: dict[str, Any],
+    *,
+    evaluation_unit: str,
+    dataset_hash: str,
+    search_manifest_hash: str,
+    frozen_policy_hash: str,
+) -> tuple[EvaluationRegistry | None, EvaluationIdentity | None]:
+    """Reserve this unit in the repository-global registry, if one is declared.
+
+    A run declares its family with ``evaluation_registry.family``; the family
+    name is part of the identity, so two scientifically different families may
+    evaluate the same split without either one silently re-using the other's
+    claim, while the same family cannot evaluate the same unit twice.
+    """
+    declared = config.get("evaluation_registry", {})
+    if not isinstance(declared, dict):
+        raise ValueError("evaluation_registry must be a mapping.")
+    family = declared.get("family")
+    if family is None:
+        return None, None
+    if not isinstance(family, str) or not family.strip():
+        raise ValueError("evaluation_registry.family must be a non-empty string.")
+    identity = EvaluationIdentity(
+        dataset_hash=dataset_hash,
+        split_or_search_manifest_hash=search_manifest_hash,
+        frozen_policy_hash=frozen_policy_hash,
+        evaluation_unit=f"{evaluation_unit}|family={family}",
+    )
+    registry = EvaluationRegistry(default_evaluation_registry_root())
+    if registry.inspect(identity) is not None:
+        raise EvaluationAlreadyClaimedError(
+            "Outer-test evaluation identity was already reserved; reevaluation "
+            f"is prohibited: {identity.evaluation_unit}."
+        )
+    registry.reserve(identity)
+    return registry, identity
 
 
 def _claim_evaluation(
