@@ -10,6 +10,12 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    OBSERVED_ONLY_LOW_DATA,
+    CandidateScopePolicy,
+    CandidateScopeViolation,
+    legacy_scope_from_measured_identity_keys,
+)
 from bh_augmentation.data.canonicalize_roles import (
     CANONICALIZATION_VERSION,
     build_canonical_reaction_identity,
@@ -24,7 +30,15 @@ from bh_augmentation.data.reaction_roles import (
 )
 
 FEATURE_HASH_SCHEMA_VERSION = "configured-feature-vector-v1"
-SYNTHETIC_IDENTITY_AUDIT_VERSION = "canonical-synthetic-identity-v1"
+#: Bumped to v2 when the candidate audit gained its explicit candidate-scope
+#: columns. The eligibility *decisions* are unchanged for any pre-existing
+#: configuration -- a legacy `measured_identity_keys` call still reports
+#: rejection_reason="already_measured" against the same key set -- but the audit
+#: frame now carries seven additional columns naming which rule produced it.
+#: Recording that as a schema version is deliberate: a candidate audit that
+#: cannot say which eligibility rule it was produced under is exactly what let
+#: two different scientific questions share one gate.
+SYNTHETIC_IDENTITY_AUDIT_VERSION = "canonical-synthetic-identity-v2"
 ROLE_CHANGE_REQUIREMENTS = {"all", "any"}
 
 REQUIRED_SYNTHETIC_AUDIT_FIELDS = (
@@ -39,6 +53,15 @@ REQUIRED_SYNTHETIC_AUDIT_FIELDS = (
     "feature_duplicate_synthetic",
     "chemical_parse_valid",
     "rejection_reason",
+)
+REQUIRED_CANDIDATE_SCOPE_AUDIT_FIELDS = (
+    "candidate_scope_mode",
+    "candidate_scope_provenance",
+    "candidate_scope_hash",
+    "observed_in_labeled_train",
+    "globally_measured_outside_labeled_train",
+    "quarantined_held_out_identity",
+    "quarantine_role",
 )
 REQUIRED_SYNTHETIC_SUPPORT_FIELDS = (
     "substrate_similarity",
@@ -187,21 +210,71 @@ def measured_canonical_keys(
     return keys
 
 
+def assert_stored_identities_match_roles(
+    frame: pd.DataFrame,
+    *,
+    description: str,
+    sample: int | None = None,
+) -> None:
+    """Fail if a frame's stored canonical keys disagree with live canonicalization.
+
+    Candidate identities are computed live from roles, while a partition's
+    identities are usually read from the stored ``canonical_reaction_key``
+    column.  If the installed RDKit canonicalizes differently from the version
+    that built the dataset, the two vocabularies silently stop intersecting --
+    and an eligibility gate that compares them would then accept *every*
+    candidate, including ones identical to reactions the learner has observed.
+    That failure is invisible in the metrics, so it must be loud here.
+
+    ``sample`` bounds the work for large frames; the default checks every row,
+    which is what a low-data labeled subset can afford.
+    """
+    if frame.empty or "canonical_reaction_key" not in frame:
+        return
+    rows = frame if sample is None else frame.head(int(sample))
+    for row in rows.to_dict(orient="records"):
+        stored = row.get("canonical_reaction_key")
+        if not isinstance(stored, str) or not stored:
+            continue
+        identity = canonicalize_synthetic_roles(reaction_roles_from_row(row))
+        if identity.canonical_reaction_key == stored:
+            continue
+        raise CandidateScopeViolation(
+            f"{description}: stored canonical identities disagree with live "
+            "canonicalization, so candidate eligibility would compare two "
+            "different identity vocabularies and accept everything. This "
+            "usually means the installed RDKit differs from the version that "
+            "built the dataset (see the dependency_versions block of the "
+            "canonical data audit manifest). Offending source_row_id="
+            f"{row.get('source_row_id')!r}."
+        )
+
+
 def audit_candidate_identities(
     candidate_df: pd.DataFrame,
     feature_matrix: np.ndarray,
     *,
-    measured_keys: Iterable[str],
     source_rows: Sequence[Mapping[str, Any]],
+    measured_keys: Iterable[str] | None = None,
+    candidate_scope: CandidateScopePolicy | None = None,
 ) -> pd.DataFrame:
-    """Audit candidates sequentially using separate chemical and feature sets."""
+    """Audit candidates sequentially using separate chemical and feature sets.
+
+    Exactly one eligibility rule applies per call.  ``candidate_scope`` is the
+    explicit typed policy; ``measured_keys`` is the historical keyword, which is
+    reconstructed into an equivalent policy carrying legacy provenance so that
+    pre-audit configurations reproduce their candidate audits unchanged.
+    """
+    scope = _resolve_audit_scope(measured_keys, candidate_scope)
     result = candidate_df.copy()
     features = np.asarray(feature_matrix)
     if len(result) != len(features):
         raise ValueError("candidate_df and feature_matrix must contain the same row count.")
-    identity_sets = CandidateIdentitySets(
-        measured_canonical_keys={str(value) for value in measured_keys}
-    )
+    rejection_keys = scope.rejection_identity_keys()
+    quarantine_keys = scope.quarantined_identity_keys()
+    observed_keys = frozenset(scope.observed_identity_keys)
+    global_keys = frozenset(scope.global_identity_keys)
+    identity_sets = CandidateIdentitySets(measured_canonical_keys=set(rejection_keys))
     source_identities = [
         canonicalize_synthetic_roles(reaction_roles_from_row(row))
         for row in source_rows
@@ -223,8 +296,15 @@ def audit_candidate_identities(
         source_identical = bool(
             key is not None and key == source_identity.canonical_reaction_key
         )
-        already_measured = bool(
-            key is not None and key in identity_sets.measured_canonical_keys
+        already_measured = bool(key is not None and key in rejection_keys)
+        observed_in_labeled_train = bool(key is not None and key in observed_keys)
+        globally_measured_outside = (
+            bool(key is not None and key in global_keys and key not in observed_keys)
+            if scope.consults_complete_dataset
+            else pd.NA
+        )
+        quarantined = bool(
+            key is not None and not already_measured and key in quarantine_keys
         )
         duplicate_synthetic = bool(
             key is not None and key in identity_sets.generated_canonical_keys
@@ -237,7 +317,7 @@ def audit_candidate_identities(
             chemical_parse_valid=candidate_identity.chemical_parse_valid,
             feature_hash=feature_hash,
             source_identical=source_identical,
-            already_measured=already_measured,
+            scope_rejection_reason=scope.rejection_reason_for(key),
             duplicate_synthetic=duplicate_synthetic,
             feature_duplicate_synthetic=feature_duplicate,
         )
@@ -258,6 +338,13 @@ def audit_candidate_identities(
                 "feature_hash": feature_hash,
                 "source_identical": source_identical,
                 "already_measured": already_measured,
+                "candidate_scope_mode": scope.mode,
+                "candidate_scope_provenance": scope.provenance,
+                "candidate_scope_hash": scope.scope_hash,
+                "observed_in_labeled_train": observed_in_labeled_train,
+                "globally_measured_outside_labeled_train": globally_measured_outside,
+                "quarantined_held_out_identity": quarantined,
+                "quarantine_role": scope.quarantine_role if quarantined else None,
                 "duplicate_synthetic": duplicate_synthetic,
                 "feature_duplicate_synthetic": feature_duplicate,
                 "chemical_parse_valid": candidate_identity.chemical_parse_valid,
@@ -438,10 +525,42 @@ def assert_accepted_identity_invariants(candidate_df: pd.DataFrame) -> None:
         raise AssertionError("An accepted synthetic candidate lacks a feature hash.")
     if accepted["already_measured"].astype(bool).any():
         raise AssertionError("An accepted synthetic candidate duplicates measured chemistry.")
+    _assert_accepted_scope_invariants(accepted)
     if accepted["canonical_reaction_key"].duplicated().any():
         raise AssertionError("An accepted synthetic canonical key appears more than once.")
     if accepted["feature_hash"].duplicated().any():
         raise AssertionError("An accepted synthetic feature hash appears more than once.")
+
+
+def _assert_accepted_scope_invariants(accepted: pd.DataFrame) -> None:
+    """Hard-fail if an accepted candidate breaks its declared eligibility scope."""
+    if "candidate_scope_mode" not in accepted:
+        return
+    modes = set(accepted["candidate_scope_mode"].dropna().astype(str))
+    if len(modes) > 1:
+        raise AssertionError(
+            "One candidate pool mixes candidate-scope modes: " + ", ".join(sorted(modes))
+        )
+    if accepted["observed_in_labeled_train"].astype(bool).any():
+        raise AssertionError(
+            "An accepted synthetic candidate repeats chemistry the simulated "
+            "low-data learner already observed."
+        )
+    if accepted["quarantined_held_out_identity"].astype(bool).any():
+        raise AssertionError(
+            "A quarantined held-out identity was accepted into a training pool."
+        )
+    global_flags = accepted["globally_measured_outside_labeled_train"]
+    if modes == {OBSERVED_ONLY_LOW_DATA}:
+        if not global_flags.isna().all():
+            raise AssertionError(
+                "An observed-only low-data candidate audit recorded complete-dataset "
+                "membership, which the protocol forbids consulting at generation time."
+            )
+    elif global_flags.fillna(False).astype(bool).any():
+        raise AssertionError(
+            "An accepted prospective candidate duplicates globally measured chemistry."
+        )
 
 
 def _candidate_identity(candidate: pd.Series) -> CanonicalSyntheticReaction:
@@ -451,12 +570,38 @@ def _candidate_identity(candidate: pd.Series) -> CanonicalSyntheticReaction:
     return canonicalize_synthetic_roles(roles)
 
 
+def _resolve_audit_scope(
+    measured_keys: Iterable[str] | None,
+    candidate_scope: CandidateScopePolicy | None,
+) -> CandidateScopePolicy:
+    """Return exactly one eligibility policy for a candidate audit."""
+    if candidate_scope is not None and measured_keys is not None:
+        raise CandidateScopeViolation(
+            "Pass either candidate_scope or measured_keys to audit_candidate_identities, "
+            "not both: two eligibility rules cannot apply to one candidate audit."
+        )
+    if candidate_scope is not None:
+        if not isinstance(candidate_scope, CandidateScopePolicy):
+            raise CandidateScopeViolation(
+                "candidate_scope must be a CandidateScopePolicy instance."
+            )
+        return candidate_scope
+    if measured_keys is None:
+        raise CandidateScopeViolation(
+            "audit_candidate_identities requires candidate_scope or measured_keys."
+        )
+    return legacy_scope_from_measured_identity_keys(
+        labeled_train_identity_keys=[str(value) for value in measured_keys],
+        measured_identity_keys=(),
+    )
+
+
 def _identity_rejection_reason(
     *,
     chemical_parse_valid: bool,
     feature_hash: str | None,
     source_identical: bool,
-    already_measured: bool,
+    scope_rejection_reason: str | None,
     duplicate_synthetic: bool,
     feature_duplicate_synthetic: bool,
 ) -> str | None:
@@ -466,8 +611,8 @@ def _identity_rejection_reason(
         return "invalid_feature_vector"
     if source_identical:
         return "source_identical"
-    if already_measured:
-        return "already_measured"
+    if scope_rejection_reason is not None:
+        return scope_rejection_reason
     if duplicate_synthetic:
         return "duplicate_synthetic"
     if feature_duplicate_synthetic:

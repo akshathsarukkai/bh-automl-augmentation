@@ -71,6 +71,12 @@ def run_smoke(output_directory: str | Path) -> dict[str, Path]:
         donor_similarity_n_bits=64,
         donor_similarity_backend="rdkit",
     )
+    # Candidate scope: globally_unmeasured_prospective. This smoke deliberately
+    # rejects against the COMPLETE measured dataset, not against the rows the
+    # training slice observed. Its zero-accepted result therefore measures global
+    # discovery headroom on a near-complete factorial matrix; it is not evidence
+    # about how much chemistry a low-data learner could legitimately generate.
+    # See src/bh_augmentation/augmentation/candidate_scope.py.
     all_measured_keys = measured_canonical_keys(measured)
     kwargs = {
         "feature_config": feature_config,

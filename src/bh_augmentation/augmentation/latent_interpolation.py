@@ -10,6 +10,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    REPRESENTATION_AUGMENTATION,
+)
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_RANKING_FIELDS,
     REQUIRED_SYNTHETIC_SUPPORT_FIELDS,
@@ -338,6 +341,12 @@ def _audit_nonchemical_candidates(
     result["feature_hash"] = feature_hashes
     result["source_identical"] = pd.array([pd.NA] * len(result), dtype="boolean")
     result["already_measured"] = pd.array([pd.NA] * len(result), dtype="boolean")
+    # Semantic rule: representation_augmentation. A latent coordinate carries no
+    # seven-role reaction identity, so the chemical-identity gate is
+    # inapplicable rather than passed. Chemical duplicate questions stay NULL
+    # (not False): they are unanswerable here, which is a different statement
+    # from being answered "no". See docs/CANDIDATE_SCOPE.md.
+    result["candidate_scope_mode"] = REPRESENTATION_AUGMENTATION
     result["duplicate_synthetic"] = pd.array([pd.NA] * len(result), dtype="boolean")
     result["feature_duplicate_synthetic"] = duplicate_flags
     result["chemical_parse_valid"] = False

@@ -11,6 +11,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    CandidateScopePolicy,
+    resolve_generation_scope,
+)
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     ROLE_CHANGE_REQUIREMENTS,
@@ -171,13 +175,16 @@ def generate_role_aware_condition_transfer_examples(
     real_feature_names: list[str],
     real_feature_metadata: FeatureMetadata,
     measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
 ) -> dict[str, Any]:
     """Generate role-aware synthetic reactions using only training rows."""
     _validate_config(config)
     _validate_training_frame(df_train)
-    all_measured_keys = measured_canonical_keys(
-        df_train,
-        additional_keys=measured_identity_keys,
+    labeled_train_identity_keys = measured_canonical_keys(df_train)
+    generation_scope = resolve_generation_scope(
+        labeled_train_identity_keys=labeled_train_identity_keys,
+        candidate_scope=candidate_scope,
+        measured_identity_keys=measured_identity_keys,
     )
     train = df_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
     X_train_array = np.asarray(X_train, dtype=np.float32)
@@ -399,7 +406,7 @@ def generate_role_aware_condition_transfer_examples(
     candidate_df = audit_candidate_identities(
         candidate_df,
         X_synthetic,
-        measured_keys=all_measured_keys,
+        candidate_scope=generation_scope,
         source_rows=train_records,
     )
     candidate_df = audit_role_changes(

@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import resolved_candidate_scope_mode
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
@@ -18,6 +19,7 @@ from bh_augmentation.augmentation.synthetic_identity import measured_canonical_k
 from bh_augmentation.data.clean_data import clean_buchwald_hartwig
 from bh_augmentation.data.load_data import load_reaction_csv
 from bh_augmentation.data.reaction_roles import ensure_reaction_role_columns
+from bh_augmentation.evaluation.low_data_partitions import scope_from_split_frames
 from bh_augmentation.features.compatibility import assert_feature_compatibility
 from bh_augmentation.features.featurize import (
     build_feature_matrix_with_metadata,
@@ -67,6 +69,13 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
     df = ensure_reaction_role_columns(clean_buchwald_hartwig(raw_df), parse_if_missing=True)
     if df.empty:
         raise ValueError("No rows remain after cleaning; cannot run condition transfer.")
+    # Candidate eligibility is a declared scientific choice. This is a low-data
+    # augmentation-benefit runner, so its default is observed_only_low_data: a
+    # candidate is ineligible only when the simulated learner has actually
+    # observed that chemistry. Rejecting against the complete historical dataset
+    # instead answers a prospective-novelty question, which is available by
+    # declaring candidate_scope.mode: globally_unmeasured_prospective.
+    candidate_scope_mode = resolved_candidate_scope_mode(config)
     complete_measured_identity_keys = measured_canonical_keys(df)
 
     configured_features = {"kind": "bh_role_separated", **dict(config.get("features", {}))}
@@ -98,6 +107,11 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
     for seed in seeds:
         set_global_seed(seed)
         for train_fraction, splits in _create_split_variants(df, config, seed):
+            unit_candidate_scope = scope_from_split_frames(
+                candidate_scope_mode,
+                splits=splits,
+                global_identity_keys=complete_measured_identity_keys,
+            )
             train_indices = _split_positions(splits["train"])
             valid_indices = _split_positions(splits["valid"])
             test_indices = _split_positions(splits["test"])
@@ -133,7 +147,7 @@ def run_condition_transfer(config_path: str | Path) -> dict[str, Path]:
                     feature_config=feature_config,
                     real_feature_names=feature_names,
                     real_feature_metadata=feature_metadata,
-                    measured_identity_keys=complete_measured_identity_keys,
+                    candidate_scope=unit_candidate_scope,
                 )
                 metadata = dict(result["metadata"])
                 metadata.update(

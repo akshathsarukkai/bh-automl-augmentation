@@ -47,6 +47,10 @@ def _unit(name: str = "random_seed_0_fraction_1") -> SimpleNamespace:
         seed=0,
         train_fraction=1.0,
         train_source_ids=("train-a", "train-b"),
+        # This fixture's canonical frame carries only train and test rows, so
+        # the unit has an empty validation partition. Outer-test identities
+        # still exercise the quarantine channel.
+        validation_source_ids=(),
         test_source_ids=("test-a", "test-b"),
         exact_split_hash="exact-split",
         aggregate_assignment_hash="aggregate-split",

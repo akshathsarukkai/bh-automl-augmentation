@@ -11,6 +11,9 @@ import pandas as pd
 from sklearn.decomposition import TruncatedSVD
 from sklearn.model_selection import train_test_split
 
+from bh_augmentation.augmentation.candidate_scope import (
+    REPRESENTATION_AUGMENTATION,
+)
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     REQUIRED_SYNTHETIC_RANKING_FIELDS,
@@ -447,6 +450,12 @@ def score_and_filter_feature_candidates(
     ]
     scored["source_identical"] = pd.array([pd.NA] * len(scored), dtype="boolean")
     scored["already_measured"] = pd.array([pd.NA] * len(scored), dtype="boolean")
+    # Semantic rule: representation_augmentation. A generated feature coordinate carries no
+    # seven-role reaction identity, so the chemical-identity gate is
+    # inapplicable rather than passed. Chemical duplicate questions stay NULL
+    # (not False): they are unanswerable here, which is a different statement
+    # from being answered "no". See docs/CANDIDATE_SCOPE.md.
+    scored["candidate_scope_mode"] = REPRESENTATION_AUGMENTATION
     scored["duplicate_synthetic"] = pd.array([pd.NA] * len(scored), dtype="boolean")
     scored["chemical_parse_valid"] = False
     scored["identity_classification"] = "feature_space_nonchemical"

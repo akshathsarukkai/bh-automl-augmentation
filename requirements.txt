@@ -9,3 +9,11 @@ torch
 
 # Optional dataset source, install manually when needed:
 # PyTDC
+
+# RDKit is not an install_requires dependency, but when it is present it must
+# match the version that produced the canonical dataset's stored
+# canonical_reaction_key values, or stored and freshly computed reaction
+# identities land in two different vocabularies and stop intersecting. See
+# results/corrected_canonical_data_audit/run_manifest.json and
+# docs/CANDIDATE_SCOPE.md section 7.
+# rdkit==2023.9.6

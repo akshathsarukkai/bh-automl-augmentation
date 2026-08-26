@@ -58,6 +58,12 @@ def run_smoke(output_directory: str | Path) -> dict[str, Path]:
         "fingerprint_backend": "rdkit",
         "categorical_columns": [],
     }
+    # Candidate scope: globally_unmeasured_prospective. This smoke deliberately
+    # rejects against the COMPLETE measured dataset, not against the rows the
+    # training slice observed. Its zero-accepted result therefore measures global
+    # discovery headroom on a near-complete factorial matrix; it is not evidence
+    # about how much chemistry a low-data learner could legitimately generate.
+    # See src/bh_augmentation/augmentation/candidate_scope.py.
     all_measured_keys = measured_canonical_keys(measured)
     anonymous = _run_anonymous_strict(
         train,

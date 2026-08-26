@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 from scipy import sparse
 
+from bh_augmentation.augmentation.candidate_scope import (
+    CandidateScopePolicy,
+    resolve_generation_scope,
+)
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     REQUIRED_SYNTHETIC_RANKING_FIELDS,
@@ -93,6 +97,7 @@ def generate_condition_recombined_candidates(
     *,
     feature_config: dict[str, Any] | None = None,
     measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
     max_candidates_per_source: int | None = None,
 ) -> pd.DataFrame:
     """Generate canonical candidates by transferring all typed donor conditions.
@@ -148,10 +153,12 @@ def generate_condition_recombined_candidates(
         return _empty_candidates(role_train)
 
     rng = np.random.default_rng(random_state)
-    measured_keys = measured_canonical_keys(
-        role_train,
-        additional_keys=measured_identity_keys,
+    generation_scope = resolve_generation_scope(
+        labeled_train_identity_keys=measured_canonical_keys(role_train),
+        candidate_scope=candidate_scope,
+        measured_identity_keys=measured_identity_keys,
     )
+    measured_keys = generation_scope.rejection_identity_keys()
     provisional_generated_keys: set[str] = set()
     provisional_by_source: dict[str, set[str]] = {}
     rows: list[pd.Series] = []
@@ -235,7 +242,7 @@ def generate_condition_recombined_candidates(
     audited = audit_candidate_identities(
         candidates,
         features,
-        measured_keys=measured_keys,
+        candidate_scope=generation_scope,
         source_rows=role_train.to_dict(orient="records"),
     )
     _attach_recombination_ranking_audit(
@@ -380,6 +387,7 @@ def condition_recombine_pseudolabel(
     random_state: int = 42,
     *,
     measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
     max_candidates_per_source: int | None = None,
 ) -> pd.DataFrame:
     """Return real training rows plus filtered, teacher-labeled recombined reactions."""
@@ -402,6 +410,7 @@ def condition_recombine_pseudolabel(
         random_state=random_state,
         feature_config=feature_config,
         measured_identity_keys=measured_identity_keys,
+        candidate_scope=candidate_scope,
         max_candidates_per_source=max_candidates_per_source,
     )
     candidates = filter_candidates_by_nearest_neighbor_similarity(

@@ -12,6 +12,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    GLOBALLY_UNMEASURED_PROSPECTIVE,
+    CandidateScopePolicy,
+    CandidateScopeViolation,
+)
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
@@ -21,10 +26,12 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
     clear_role_aware_teacher_cache,
     generate_role_aware_condition_transfer_examples,
 )
-from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.saved_canonical_splits import (
     SavedCanonicalSplits,
     load_saved_canonical_splits,
+)
+from bh_augmentation.evaluation.low_data_partitions import (
+    build_low_data_evaluation_unit,
 )
 from bh_augmentation.evaluation.metrics import mae, r2, rmse, spearman_corr
 from bh_augmentation.evaluation.policy_protocol import (
@@ -92,7 +99,7 @@ class LabeledPartition:
     feature_config: dict[str, Any]
     feature_names: tuple[str, ...]
     feature_metadata: FeatureMetadata
-    measured_identity_keys: frozenset[str]
+    candidate_scope: CandidateScopePolicy
 
 
 def run_policy_search_command(
@@ -110,7 +117,13 @@ def run_policy_search_command(
         requested_fractions=[fraction],
     )
     saved = _redact_outer_test_outcomes(saved, seed=seed, train_fraction=fraction)
-    global_identity_keys = frozenset(measured_canonical_keys(saved.canonical))
+    candidate_scope = _resolve_candidate_scope(
+        config,
+        saved,
+        seed=seed,
+        train_fraction=fraction,
+        dataset_path=dataset_path,
+    )
     train_frame, validation_frame = _materialize_search_frames(
         saved, seed=seed, train_fraction=fraction
     )
@@ -121,12 +134,12 @@ def run_policy_search_command(
     train, train_contract = _build_partition(
         train_frame,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     validation, validation_contract = _build_partition(
         validation_frame,
         feature_config,
-        measured_identity_keys=global_identity_keys,
+        candidate_scope=candidate_scope,
     )
     if train_contract != validation_contract:
         raise ValueError("Train and validation feature contracts differ.")
@@ -241,6 +254,7 @@ def run_policy_search_command(
 def scientific_config_projection(config: dict[str, Any]) -> dict[str, Any]:
     """Return the output-independent scientific configuration bound at search."""
     keys = (
+        "candidate_scope",
         "dataset",
         "splits",
         "low_data",
@@ -363,11 +377,39 @@ def _redact_outer_test_outcomes(
     return replace(saved, canonical=redacted)
 
 
+def _resolve_candidate_scope(
+    config: dict[str, Any],
+    saved: SavedCanonicalSplits,
+    *,
+    seed: int,
+    train_fraction: float,
+    dataset_path: Path,
+) -> CandidateScopePolicy:
+    """Resolve the declared candidate-eligibility rule for this search.
+
+    Absent a ``candidate_scope`` block the historical rule applies: eligibility
+    is decided against the complete measured universe.  That rule answers a
+    prospective-novelty question, so a low-data augmentation experiment must
+    declare ``mode: observed_only_low_data`` explicitly.
+    """
+    requested = config.get("candidate_scope", {})
+    if not isinstance(requested, dict):
+        raise CandidateScopeViolation("candidate_scope must be a mapping.")
+    mode = str(requested.get("mode", GLOBALLY_UNMEASURED_PROSPECTIVE))
+    unit = build_low_data_evaluation_unit(
+        saved,
+        seed=seed,
+        train_fraction=train_fraction,
+        dataset_path=dataset_path,
+    )
+    return unit.candidate_scope(mode)
+
+
 def _build_partition(
     frame: pd.DataFrame,
     feature_config: dict[str, Any],
     *,
-    measured_identity_keys: frozenset[str] = frozenset(),
+    candidate_scope: CandidateScopePolicy,
 ) -> tuple[LabeledPartition, dict[str, Any]]:
     X, y, names, metadata = build_feature_matrix_with_metadata(frame, feature_config)
     contract = feature_contract_record(metadata, names)
@@ -380,7 +422,7 @@ def _build_partition(
             feature_config=dict(feature_config),
             feature_names=tuple(names),
             feature_metadata=metadata,
-            measured_identity_keys=measured_identity_keys,
+            candidate_scope=candidate_scope,
         ),
         contract,
     )
@@ -478,7 +520,7 @@ def _fit_resolved_model(policy: ResolvedPolicy, partition: LabeledPartition) -> 
             feature_config=partition.feature_config,
             real_feature_names=list(partition.feature_names),
             real_feature_metadata=partition.feature_metadata,
-            measured_identity_keys=partition.measured_identity_keys,
+            candidate_scope=partition.candidate_scope,
         )
         X_train, y_train = _augment_training(partition, generated)
     elif method == "role_aware":
@@ -492,7 +534,7 @@ def _fit_resolved_model(policy: ResolvedPolicy, partition: LabeledPartition) -> 
             feature_config=partition.feature_config,
             real_feature_names=list(partition.feature_names),
             real_feature_metadata=partition.feature_metadata,
-            measured_identity_keys=partition.measured_identity_keys,
+            candidate_scope=partition.candidate_scope,
         )
         X_train, y_train = _augment_training(partition, generated)
     elif method != "real_only":

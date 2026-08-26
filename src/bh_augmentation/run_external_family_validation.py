@@ -34,6 +34,10 @@ import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge
 
+from bh_augmentation.augmentation.candidate_scope import (
+    GLOBALLY_UNMEASURED_PROSPECTIVE,
+    resolved_candidate_scope_mode,
+)
 from bh_augmentation.augmentation.family_condition_transfer import (
     assert_condition_transfer_invariants,
     build_condition_transfer_candidates,
@@ -176,6 +180,7 @@ def run_external_family_validation(
 
         for fraction, subset in low.groupby("train_fraction", sort=True):
             unit = f"family={adapter.family_id}|seed={seed}|train_fraction={float(fraction)}"
+            candidate_scope_mode = resolved_candidate_scope_mode(resolved)
             partitions = _partitions(usable, outer, subset)
             binding = ScientificBinding(
                 dataset_hash=dataset_hash,
@@ -200,7 +205,20 @@ def run_external_family_validation(
                 feature_names=feature_names,
                 feature_metadata=feature_metadata,
                 partitions=partitions,
-                measured_keys=adapter.measured_canonical_keys(usable),
+                # External-family validation is a low-data augmentation-benefit
+                # experiment, so candidate eligibility follows the same rule as
+                # the in-repo low-data runners: a candidate is ineligible only
+                # when the training partition the learner sees already contains
+                # that chemistry. `usable` spans train, valid and test, so using
+                # it here would decide eligibility from partitions the learner
+                # never observed. Declare `candidate_scope.mode:
+                # globally_unmeasured_prospective` for a novelty-claim run.
+                measured_keys=_family_eligibility_keys(
+                    candidate_scope_mode,
+                    adapter=adapter,
+                    partitions=partitions,
+                    usable=usable,
+                ),
                 seed=seed,
                 unit=unit,
                 fit_row_observer=fit_row_observer,
@@ -310,6 +328,19 @@ def run_external_family_validation(
     manifest["output_hash"] = stable_hash(manifest["output_file_hashes"])
     write_json(paths["manifest"], manifest)
     return paths
+
+
+def _family_eligibility_keys(
+    mode: str,
+    *,
+    adapter: ReactionFamilyAdapter,
+    partitions: Mapping[str, pd.DataFrame],
+    usable: pd.DataFrame,
+) -> set[str]:
+    """Resolve the identity universe an external-family run rejects against."""
+    if mode == GLOBALLY_UNMEASURED_PROSPECTIVE:
+        return set(adapter.measured_canonical_keys(usable))
+    return set(adapter.measured_canonical_keys(partitions["train"]))
 
 
 class _UnitContext:

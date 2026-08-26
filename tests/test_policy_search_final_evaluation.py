@@ -11,6 +11,7 @@ import pytest
 import yaml
 
 import bh_augmentation.final_evaluation as final_module
+from bh_augmentation.augmentation.candidate_scope import GLOBALLY_UNMEASURED_PROSPECTIVE
 from bh_augmentation.final_evaluation import run_final_evaluation_command
 from bh_augmentation.policy_search import run_policy_search_command
 from bh_augmentation.utils.corrected_runs import stable_hash
@@ -429,11 +430,10 @@ def test_typed_transfer_search_adapters_remain_validation_only(
         else "generate_role_aware_condition_transfer_examples"
     )
     production_generator = getattr(search_module, generator_name)
-    measured_key_count = 0
+    observed_scopes: list[object] = []
 
     def recording_generator(*args: object, **kwargs: object) -> object:
-        nonlocal measured_key_count
-        measured_key_count = len(kwargs["measured_identity_keys"])
+        observed_scopes.append(kwargs["candidate_scope"])
         return production_generator(*args, **kwargs)
 
     prediction_batches = 0
@@ -454,7 +454,12 @@ def test_typed_transfer_search_adapters_remain_validation_only(
     final_metrics = pd.read_csv(final_paths["final_test_metrics"])
     final_manifest = json.loads(final_paths["final_evaluation_manifest"].read_text())
     assert prediction_batches == 1
-    assert measured_key_count > int(final_metrics["n_refit"].iloc[0])
+    # Absent an explicit candidate_scope block the historical prospective rule
+    # applies: eligibility is decided against the complete measured universe,
+    # which is strictly larger than the refit partition.
+    scope = observed_scopes[-1]
+    assert scope.mode == GLOBALLY_UNMEASURED_PROSPECTIVE
+    assert len(scope.rejection_identity_keys()) > int(final_metrics["n_refit"].iloc[0])
     assert final_metrics["method"].eq(method).all()
     assert final_manifest["payload"]["selected_method"] == method
     assert final_manifest["payload"]["outer_test_prediction_batches"] == 1

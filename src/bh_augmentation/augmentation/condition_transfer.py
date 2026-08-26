@@ -11,6 +11,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    CandidateScopePolicy,
+    resolve_generation_scope,
+)
 from bh_augmentation.augmentation.synthetic_identity import (
     REQUIRED_SYNTHETIC_AUDIT_FIELDS,
     apply_filter_rejection,
@@ -159,6 +163,7 @@ def generate_condition_transfer_examples(
     real_feature_names: list[str],
     real_feature_metadata: FeatureMetadata,
     measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
 ) -> dict[str, Any]:
     """Generate condition-transfer examples using only low-data training rows."""
     _validate_config(config)
@@ -167,9 +172,11 @@ def generate_condition_transfer_examples(
         raise ValueError("condition transfer requires a reaction_smiles column.")
 
     role_train = ensure_reaction_role_columns(df_train, parse_if_missing=True)
-    all_measured_keys = measured_canonical_keys(
-        role_train,
-        additional_keys=measured_identity_keys,
+    labeled_train_identity_keys = measured_canonical_keys(role_train)
+    generation_scope = resolve_generation_scope(
+        labeled_train_identity_keys=labeled_train_identity_keys,
+        candidate_scope=candidate_scope,
+        measured_identity_keys=measured_identity_keys,
     )
     train = role_train.reset_index(drop=False).rename(columns={"index": "_source_dataframe_index"})
     train_records = train.to_dict(orient="records")
@@ -389,7 +396,7 @@ def generate_condition_transfer_examples(
     candidate_df = audit_candidate_identities(
         candidate_df,
         X_synthetic,
-        measured_keys=all_measured_keys,
+        candidate_scope=generation_scope,
         source_rows=train_records,
     )
     candidate_df = audit_role_changes(

@@ -33,6 +33,13 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Full history, not the default shallow checkout. The confirmatory
+          # analysis test reads PRIMARY_EXPERIMENT.md out of the preregistration
+          # commit with `git show <commit>:PRIMARY_EXPERIMENT.md` to prove the
+          # frozen constants predate any result. That object is dozens of
+          # commits back, so a depth-1 clone cannot resolve it.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -43,10 +50,27 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-          python -m pip install rdkit
+          # RDKit is pinned to the version that produced the canonical dataset's
+          # stored canonical_reaction_key values (recorded in the
+          # dependency_versions block of
+          # results/corrected_canonical_data_audit/run_manifest.json). Candidate
+          # identities are recomputed live from roles, so a newer RDKit puts the
+          # stored and generated identities in two different vocabularies: they
+          # stop intersecting entirely, the eligibility gate then rejects
+          # nothing, and the identity-dependent tests error at fixture setup.
+          # assert_stored_identities_match_roles turns that into a hard failure,
+          # but CI should exercise the real contract rather than the failure.
+          # XGBoost stays an optional runtime dependency -- the library raises a
+          # helpful ImportError without it -- but the uncertainty estimators and
+          # the Phase 15 confirmatory method are XGBoost-based, so CI installs it
+          # to actually exercise those paths rather than skip them.
+          python -m pip install "rdkit==2023.9.6" xgboost
 
       - name: Run tests
-        run: pytest
+        # -ra prints the reason for every skip. Some modules skip themselves when
+        # a clean checkout lacks the gitignored canonical artifacts; a reader of
+        # this log must be able to see exactly what did not run.
+        run: pytest -ra
 
   production_path_smoke:
     name: Bounded production-path smoke
@@ -78,7 +102,17 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-          python -m pip install rdkit
+          # RDKit is pinned to the version that produced the canonical dataset's
+          # stored canonical_reaction_key values (recorded in the
+          # dependency_versions block of
+          # results/corrected_canonical_data_audit/run_manifest.json). Candidate
+          # identities are recomputed live from roles, so a newer RDKit puts the
+          # stored and generated identities in two different vocabularies: they
+          # stop intersecting entirely, the eligibility gate then rejects
+          # nothing, and the identity-dependent tests error at fixture setup.
+          # assert_stored_identities_match_roles turns that into a hard failure,
+          # but CI should exercise the real contract rather than the failure.
+          python -m pip install "rdkit==2023.9.6"
 
       - name: Confirm the committed smoke fixture is present
         run: |

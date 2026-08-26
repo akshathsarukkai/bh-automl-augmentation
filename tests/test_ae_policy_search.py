@@ -21,6 +21,7 @@ from bh_augmentation.ae_policy_search import (
     _resolved_joint_ae_policies,
     run_ae_policy_search_command,
 )
+from bh_augmentation.augmentation.candidate_scope import observed_only_scope
 from bh_augmentation.evaluation.ae_policy_protocol import AEInnerSplit
 from bh_augmentation.features.compatibility import coordinate_feature_contract
 from bh_augmentation.policy_search import LabeledPartition
@@ -642,7 +643,7 @@ def _dummy_partition(frame: pd.DataFrame) -> LabeledPartition:
         feature_config={"kind": "dummy"},
         feature_names=tuple(feature_names),
         feature_metadata=metadata,
-        measured_identity_keys=frozenset(),
+        candidate_scope=observed_only_scope(labeled_train_identity_keys=()),
     )
 
 
@@ -684,7 +685,7 @@ def _sentinel_context() -> AEPolicySearchContext:
             feature_config={"kind": "sentinel"},
             feature_names=tuple(feature_names),
             feature_metadata=metadata,
-            measured_identity_keys=frozenset(),
+            candidate_scope=observed_only_scope(labeled_train_identity_keys=()),
         )
 
     policy_frame = pd.DataFrame(

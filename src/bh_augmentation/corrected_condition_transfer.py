@@ -10,6 +10,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    CandidateScopePolicy,
+    resolved_candidate_scope_mode,
+)
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
@@ -23,6 +27,7 @@ from bh_augmentation.augmentation.role_aware_condition_transfer import (
 from bh_augmentation.augmentation.synthetic_identity import measured_canonical_keys
 from bh_augmentation.data.bh_condition_reader import parse_bh_reaction_smiles
 from bh_augmentation.data.saved_canonical_splits import load_saved_canonical_splits
+from bh_augmentation.evaluation.low_data_partitions import scope_from_split_frames
 from bh_augmentation.features.compatibility import assert_feature_compatibility
 from bh_augmentation.features.featurize import build_feature_matrix_with_metadata
 from bh_augmentation.models.baselines import get_model
@@ -88,6 +93,13 @@ def run_corrected_condition_transfer(
     )
     dataset_hash = sha256_file(dataset_path)
     frame = load_corrected_bh_dataframe(dataset_path)
+    # Candidate eligibility is a declared scientific choice. This is a low-data
+    # augmentation-benefit runner, so its default is observed_only_low_data: a
+    # candidate is ineligible only when the simulated learner has actually
+    # observed that chemistry. Rejecting against the complete historical dataset
+    # instead answers a prospective-novelty question, which is available by
+    # declaring candidate_scope.mode: globally_unmeasured_prospective.
+    candidate_scope_mode = resolved_candidate_scope_mode(config)
     complete_measured_identity_keys = measured_canonical_keys(frame)
     output_dir = prepare_fresh_output_directory(config["output"]["directory"])
     paths = _output_paths(output_dir, transfer_kind)
@@ -130,6 +142,11 @@ def run_corrected_condition_transfer(
             )
             split_rows.append(split_record)
             split_hashes[_split_key(seed, fraction)] = str(split_record["split_hash"])
+            unit_candidate_scope = scope_from_split_frames(
+                candidate_scope_mode,
+                splits=splits,
+                global_identity_keys=complete_measured_identity_keys,
+            )
             train_idx = _split_positions(splits["train"])
             valid_idx = _split_positions(splits["valid"])
             test_idx = _split_positions(splits["test"])
@@ -182,7 +199,7 @@ def run_corrected_condition_transfer(
                     feature_config,
                     feature_names,
                     feature_metadata,
-                    complete_measured_identity_keys,
+                    unit_candidate_scope,
                 )
                 candidate_audit_frames.append(
                     build_candidate_audit_frame(
@@ -438,13 +455,13 @@ def _generate(
     feature_config: dict[str, Any],
     feature_names: list[str],
     feature_metadata: Any,
-    complete_measured_identity_keys: set[str],
+    candidate_scope: CandidateScopePolicy,
 ) -> dict[str, Any]:
     kwargs = {
         "feature_config": feature_config,
         "real_feature_names": feature_names,
         "real_feature_metadata": feature_metadata,
-        "measured_identity_keys": complete_measured_identity_keys,
+        "candidate_scope": candidate_scope,
     }
     if transfer_kind == "anonymous":
         if not isinstance(policy, ConditionTransferConfig):

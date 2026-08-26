@@ -9,7 +9,7 @@ import json
 import math
 import subprocess
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -18,6 +18,14 @@ import numpy as np
 import pandas as pd
 import yaml
 
+from bh_augmentation.augmentation.candidate_scope import (
+    GLOBALLY_UNMEASURED_PROSPECTIVE,
+    OBSERVED_ONLY_LOW_DATA,
+    CandidateScopePolicy,
+    globally_unmeasured_scope,
+    observed_only_scope,
+    resolved_candidate_scope_mode,
+)
 from bh_augmentation.augmentation.chemical_controls import (
     CHEMICAL_CONTROL_IDS,
     CHEMICAL_CONTROL_SPECS,
@@ -33,6 +41,7 @@ from bh_augmentation.augmentation.simple_controls import (
     build_simple_augmentation_control,
 )
 from bh_augmentation.augmentation.synthetic_identity import (
+    assert_stored_identities_match_roles,
     configured_feature_hash,
     measured_canonical_keys,
 )
@@ -160,6 +169,7 @@ def run_augmentation_control_benchmark(
         "model": contract["model"],
         "metrics": list(contract["metrics"]),
         "base_seed": contract["base_seed"],
+        "candidate_scope_mode": contract["candidate_scope_mode"],
     }
     plan = {
         "schema_version": AUGMENTATION_CONTROL_SCHEMA_VERSION,
@@ -225,6 +235,18 @@ def run_augmentation_control_benchmark(
         source_id: position
         for position, source_id in enumerate(canonical["source_row_id"])
     }
+    # Candidate eligibility is a declared scientific choice, not an implicit
+    # side effect of which frame happened to be in scope. Phase 11 is a low-data
+    # augmentation-benefit benchmark, so its default is observed_only_low_data:
+    # a candidate is ineligible only when the simulated learner has actually
+    # observed that chemistry. The prospective rule stays available for a
+    # novelty-claim control run.
+    candidate_scope_mode = contract["candidate_scope_mode"]
+    assert_stored_identities_match_roles(
+        canonical,
+        description="Phase 11 canonical dataset",
+        sample=64,
+    )
     global_measured_keys = frozenset(measured_canonical_keys(canonical))
 
     prediction_rows: list[dict[str, Any]] = []
@@ -241,6 +263,12 @@ def run_augmentation_control_benchmark(
         test_positions = np.asarray(
             [positions[source_id] for source_id in unit.test_source_ids],
             dtype=int,
+        )
+        unit_candidate_scope = _unit_candidate_scope(
+            candidate_scope_mode,
+            by_source=by_source,
+            unit=unit,
+            global_measured_keys=global_measured_keys,
         )
         train_frame = by_source.loc[
             list(unit.train_source_ids)
@@ -320,7 +348,7 @@ def run_augmentation_control_benchmark(
                     feature_config=feature_config,
                     feature_names=feature_names,
                     feature_metadata=feature_metadata,
-                    measured_identity_keys=global_measured_keys,
+                    candidate_scope=unit_candidate_scope,
                     nominal_added_budget=nominal_budget,
                     seed=unit_seed,
                     max_teacher_std=(
@@ -767,6 +795,38 @@ def validate_augmentation_control_benchmark(
     return manifest
 
 
+def _unit_candidate_scope(
+    mode: str,
+    *,
+    by_source: pd.DataFrame,
+    unit: Any,
+    global_measured_keys: frozenset[str],
+) -> CandidateScopePolicy:
+    """Build one evaluation unit's typed candidate-eligibility policy."""
+    observed = _identity_keys(by_source, unit.train_source_ids)
+    quarantine = _identity_keys(
+        by_source,
+        (*unit.validation_source_ids, *unit.test_source_ids),
+    )
+    if mode == OBSERVED_ONLY_LOW_DATA:
+        return observed_only_scope(
+            labeled_train_identity_keys=observed,
+            quarantine_identity_keys=quarantine,
+        )
+    return globally_unmeasured_scope(
+        labeled_train_identity_keys=observed,
+        global_identity_keys=global_measured_keys,
+        quarantine_identity_keys=quarantine,
+    )
+
+
+def _identity_keys(by_source: pd.DataFrame, source_ids: Sequence[str]) -> tuple[str, ...]:
+    if not len(source_ids):
+        return ()
+    values = by_source.loc[list(source_ids), "canonical_reaction_key"].astype(str)
+    return tuple(sorted({value for value in values if value}))
+
+
 def _resolve_contract(config: Mapping[str, Any]) -> dict[str, Any]:
     dataset = config.get("dataset")
     splits = config.get("splits")
@@ -844,6 +904,9 @@ def _resolve_contract(config: Mapping[str, Any]) -> dict[str, Any]:
         "canonical_split_directory": Path(splits["canonical_directory"]),
         "random_seeds": seeds,
         "random_fractions": fractions,
+        "candidate_scope_mode": resolved_candidate_scope_mode(
+            config, default=OBSERVED_ONLY_LOW_DATA
+        ),
         "augmentation": {
             "nominal_added_multiplier": multiplier,
             "n_yield_strata": strata,
@@ -1796,6 +1859,13 @@ def _assert_chemical_candidate_audit(
         raise ValueError("Phase 11 chemical audit control coverage mismatch.")
     canonical = pd.read_csv(scientific["dataset_path"])
     canonical["source_row_id"] = canonical["source_row_id"].astype(str)
+    # The validator must apply the SAME eligibility rule the run declared.
+    # Asserting against the complete universe would reject a legitimately
+    # accepted observed-only candidate that happens to exist in a partition the
+    # simulated learner never saw.
+    validated_scope_mode = str(
+        scientific.get("candidate_scope_mode", GLOBALLY_UNMEASURED_PROSPECTIVE)
+    )
     measured_keys = set(canonical["canonical_reaction_key"].astype(str))
     source_by_id = canonical.set_index("source_row_id", drop=False)
     budget_by_key = budgets.set_index(
@@ -2007,14 +2077,24 @@ def _assert_chemical_candidate_audit(
             ]
             if replayed_feature_hashes != list(accepted["feature_hash"]):
                 raise ValueError("Phase 11 candidate feature hash replay mismatch.")
+            ineligible_keys = (
+                measured_keys
+                if validated_scope_mode == GLOBALLY_UNMEASURED_PROSPECTIVE
+                else set(
+                    source_by_id.loc[
+                        list(rows["source_row_id"].dropna().astype(str).unique()),
+                        "canonical_reaction_key",
+                    ].astype(str)
+                )
+            )
             if (
-                set(accepted["canonical_reaction_key"].astype(str))
-                & measured_keys
+                set(accepted["canonical_reaction_key"].astype(str)) & ineligible_keys
                 or accepted["canonical_reaction_key"].duplicated().any()
                 or accepted["feature_hash"].duplicated().any()
             ):
                 raise ValueError(
-                    "Phase 11 accepted chemistry duplicates measured/synthetic data."
+                    "Phase 11 accepted chemistry duplicates chemistry the declared "
+                    f"{validated_scope_mode} scope makes ineligible."
                 )
             for key_value, hash_value in zip(
                 accepted["canonical_reaction_key"],
@@ -2182,12 +2262,23 @@ def _assert_frozen_control_config(
     if set(resolved) != {
         "spec",
         "generator_config",
+        "candidate_scope_mode",
+        "candidate_scope_hash",
         "nominal_added_budget",
         "seed",
         "max_teacher_std",
         "teacher_models",
     }:
         raise ValueError("Phase 11 chemical control config schema mismatch.")
+    declared_scope_mode = str(
+        scientific.get("candidate_scope_mode", GLOBALLY_UNMEASURED_PROSPECTIVE)
+    )
+    if resolved["candidate_scope_mode"] != declared_scope_mode:
+        raise ValueError(
+            "Phase 11 chemical control declares a candidate scope that differs "
+            "from the frozen scientific configuration: "
+            f"{resolved['candidate_scope_mode']!r} != {declared_scope_mode!r}."
+        )
     plan_spec = next(
         item for item in plan["controls"] if item["control_id"] == control_id
     )

@@ -11,6 +11,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    EXPLICIT_PROVENANCE,
+    GENERATION_SCOPE_MODES,
+    CandidateScopePolicy,
+    CandidateScopeViolation,
+    legacy_scope_from_measured_identity_keys,
+)
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
@@ -56,6 +63,7 @@ class ScientificTransferPool:
     schema_version: str
     training_source_id_hash: str
     global_measured_identity_hash: str
+    candidate_scope_mode: str
     feature_metadata_hash: str
     config_hash: str
     candidate_audit_hash: str
@@ -72,6 +80,10 @@ class ScientificTransferPool:
     def __post_init__(self) -> None:
         if self.pool_kind not in _POOL_KINDS:
             raise ValueError(f"Unknown scientific transfer pool kind {self.pool_kind!r}.")
+        if self.candidate_scope_mode not in GENERATION_SCOPE_MODES:
+            raise ValueError(
+                f"Unknown pool candidate scope mode {self.candidate_scope_mode!r}."
+            )
         if self.schema_version != SCIENTIFIC_TRANSFER_POOL_SCHEMA_VERSION:
             raise ValueError("Scientific transfer pool schema version mismatch.")
         for name in (
@@ -164,7 +176,8 @@ def build_anonymous_transfer_pool(
     feature_config: Mapping[str, Any],
     feature_names: Sequence[str],
     feature_metadata: FeatureMetadata,
-    global_measured_identity_keys: Iterable[str],
+    global_measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
     config: ConditionTransferConfig,
 ) -> ScientificTransferPool:
     """Generate one strict anonymous pool without an undeclared fallback."""
@@ -181,6 +194,7 @@ def build_anonymous_transfer_pool(
         feature_names=feature_names,
         feature_metadata=feature_metadata,
         global_measured_identity_keys=global_measured_identity_keys,
+        candidate_scope=candidate_scope,
     )
     result = generate_condition_transfer_examples(
         prepared.frame,
@@ -190,7 +204,7 @@ def build_anonymous_transfer_pool(
         feature_config=prepared.feature_config,
         real_feature_names=list(prepared.feature_names),
         real_feature_metadata=prepared.feature_metadata,
-        measured_identity_keys=prepared.global_measured_keys,
+        candidate_scope=prepared.scope,
     )
     return _validate_and_package(
         pool_kind="anonymous",
@@ -208,7 +222,8 @@ def build_strict_context_matched_typed_transfer_pool(
     feature_config: Mapping[str, Any],
     feature_names: Sequence[str],
     feature_metadata: FeatureMetadata,
-    global_measured_identity_keys: Iterable[str],
+    global_measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
     config: RoleAwareConditionTransferConfig,
 ) -> ScientificTransferPool:
     """Generate a strict typed pool using exact-substrate context matching."""
@@ -230,6 +245,7 @@ def build_strict_context_matched_typed_transfer_pool(
         feature_names=feature_names,
         feature_metadata=feature_metadata,
         global_measured_identity_keys=global_measured_identity_keys,
+        candidate_scope=candidate_scope,
     )
     clear_role_aware_teacher_cache()
     try:
@@ -241,7 +257,7 @@ def build_strict_context_matched_typed_transfer_pool(
             feature_config=prepared.feature_config,
             real_feature_names=list(prepared.feature_names),
             real_feature_metadata=prepared.feature_metadata,
-            measured_identity_keys=prepared.global_measured_keys,
+            candidate_scope=prepared.scope,
         )
     finally:
         clear_role_aware_teacher_cache()
@@ -262,7 +278,7 @@ class _PreparedInputs:
     feature_names: tuple[str, ...]
     feature_metadata: FeatureMetadata
     training_source_ids: tuple[str, ...]
-    global_measured_keys: tuple[str, ...]
+    scope: CandidateScopePolicy
     feature_contract: dict[str, Any]
 
 
@@ -275,6 +291,7 @@ def _prepare_inputs(
     feature_names: Sequence[str],
     feature_metadata: FeatureMetadata,
     global_measured_identity_keys: Iterable[str],
+    candidate_scope: CandidateScopePolicy | None,
 ) -> _PreparedInputs:
     if not isinstance(feature_metadata, FeatureMetadata):
         raise TypeError("feature_metadata must be a FeatureMetadata instance.")
@@ -332,9 +349,15 @@ def _prepare_inputs(
             }
         )
     )
-    if not global_keys:
+    if candidate_scope is not None and global_keys:
+        raise CandidateScopeViolation(
+            "Pass either candidate_scope or global_measured_identity_keys to a "
+            "scientific transfer pool, not both."
+        )
+    if candidate_scope is None and not global_keys:
         raise ValueError(
-            "A nonempty global_measured_identity_keys contract is required."
+            "A scientific transfer pool requires either an explicit candidate_scope "
+            "or a nonempty global_measured_identity_keys contract."
         )
     computed_training_keys: set[str] = set()
     for row in frame.to_dict(orient="records"):
@@ -352,12 +375,25 @@ def _prepare_inputs(
         ):
             raise ValueError("Training canonical_reaction_key does not match its roles.")
         computed_training_keys.add(identity.canonical_reaction_key)
-    outside_contract = computed_training_keys - set(global_keys)
-    if outside_contract:
-        raise ValueError(
-            "Global measured identity contract omits training reactions: "
-            f"{sorted(outside_contract)[:3]}."
+    if candidate_scope is None:
+        scope = legacy_scope_from_measured_identity_keys(
+            labeled_train_identity_keys=computed_training_keys,
+            measured_identity_keys=global_keys,
         )
+        outside_contract = computed_training_keys - set(global_keys)
+        if outside_contract:
+            raise ValueError(
+                "Global measured identity contract omits training reactions: "
+                f"{sorted(outside_contract)[:3]}."
+            )
+    else:
+        scope = candidate_scope
+        outside_scope = computed_training_keys - set(scope.observed_identity_keys)
+        if outside_scope:
+            raise CandidateScopeViolation(
+                "The candidate scope omits training reactions handed to the pool: "
+                f"{sorted(outside_scope)[:3]}."
+            )
 
     replay_frame = frame.copy()
     replay_frame["yield"] = 0.0
@@ -384,7 +420,7 @@ def _prepare_inputs(
         feature_names=names,
         feature_metadata=feature_metadata,
         training_source_ids=source_ids,
-        global_measured_keys=global_keys,
+        scope=scope,
         feature_contract=feature_contract,
     )
 
@@ -458,11 +494,21 @@ def _validate_and_package(
         assert_accepted_identity_invariants(audit)
         assert_accepted_role_change_invariants(audit)
         accepted_candidates = audit.loc[audit["accepted"].astype(bool)]
-        if set(accepted_candidates["canonical_reaction_key"].astype(str)) & set(
-            prepared.global_measured_keys
-        ):
+        ineligible = set(
+            accepted_candidates["canonical_reaction_key"].astype(str)
+        ) & prepared.scope.rejection_identity_keys()
+        if ineligible:
             raise ValueError(
-                "An accepted synthetic candidate duplicates global measured chemistry."
+                "An accepted synthetic candidate duplicates chemistry the "
+                f"{prepared.scope.mode} scope declares ineligible."
+            )
+        quarantined = set(
+            accepted_candidates["canonical_reaction_key"].astype(str)
+        ) & prepared.scope.quarantined_identity_keys()
+        if quarantined:
+            raise ValueError(
+                "An accepted synthetic candidate matches a quarantined held-out "
+                "evaluation identity."
             )
         for key, digest in zip(
             accepted_candidates["canonical_reaction_key"],
@@ -510,7 +556,10 @@ def _validate_and_package(
             raise ValueError("Synthetic feature hashes do not align with pool features.")
         if (
             set(kept["canonical_reaction_key"].astype(str))
-            & set(prepared.global_measured_keys)
+            & (
+                prepared.scope.rejection_identity_keys()
+                | prepared.scope.quarantined_identity_keys()
+            )
             or kept["canonical_reaction_key"].duplicated().any()
             or kept["feature_hash"].duplicated().any()
             or not kept["chemical_parse_valid"].astype(bool).all()
@@ -554,7 +603,7 @@ def _validate_and_package(
     ) if not audit.empty else []
     accepted_identity_hash = stable_hash(accepted_records)
     training_source_id_hash = stable_hash(sorted(prepared.training_source_ids))
-    global_measured_identity_hash = stable_hash(prepared.global_measured_keys)
+    global_measured_identity_hash = stable_hash(prepared.scope.global_identity_keys)
     payload = {
         "schema_version": SCIENTIFIC_TRANSFER_POOL_SCHEMA_VERSION,
         "pool_kind": pool_kind,
@@ -576,11 +625,14 @@ def _validate_and_package(
             for row in kept.to_dict(orient="records")
         ],
     }
+    if prepared.scope.provenance == EXPLICIT_PROVENANCE:
+        payload["candidate_scope"] = prepared.scope.scope_record()
     return ScientificTransferPool(
         pool_kind=pool_kind,
         schema_version=SCIENTIFIC_TRANSFER_POOL_SCHEMA_VERSION,
         training_source_id_hash=training_source_id_hash,
         global_measured_identity_hash=global_measured_identity_hash,
+        candidate_scope_mode=prepared.scope.mode,
         feature_metadata_hash=prepared.feature_contract["feature_metadata_hash"],
         config_hash=config_hash,
         candidate_audit_hash=candidate_audit_hash,

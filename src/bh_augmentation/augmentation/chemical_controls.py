@@ -13,6 +13,10 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from bh_augmentation.augmentation.candidate_scope import (
+    LEGACY_PROVENANCE,
+    CandidateScopePolicy,
+)
 from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
@@ -157,7 +161,8 @@ def build_chemical_augmentation_control(
     feature_config: Mapping[str, Any],
     feature_names: Sequence[str],
     feature_metadata: FeatureMetadata,
-    measured_identity_keys: Iterable[str],
+    measured_identity_keys: Iterable[str] = (),
+    candidate_scope: CandidateScopePolicy | None = None,
     nominal_added_budget: int,
     seed: int,
     max_teacher_std: float | None = None,
@@ -175,7 +180,15 @@ def build_chemical_augmentation_control(
     budget = _nonnegative_integer(nominal_added_budget, "nominal_added_budget")
     random_state = _integer(seed, "seed")
     resolved_teachers = _teacher_models(teacher_models)
-    measured_keys = tuple(measured_identity_keys)
+    # Forward exactly one eligibility rule to the generator, which folds in the
+    # training frame's own identities and resolves the policy. Resolving it here
+    # would duplicate that work against a frame that has not yet been role-
+    # normalized by the generator.
+    scope_kwargs: dict[str, Any] = (
+        {"candidate_scope": candidate_scope}
+        if candidate_scope is not None
+        else {"measured_identity_keys": tuple(measured_identity_keys)}
+    )
     threshold = _uncertainty_threshold(spec, max_teacher_std)
     multiplier = _budget_multiplier(budget, len(frame))
     source_cap = max(3, math.ceil(budget / len(frame)) * 3)
@@ -212,7 +225,7 @@ def build_chemical_augmentation_control(
             feature_config=dict(feature_config),
             real_feature_names=list(feature_names),
             real_feature_metadata=feature_metadata,
-            measured_identity_keys=measured_keys,
+            **scope_kwargs,
         )
         reference_unfiltered = None
     else:
@@ -241,7 +254,7 @@ def build_chemical_augmentation_control(
                 feature_config=dict(feature_config),
                 real_feature_names=list(feature_names),
                 real_feature_metadata=feature_metadata,
-                measured_identity_keys=measured_keys,
+                **scope_kwargs,
             )
         else:
             reference_unfiltered = None
@@ -253,7 +266,7 @@ def build_chemical_augmentation_control(
             feature_config=dict(feature_config),
             real_feature_names=list(feature_names),
             real_feature_metadata=feature_metadata,
-            measured_identity_keys=measured_keys,
+            **scope_kwargs,
         )
 
     candidate_audit = generated["candidate_df"].copy()
@@ -310,11 +323,8 @@ def build_chemical_augmentation_control(
         kept_indices=kept_indices,
     )
     underfill = budget - effective_count
-    underfill_reason = (
-        "candidate_rejection_or_no_role_and_context_eligible_donor"
-        if underfill
-        else None
-    )
+    rejection_counts = _rejection_counts(candidate_audit)
+    underfill_reason = _underfill_reason(underfill, rejection_counts)
     uncertainty_semantics = (
         _UNCALIBRATED_UNCERTAINTY if spec.control_number in {12, 13} else None
     )
@@ -327,6 +337,8 @@ def build_chemical_augmentation_control(
         "budget_underfill_count": underfill,
         "budget_underfill_reason": underfill_reason,
         "budget_backfill_performed": False,
+        **{f"rejected_{reason}_count": count for reason, count in rejection_counts.items()},
+        **_scope_metadata(candidate_audit, candidate_scope),
         "context_definition": spec.context_definition,
         "prefilter_pool_hash": prefilter_pool_hash,
         "uncertainty_semantics": uncertainty_semantics,
@@ -336,6 +348,12 @@ def build_chemical_augmentation_control(
     resolved = {
         "spec": asdict(spec),
         "generator_config": asdict(generator_config),
+        "candidate_scope_mode": (
+            candidate_scope.mode if candidate_scope is not None else LEGACY_PROVENANCE
+        ),
+        "candidate_scope_hash": (
+            candidate_scope.scope_hash if candidate_scope is not None else None
+        ),
         "nominal_added_budget": budget,
         "seed": random_state,
         "max_teacher_std": threshold,
@@ -364,6 +382,59 @@ def build_chemical_augmentation_control(
         uncertainty_semantics=uncertainty_semantics,
         uncertainty_accepted_keys_subset=subset_valid,
     )
+
+
+#: Rejection reasons a chemical control counts separately.  Splitting these
+#: apart is what makes a suppressed treatment visible: "collides with a reaction
+#: the learner observed" and "collides with a reaction the learner was never
+#: shown" have opposite scientific meanings under the low-data protocol.
+_COUNTED_REJECTION_REASONS = (
+    "observed_in_labeled_train",
+    "already_measured",
+    "quarantined_held_out_identity",
+    "source_identical",
+    "duplicate_synthetic",
+    "feature_duplicate_synthetic",
+    "chemical_parse_invalid",
+    "role_change_requirement_not_met",
+    "unexpected_role_change",
+)
+
+
+def _scope_metadata(
+    candidate_audit: pd.DataFrame,
+    candidate_scope: CandidateScopePolicy | None,
+) -> dict[str, Any]:
+    """Record which eligibility rule produced this control's candidate pool."""
+    if candidate_scope is not None:
+        return candidate_scope.scope_record()
+    return {
+        "candidate_scope_mode": LEGACY_PROVENANCE,
+        "candidate_scope_provenance": LEGACY_PROVENANCE,
+        "consults_complete_dataset": None,
+        "candidate_scope_hash": (
+            str(candidate_audit["candidate_scope_hash"].iloc[0])
+            if "candidate_scope_hash" in candidate_audit and not candidate_audit.empty
+            else None
+        ),
+    }
+
+
+def _rejection_counts(candidate_audit: pd.DataFrame) -> dict[str, int]:
+    if candidate_audit.empty or "rejection_reason" not in candidate_audit:
+        return dict.fromkeys(_COUNTED_REJECTION_REASONS, 0)
+    reasons = candidate_audit["rejection_reason"].fillna("").astype(str)
+    return {reason: int(reasons.eq(reason).sum()) for reason in _COUNTED_REJECTION_REASONS}
+
+
+def _underfill_reason(underfill: int, counts: Mapping[str, int]) -> str | None:
+    """Name the dominant reason a control could not spend its budget."""
+    if not underfill:
+        return None
+    dominant = max(counts.items(), key=lambda item: (item[1], item[0]))
+    if dominant[1] == 0:
+        return "no_role_and_context_eligible_donor"
+    return f"candidate_rejection:{dominant[0]}"
 
 
 def _resolve_spec(control_id: str) -> ChemicalControlSpec:
