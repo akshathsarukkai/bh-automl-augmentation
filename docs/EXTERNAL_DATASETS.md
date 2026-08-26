@@ -261,7 +261,7 @@ Outputs written to `output.directory`:
 | `frozen_policy__<unit>.json` | Hash-verified frozen policy, written before any test access |
 | `split_overlap_audit.csv` | Group-overlap audit for every seed |
 | `family_eligibility_audit.csv` | Per-row canonicalization and eligibility outcome |
-| `synthetic_candidate_audit.csv` | Every typed-transfer candidate with its accept/reject reason |
+| `synthetic_candidate_audit.csv` | Every typed-transfer candidate with its accept/reject reason, its `candidate_scope_mode` and the scope hash |
 | `run_manifest.json` | Config hash, dataset hash, provenance, feature contract, split hashes, frozen policy hashes, and SHA-256 of every other output |
 
 ---
@@ -281,9 +281,19 @@ parallel implementation:
   read any row whose `outer_split` is not `train`, and pseudo-label teachers are fit on
   training rows only.
 - **Typed transfer.** Only roles in `transferable_roles` may change. An accepted candidate
-  has byte-identical canonical substrate and product keys to its source. A candidate whose
-  canonical reaction key already exists in the measured data is rejected as
-  `already_measured`.
+  has byte-identical canonical substrate and product keys to its source.
+- **Candidate scope.** External-family validation is a *low-data augmentation-benefit*
+  experiment, so its default eligibility rule is `observed_only_low_data`: a candidate is
+  rejected when its canonical reaction key already occurs in **the training partition the
+  simulated learner observes**, not when it occurs somewhere in the complete file. This
+  matters because the previous bullet restricts *generation* to training rows while the
+  eligibility rule previously consulted train, validation and test together — two
+  different scopes one line apart. Set `candidate_scope.mode:
+  globally_unmeasured_prospective` for a prospective-novelty run, in which any historically
+  measured identity is ineligible. The resolved mode is recorded in the candidate audit as
+  `candidate_scope_mode`, and the reasons are now distinct:
+  `observed_in_labeled_train`, `already_measured`, and `quarantined_held_out_identity`.
+  See `README.md` § *Candidate Scope: Three Different Questions*.
 - **Validation-only selection, frozen before test.** Policies are scored on validation
   only, then frozen into a hash-verified envelope bound to the dataset hash, split hashes,
   canonicalization version, feature-metadata hash and config hash. The test partition is

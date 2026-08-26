@@ -870,6 +870,42 @@ Authoritative outputs:
 - `results/corrected_canonical_splits_phase15`
 - `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`
 
+## Candidate-scope audit (2026-08-25, post-roadmap)
+
+A repository-wide audit of candidate-eligibility semantics ran after the roadmap
+closed. It changes no historical number and re-runs nothing. Three findings
+change how entries above should be read.
+
+**1. Phase 15 is unaffected.** Its candidate eligibility was already scoped to
+the rows each phase could observe (507 identities during search, 633 during
+placement and final; never the 3,955-row canonical universe), enforced by a hash
+guard. The confirmatory null stands.
+
+**2. "Exactly five eligible unmeasured reactions" is a global-discovery claim
+and must stop doing low-data explanatory work.** Wherever this summary uses the
+near-complete factorial to explain a zero-accepted-candidate result or an
+augmentation null, that reasoning applies only to runs whose eligibility rule
+was the complete measured universe — the Phase 1-3 smokes and Phase 11. It does
+not apply to Phase 14/15, whose pools were large precisely because their rule
+was observed-only. A saturated matrix can leave almost no *global* discovery
+headroom while leaving most of the matrix hidden from a low-data learner.
+
+**3. The Phase 11 chemical-augmentation conclusions are withdrawn as
+uninformative.** Under its executed global rule, 11,682 of 11,727 chemical
+candidates were rejected as `already_measured`, and 93.6% of those collided only
+with rows the simulated learner had never seen. The five chemical arms carried
+0.4 to 1.2 effective added rows against a nominal budget of 159, so the recorded
+"only 2 anonymous, 3 random typed, and 6 context-matched typed candidates across
+795 nominal additions" and "anonymous transfer is 0.025 RMSE better on average
+but adds only two rows" compare *(real-only)* against *(real-only + 159 rows)*.
+The run is retained unaltered as a record of the executed protocol; its
+conclusion about chemical augmentation is not.
+
+See `RESULT_STATUS.md` § *Candidate-scope semantics* and
+`docs/CANDIDATE_SCOPE.md`. A new experiment is preregistered in
+`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md`; development evidence for it is in
+`results/corrected_candidate_scope_development_v1`.
+
 ## Roadmap complete
 
 All 18 phases are passed and checkpointed locally at `432c1a5`. Nothing has been

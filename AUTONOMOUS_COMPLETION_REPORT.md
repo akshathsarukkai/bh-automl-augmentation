@@ -1,5 +1,19 @@
 # Autonomous completion report
 
+> **Addendum, 2026-08-25 — candidate-scope audit.** A repository-wide audit of
+> candidate-eligibility semantics ran after this report was written. It does not
+> change the Phase 15 confirmatory verdict, which was already scoped to the rows
+> each phase could observe. It does narrow one argument used throughout this
+> report: the "exactly five eligible unmeasured reactions" figure is a statement
+> about **global discovery headroom** and must not be used to explain low-data
+> augmentation nulls, because a low-data learner has observed only a small
+> fraction of the matrix and its transfer headroom is correspondingly large. It
+> also withdraws the Phase 11 chemical-augmentation conclusions as uninformative:
+> under the executed global eligibility rule those arms carried 0.4 to 1.2
+> effective added rows against a nominal budget of 159. See `RESULT_STATUS.md`
+> § *Candidate-scope semantics* and `docs/CANDIDATE_SCOPE.md`. No historical
+> number in this report is edited.
+
 All 18 roadmap phases are passed and checkpointed locally. Nothing has been
 pushed.
 

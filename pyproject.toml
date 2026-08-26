@@ -29,7 +29,13 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# The repository root must be on sys.path, not just src. Several test modules
+# import `tests.canonical_test_utils` and `scripts.*`, and only `python -m
+# pytest` puts the working directory on sys.path -- the bare `pytest` console
+# script does not, and neither does the editable install, whose package
+# discovery is scoped to src. Without the "." entry those modules fail to
+# import and pytest exits on collection errors.
+pythonpath = [".", "src"]
 
 [tool.ruff]
 line-length = 100

@@ -148,6 +148,44 @@ explicit reporting of negative and null results.
 Historical role-aware-v2 and historical unverified LOGO results remain excluded
 and are not used here.
 
+## 8a. Candidate-scope scope note (added post hoc, after the result)
+
+**Added 2026-08-25, after this experiment completed. Nothing above was changed;
+no number, verdict, or protocol statement is edited. This section records what a
+later repository-wide audit established about the *scope* of the question this
+experiment answered.**
+
+This experiment's candidate eligibility was `observed_only_low_data`: a
+generated reaction was rejected only when its canonical identity occurred in the
+rows the phase could actually see — the inner policy-fit subset during search
+(507 identities) and the saved training subset during placement and final
+evaluation (633 identities) — never the 3,955-row canonical universe. A hash
+guard in `redesigned_ae_benchmark.py` hard-fails if a pool consumes any other
+key set. The audit confirmed this from the executed bundle's `pool_summary.csv`,
+whose `measured_identity_key_scope` column reads only `inner_policy_fit_rows`
+and `saved_training_rows`.
+
+**The verdict is therefore unaffected and is not retracted.** The treatment
+genuinely applied: every unit had 335 to 362 accepted synthetic rows against 633
+measured rows, roughly 55% augmentation.
+
+What the audit does narrow is the *stated reason* offered for the null in §2 and
+in the completion report. That reasoning invoked the near-complete factorial —
+"only five eligible unmeasured reactions exist" — to explain why augmentation
+had little room to act. **That is a global-discovery-headroom argument, and it
+does not apply to an observed-only pool.** A near-complete matrix can leave
+almost no globally novel chemistry while still leaving most of the matrix hidden
+from a low-data learner, which is exactly the regime this experiment ran in and
+is why its pools were large rather than empty. The correct reading of the null
+is: *anonymous condition transfer supplied a substantial, legitimate, non-empty
+low-data augmentation and still did not shift outer-test RMSE by a practically
+meaningful amount at training fraction 0.2.*
+
+The distinction, the taxonomy, and the families it does affect are recorded in
+`RESULT_STATUS.md` under *Candidate-scope semantics*. A separate new experiment
+at a lower training fraction is preregistered in
+`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md`; it does not re-analyse this result.
+
 ## 9. Anti-gaming commitments
 
 - The primary metric, margin, seed count, exclusion rule, interval method and

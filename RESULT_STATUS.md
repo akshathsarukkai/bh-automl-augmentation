@@ -146,13 +146,60 @@ direction.** See `docs/EXTERNAL_DATASETS.md`.
 | --- | --- |
 | Phase 14 — reassess the supervised autoencoder | **Complete. Development evidence.** The supervised autoencoder **failed** its predefined retention criterion and is classified as a **secondary ablation**. It is not a supported method and was excluded from confirmation. Authoritative output: `results/autonomous_execution/phase_14/corrected-20260728-851d64e-phase14-production-v3`. |
 | Phase 15 — primary confirmatory hypothesis | **Complete. Confirmatory evidence — the only entry in that class.** Verdict **null**: anonymous condition-transfer augmentation produces no practically meaningful change relative to a matched real-only XGBoost baseline. Preregistered at `13fbfde` before any result existed. Authoritative output: `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`. |
+| Candidate-scope reanalysis — observed-only condition transfer | **Preregistered, not yet executed.** `PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md` freezes a new confirmatory experiment on seeds 6–14 at training fraction 0.05, comparing observed-only condition transfer against a matched real-only control, with a globally-unmeasured prospective control and a withheld-cell oracle diagnostic as declared secondary evidence. Development evidence: `results/corrected_candidate_scope_development_v1`. |
 | Phase 18 — prospective preparation | The recommendation simulation and the prospective package are both committed and classified as development evidence above. **Prospective laboratory validation has not been performed**, so no phase claims a wet-lab outcome. |
 
 The confirmatory-evidence class contains exactly one result, and that result is
 a null. Its scope is training fraction 0.2, canonical grouped random splits, one
-dataset. It is **not** OOD evidence and must not be quoted as one.
+dataset, and **candidate eligibility decided from the rows each phase could
+observe** (§ *Candidate-scope semantics* below). It is **not** OOD evidence and
+must not be quoted as one.
 
 No prospective laboratory claim is made by any phase.
+
+## Candidate-scope semantics
+
+Every result family that generates synthetic reactions decides *candidate
+eligibility* under exactly one of two scientifically different rules. The rule
+is declared in `src/bh_augmentation/augmentation/candidate_scope_registry.py`
+and verified against the code by `scripts/audit_candidate_scope.py`.
+
+| Rule | Question it answers | A candidate is ineligible when |
+| --- | --- | --- |
+| `observed_only_low_data` | Does augmentation help a learner that has seen only a small labeled subset? | Its canonical identity occurs in `labeled_train`, or it duplicates another generated candidate. Complete-dataset membership is **not** consulted. |
+| `globally_unmeasured_prospective` | Is this reaction genuinely new chemistry worth running? | Its canonical identity occurs **anywhere** in the complete measured dataset. |
+
+Two further labels exist for the audit and construct no generation policy:
+`representation_augmentation` (SMILES randomization, role/reaction-order
+permutation, latent and feature-space methods — the chemistry is deliberately
+unchanged, or the object generated has no chemical identity at all) and
+`not_applicable`.
+
+**Why the distinction matters here.** The canonical Buchwald–Hartwig dataset is
+a near-complete factorial: 3,955 of 3,960 grid cells are measured, leaving five
+globally novel reactions. **Global discovery headroom is therefore almost
+zero.** But a learner restricted to a 5% training fraction has observed 159 of
+3,955 reactions, so **low-data transfer headroom is very large**. Applying the
+global rule to a low-data augmentation experiment suppresses almost the entire
+treatment: development evidence at seeds 0–4 records **1 accepted candidate out
+of 2,540 generated** under the global rule against **1,704** under the
+observed-only rule. A near-complete matrix can have essentially no global
+discovery headroom while still offering substantial low-data transfer headroom,
+because most cells are hidden from the simulated learner even though they exist
+in the file.
+
+### Status of families under this distinction
+
+| Family | Rule | Effect of the correction |
+| --- | --- | --- |
+| Phase 15 primary confirmatory (`redesigned_ae_benchmark`) | `observed_only_low_data` | **None.** Already scoped to each phase's visible rows — inner policy-fit rows during search (507 identities) and saved training rows during placement and final (633), never the 3,955-row universe, with a hash guard that hard-fails otherwise. The verdict, numbers and registry records are unchanged. What is narrowed is the *stated reason* for the null, not the null. |
+| Phase 14 redesigned AE benchmark | `observed_only_low_data` | None, for the same reason. |
+| Phase 18 prospective package | `globally_unmeasured_prospective` | None. Global novelty is the correct and intended rule for a prospective claim. |
+| Phases 1–3 identity/role-change/ranking smokes | `globally_unmeasured_prospective` | None to the runs. Their zero-accepted results are **global-novelty statements** and must not be quoted as evidence about how much a low-data learner could generate. |
+| Phase 11 matched-budget augmentation controls | `observed_only_low_data` | **Materially affected.** Under the executed global rule, 11,682 of 11,727 chemical candidates were rejected as `already_measured`, and 93.6% of those collided only with rows the simulated learner had never seen. The chemical arms carried 0.4–1.2 effective added rows against a nominal budget of 159, so their comparisons against the oversampling controls compared *(real-only)* with *(real-only + 159 rows)*. **The Phase 11 chemical-augmentation conclusions are withdrawn as uninformative about chemical augmentation**; the run itself is retained unaltered as a record of the executed protocol. |
+| Corrected anonymous / role-aware condition transfer | `observed_only_low_data` | Materially affected; their candidate pools were suppressed by the same rule. Existing bundles are retained under their executed protocol and are not cited as low-data augmentation-benefit evidence. |
+| Frozen-policy search / final evaluation (Phases 5, 6) | `observed_only_low_data` | Latent only. No completed final evaluation on that chain selected an augmenting method, so no published metric changed. |
+| External reaction-family validation | `observed_only_low_data` | Semantics corrected in code, config and tests. The empirical datasets remain **externally blocked**; no run was fabricated. |
 
 ## Why role-aware v2 is invalid
 

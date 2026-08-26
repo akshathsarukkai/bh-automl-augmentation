@@ -378,7 +378,9 @@ The active method parses `A.B.C.D.E.F>>P` as two substrate tokens, condition
 tokens, and a product. It keeps `A.B` and `P` from a source training row,
 replaces the conditions with those from another training row, and rebuilds the
 reaction string. Candidates too dissimilar to measured training reactions are
-removed with a nearest-neighbor Tanimoto filter.
+removed with a nearest-neighbor Tanimoto filter, and every candidate passes a
+**canonical identity gate** whose eligibility rule is declared explicitly — see
+*Candidate Scope: Three Different Questions* below.
 
 A teacher model is fitted only on real training rows and predicts the synthetic
 yields, which are clipped to `[0, 100]`. The student then trains on real plus
@@ -686,6 +688,63 @@ This repository therefore follows the rule:
 This rule is especially important for low-data and recommendation-style
 experiments, where a small amount of leakage can dominate the apparent benefit.
 
+## Candidate Scope: Three Different Questions
+
+Generating a synthetic reaction and deciding whether it is *eligible* are
+separate steps, and the eligibility rule depends entirely on which scientific
+question is being asked. This repository distinguishes three, and the
+distinction is declared in code
+(`src/bh_augmentation/augmentation/candidate_scope_registry.py`) and verified by
+`python scripts/audit_candidate_scope.py`.
+
+**1. Globally novel chemistry generation** (`globally_unmeasured_prospective`).
+Propose reactions that have never been measured. A candidate whose canonical
+identity occurs anywhere in the complete historical dataset is ineligible. This
+is the correct rule for prospective discovery and for the Phase 18 package.
+
+**2. Low-data pseudo-label augmentation** (`observed_only_low_data`). Simulate a
+learner that has observed only a small labeled subset. A candidate is ineligible
+only when its identity occurs in that observed subset, or duplicates another
+generated candidate. Whether the reaction happens to exist elsewhere in the file
+is *unknowable to that learner* and must not decide eligibility. Candidates
+matching the validation or outer-test partitions are quarantined — recorded in
+the candidate audit, excluded from student training — rather than silently
+dropped.
+
+**3. Retrospective withheld-cell reconstruction**
+(`withheld_cell_transfer_oracle`). Ask how accurately the pseudo-labels
+reconstruct reactions that *were* measured but were hidden from the simulated
+learner. This is a diagnostic, not a benchmark. The hidden yields are oracle
+labels: they are read only after the candidate pool and its pseudo-labels are
+frozen and hash-verified, and they may never influence generation, ranking,
+teacher fitting, policy selection, hyperparameters, synthetic weights, or
+student fitting.
+
+A fourth label, `representation_augmentation`, covers families that
+re-*represent* existing chemistry rather than generating new chemistry — SMILES
+randomization, reaction/role-order permutation, latent interpolation, and
+feature-space GAN candidates. Chemical-identity rejection is inapplicable to
+them: the molecule is deliberately unchanged, or the generated object is a
+coordinate with no seven-role identity at all, which those modules record as a
+null rather than as a false.
+
+### Why a complete dataset can still leave room for augmentation
+
+The canonical Buchwald–Hartwig matrix is a near-complete factorial: 3,955 of
+3,960 cells are measured, so exactly five globally novel reactions exist.
+**Global discovery headroom is therefore almost zero.** But a learner restricted
+to a 5% training fraction has observed 159 of those 3,955 reactions, so **low-data
+transfer headroom is very large** — about 96% of the matrix is unknown to it.
+
+These two numbers describe different worlds, and using the first to reason about
+the second suppresses the treatment entirely. Development evidence at seeds 0–4
+records **1 accepted candidate out of 2,540 generated** under the global rule
+against **1,704** under the observed-only rule. `RESULT_STATUS.md` records which
+result families this affected and which it did not, `docs/CANDIDATE_SCOPE.md` is
+the methodology reference, and
+`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md` freezes the new confirmatory
+experiment that follows from it.
+
 ## Corrected Revalidation
 
 Corrected condition-transfer experiments use the explicit RDKit-backed
@@ -704,6 +763,26 @@ caffeinate -dimsu bash scripts/run_corrected_revalidation.sh \
 
 Historical role-aware v2 and matched-comparison outputs remain invalid. See
 `RESULT_STATUS.md` for the evidence registry.
+
+### Low-Data Candidate-Scope Reanalysis
+
+The reanalysis that introduced the candidate-scope taxonomy runs as one
+deterministic script. It audits every call site, runs the bounded tests,
+regenerates only the calculations the semantics change affects, executes the
+preregistered confirmatory experiment on fresh evaluation units, runs the
+withheld-cell oracle diagnostic, and verifies hashes and leakage contracts. It
+never pushes, never deletes or overwrites a historical output, and never
+downloads a dataset.
+
+```bash
+caffeinate -i bash scripts/run_lowdata_candidate_scope_reanalysis.sh \
+  2>&1 | tee results/corrected_candidate_scope_reanalysis_run.log
+```
+
+It requires an environment whose RDKit matches the one that built the canonical
+dataset (`rdkit==2023.9.6`); a preflight check fails fast otherwise, because a
+different canonicalization would make the stored and generated identity
+vocabularies disjoint and silently accept every candidate.
 
 ## Suggested Experiment Order
 
