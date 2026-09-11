@@ -49,6 +49,7 @@ from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.pool_accounting import pool_statistics
 from bh_augmentation.augmentation.role_aware_condition_transfer import (
     RoleAwareConditionTransferConfig,
     clear_role_aware_teacher_cache,
@@ -386,9 +387,21 @@ def _resolved_models(config: Mapping[str, Any]) -> list[tuple[str, dict[str, Any
         if isinstance(item, str):
             resolved.append((item, {}))
         elif isinstance(item, Mapping) and "name" in item:
-            resolved.append(
-                (str(item["name"]), {k: v for k, v in item.items() if k != "name"})
-            )
+            # ``params`` is the nested estimator-keyword block used by every
+            # config in this repository.  It must be flattened into the keyword
+            # arguments handed to ``get_model``; forwarding it as a single
+            # ``params=`` keyword is silently ignored by XGBoost (which warns
+            # "Parameters: { "params" } are not used") and fits the defaults.
+            unknown = set(item) - {"name", "params"}
+            if unknown:
+                raise ValueError(
+                    f"Unsupported model specification keys {sorted(unknown)!r} "
+                    f"for model {item['name']!r}; use a nested 'params' mapping."
+                )
+            params = item.get("params", {})
+            if not isinstance(params, Mapping):
+                raise ValueError(f"Model params for {item['name']!r} must be a mapping.")
+            resolved.append((str(item["name"]), dict(params)))
         else:
             raise ValueError(f"Unsupported model specification: {item!r}")
     return resolved
@@ -470,46 +483,8 @@ def _pool_statistics(
     candidate_df: pd.DataFrame,
     scope: CandidateScopePolicy,
 ) -> dict[str, Any]:
-    if candidate_df.empty:
-        return {
-            "generated_candidate_count": 0,
-            "accepted_candidate_count": 0,
-            "unique_accepted_identity_count": 0,
-            "selected_candidate_count": 0,
-            "rejected_observed_in_labeled_train": 0,
-            "rejected_already_measured": 0,
-            "rejected_quarantined_held_out_identity": 0,
-            "rejected_source_identical": 0,
-            "rejected_duplicate_synthetic": 0,
-            "rejected_other": 0,
-            **scope.scope_record(),
-        }
-    accepted = candidate_df.loc[candidate_df["accepted"].astype(bool)]
-    reasons = candidate_df["rejection_reason"].fillna("").astype(str)
-    counted = (
-        "observed_in_labeled_train",
-        "already_measured",
-        "quarantined_held_out_identity",
-        "source_identical",
-        "duplicate_synthetic",
-    )
-    return {
-        "generated_candidate_count": int(len(candidate_df)),
-        "accepted_candidate_count": int(len(accepted)),
-        "unique_accepted_identity_count": int(
-            accepted["canonical_reaction_key"].astype(str).nunique()
-        ),
-        "selected_candidate_count": (
-            int(candidate_df["kept"].astype(bool).sum())
-            if "kept" in candidate_df
-            else int(len(accepted))
-        ),
-        **{f"rejected_{reason}": int(reasons.eq(reason).sum()) for reason in counted},
-        "rejected_other": int(
-            reasons.ne("").sum() - sum(int(reasons.eq(r).sum()) for r in counted)
-        ),
-        **scope.scope_record(),
-    }
+    """Kept as the historical name; the definition lives in ``pool_accounting``."""
+    return pool_statistics(candidate_df, scope)
 
 
 def _metric_rows(

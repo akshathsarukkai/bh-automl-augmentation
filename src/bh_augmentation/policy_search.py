@@ -21,6 +21,7 @@ from bh_augmentation.augmentation.condition_transfer import (
     ConditionTransferConfig,
     generate_condition_transfer_examples,
 )
+from bh_augmentation.augmentation.pool_accounting import pool_statistics
 from bh_augmentation.augmentation.role_aware_condition_transfer import (
     RoleAwareConditionTransferConfig,
     clear_role_aware_teacher_cache,
@@ -87,6 +88,30 @@ _SEARCH_PAYLOAD_FIELDS = {
 }
 _METRICS = {"rmse": rmse, "mae": mae, "r2": r2, "spearman": spearman_corr}
 
+DEGENERATE_UNIT_SCHEMA_VERSION = "bh-degenerate-search-unit-v1"
+DEGENERATE_UNIT_STATUS = "degenerate_no_frozen_policy"
+POOL_ACCOUNTING_SCHEMA_VERSION = "bh-search-pool-accounting-v1"
+DEGENERATE_POOL_MESSAGE = (
+    "Typed augmentation policy produced zero accepted synthetic rows and "
+    "cannot be credited as augmentation."
+)
+
+
+class DegenerateAugmentationPool(ValueError):
+    """A typed augmentation policy accepted zero synthetic rows.
+
+    Under the frozen-policy protocol such a policy is *not* fitted as plain
+    real-only training and silently counted as augmentation: an augmented arm
+    that is identical to its comparator by construction must be reported as
+    degenerate (preregistration section 6), never scored as a treatment.  The
+    exception carries the pool accounting so the caller can record exactly how
+    many candidates were generated and why each was rejected.
+    """
+
+    def __init__(self, pool: dict[str, Any] | None = None) -> None:
+        super().__init__(DEGENERATE_POOL_MESSAGE)
+        self.pool_statistics = dict(pool or {})
+
 
 @dataclass(frozen=True)
 class LabeledPartition:
@@ -106,8 +131,19 @@ def run_policy_search_command(
     config_path: str | Path,
     *,
     output_directory: str | Path | None = None,
+    record_degenerate: bool = False,
 ) -> dict[str, Path]:
-    """Search real-only model policies without materializing outer-test labels."""
+    """Search real-only model policies without materializing outer-test labels.
+
+    With ``record_degenerate`` the typed policies' candidate pools are generated
+    once before the search and their accounting is written next to the search
+    outputs as ``pool_accounting.json``.  If *every* typed policy accepts zero
+    synthetic rows the unit is degenerate: ``degenerate_unit.json`` is written
+    instead of a frozen policy, nothing is searched, no outer-test identity is
+    claimed, and the returned mapping carries ``degenerate_unit`` rather than
+    ``frozen_policy``.  The flag lives on the command line only, so the
+    scientific configuration and every hash derived from it are unchanged.
+    """
     config = load_config(config_path)
     dataset_path, split_directory, seed, fraction = _resolve_run_contract(config)
     saved = load_saved_canonical_splits(
@@ -162,6 +198,56 @@ def run_policy_search_command(
     inputs = PolicySearchInputs(train=train, validation=validation, binding=binding)
     policies = _resolved_model_policies(config, seed=seed, fraction=fraction)
     metric_names, selection_metric, lower_is_better = _selection_contract(config)
+    output = Path(
+        output_directory
+        if output_directory is not None
+        else config.get("output", {}).get(
+            "search_directory", "results/corrected_policy_search"
+        )
+    )
+
+    pool_accounting: list[dict[str, Any]] | None = None
+    if record_degenerate:
+        pool_accounting = _account_policy_pools(policies, train)
+        typed = [record for record in pool_accounting if record["method"] != "real_only"]
+        degenerate = [
+            record
+            for record in typed
+            if record["pool_statistics"]["accepted_candidate_count"] == 0
+        ]
+        if typed and len(degenerate) == len(typed):
+            _create_fresh_directory(output)
+            payload = {
+                "run_type": "policy_search_degenerate_pool",
+                "scientific_binding": binding.to_dict(),
+                "scientific_config": config_projection,
+                "evaluation_unit": evaluation_unit,
+                "seed": seed,
+                "train_fraction": fraction,
+                "family": _declared_registry_family(config),
+                "candidate_scope_mode": candidate_scope.mode,
+                "candidate_policy_hashes": [policy.policy_hash for policy in policies],
+                "per_policy": pool_accounting,
+                "reason": DEGENERATE_POOL_MESSAGE,
+                "n_train": int(len(train.y)),
+                "n_validation": int(len(validation.y)),
+                "outer_test_labels_accessed": False,
+                "outer_test_predictions_generated": False,
+                "test_evaluated": False,
+                "frozen_policy_written": False,
+                "registry_claimed": False,
+            }
+            record = {
+                "schema_version": DEGENERATE_UNIT_SCHEMA_VERSION,
+                "status": DEGENERATE_UNIT_STATUS,
+                "payload": payload,
+                "degenerate_unit_hash": stable_hash(payload),
+            }
+            degenerate_path = output / "degenerate_unit.json"
+            degenerate_path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n")
+            return {"directory": output, "degenerate_unit": degenerate_path}
+        if degenerate:
+            raise DegenerateAugmentationPool(degenerate[0]["pool_statistics"])
 
     def validation_evaluator(
         search_inputs: PolicySearchInputs,
@@ -229,13 +315,6 @@ def run_policy_search_command(
         "frozen_policy_hash": frozen.frozen_policy_hash,
     }
 
-    output = Path(
-        output_directory
-        if output_directory is not None
-        else config.get("output", {}).get(
-            "search_directory", "results/corrected_policy_search"
-        )
-    )
     _create_fresh_directory(output)
     paths = {
         "directory": output,
@@ -248,7 +327,100 @@ def run_policy_search_command(
     paths["search_manifest"].write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n"
     )
+    if pool_accounting is not None:
+        accounting_payload = {
+            "evaluation_unit": evaluation_unit,
+            "seed": seed,
+            "train_fraction": fraction,
+            "family": _declared_registry_family(config),
+            "candidate_scope_mode": candidate_scope.mode,
+            "search_manifest_hash": search_manifest_hash,
+            "frozen_policy_hash": frozen.frozen_policy_hash,
+            "per_policy": pool_accounting,
+        }
+        paths["pool_accounting"] = output / "pool_accounting.json"
+        paths["pool_accounting"].write_text(
+            json.dumps(
+                {
+                    "schema_version": POOL_ACCOUNTING_SCHEMA_VERSION,
+                    "payload": accounting_payload,
+                    "pool_accounting_hash": stable_hash(accounting_payload),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
     return paths
+
+
+def load_degenerate_unit(path: str | Path) -> dict[str, Any]:
+    """Strictly load and hash-verify a degenerate-unit record."""
+    try:
+        record = json.loads(Path(path).read_text())
+    except json.JSONDecodeError as exc:
+        raise ValueError("Degenerate-unit record contains invalid JSON.") from exc
+    expected_fields = {"schema_version", "status", "payload", "degenerate_unit_hash"}
+    if not isinstance(record, dict) or set(record) != expected_fields:
+        raise ValueError("Degenerate-unit record schema mismatch.")
+    if (
+        record["schema_version"] != DEGENERATE_UNIT_SCHEMA_VERSION
+        or record["status"] != DEGENERATE_UNIT_STATUS
+    ):
+        raise ValueError("Unsupported degenerate-unit record.")
+    payload = record["payload"]
+    if stable_hash(payload) != record["degenerate_unit_hash"]:
+        raise ValueError("Degenerate-unit record hash mismatch.")
+    if (
+        payload.get("outer_test_labels_accessed") is not False
+        or payload.get("test_evaluated") is not False
+        or payload.get("frozen_policy_written") is not False
+        or payload.get("registry_claimed") is not False
+    ):
+        raise ValueError("Degenerate-unit record reports forbidden activity.")
+    typed = [entry for entry in payload["per_policy"] if entry["method"] != "real_only"]
+    if not typed or any(
+        entry["pool_statistics"]["accepted_candidate_count"] != 0 for entry in typed
+    ):
+        raise ValueError("Degenerate-unit record is not degenerate.")
+    return record
+
+
+def _declared_registry_family(config: dict[str, Any]) -> str | None:
+    declared = config.get("evaluation_registry", {})
+    if not isinstance(declared, dict):
+        raise ValueError("evaluation_registry must be a mapping.")
+    family = declared.get("family")
+    return None if family is None else str(family)
+
+
+def _account_policy_pools(
+    policies: list[ResolvedPolicy],
+    partition: LabeledPartition,
+) -> list[dict[str, Any]]:
+    """Generate each typed policy's candidate pool once and summarize it.
+
+    Generation is deterministic under the policy's ``random_state``, so the
+    pool the search later regenerates is the pool accounted for here.  Real-only
+    policies generate nothing and are recorded with an empty accounting.
+    """
+    records = []
+    for policy in policies:
+        generated = _generate_synthetic(policy, partition)
+        if generated is None:
+            statistics = pool_statistics(pd.DataFrame(), partition.candidate_scope)
+        else:
+            statistics = pool_statistics(generated["candidate_df"], partition.candidate_scope)
+        records.append(
+            {
+                "policy_id": policy.policy_id,
+                "policy_hash": policy.policy_hash,
+                "method": str(policy.config.get("method", "real_only")),
+                "model": str(policy.config["model"]),
+                "pool_statistics": statistics,
+            }
+        )
+    return records
 
 
 def scientific_config_projection(config: dict[str, Any]) -> dict[str, Any]:
@@ -505,14 +677,21 @@ def _selection_contract(config: dict[str, Any]) -> tuple[list[str], str, bool]:
     return list(metrics), selection_metric, lower_is_better
 
 
-def _fit_resolved_model(policy: ResolvedPolicy, partition: LabeledPartition) -> Any:
+def _generate_synthetic(
+    policy: ResolvedPolicy,
+    partition: LabeledPartition,
+) -> dict[str, Any] | None:
+    """Generate a typed policy's candidate pool from the partition alone.
+
+    Returns ``None`` for real-only policies.  Every generator call receives the
+    partition's declared candidate scope, so eligibility is decided by the rule
+    the configuration bound, never by an implicit default.
+    """
     resolved = policy.config
     method = resolved.get("method")
-    X_train = partition.X
-    y_train = partition.y
     if method == "anonymous":
         transfer = ConditionTransferConfig(**dict(resolved["transfer_config"]))
-        generated = generate_condition_transfer_examples(
+        return generate_condition_transfer_examples(
             partition.frame,
             partition.X,
             partition.y,
@@ -522,11 +701,10 @@ def _fit_resolved_model(policy: ResolvedPolicy, partition: LabeledPartition) -> 
             real_feature_metadata=partition.feature_metadata,
             candidate_scope=partition.candidate_scope,
         )
-        X_train, y_train = _augment_training(partition, generated)
-    elif method == "role_aware":
+    if method == "role_aware":
         clear_role_aware_teacher_cache()
         transfer = RoleAwareConditionTransferConfig(**dict(resolved["transfer_config"]))
-        generated = generate_role_aware_condition_transfer_examples(
+        return generate_role_aware_condition_transfer_examples(
             partition.frame,
             partition.X,
             partition.y,
@@ -536,9 +714,18 @@ def _fit_resolved_model(policy: ResolvedPolicy, partition: LabeledPartition) -> 
             real_feature_metadata=partition.feature_metadata,
             candidate_scope=partition.candidate_scope,
         )
-        X_train, y_train = _augment_training(partition, generated)
-    elif method != "real_only":
+    if method not in (None, "real_only"):
         raise ValueError(f"Unsupported resolved policy method: {method}.")
+    return None
+
+
+def _fit_resolved_model(policy: ResolvedPolicy, partition: LabeledPartition) -> Any:
+    resolved = policy.config
+    X_train = partition.X
+    y_train = partition.y
+    generated = _generate_synthetic(policy, partition)
+    if generated is not None:
+        X_train, y_train = _augment_training(partition, generated)
     model = get_model(
         str(resolved["model"]),
         seed=int(resolved["seed"]),
@@ -562,9 +749,8 @@ def _augment_training(
         synthetic_metadata=generated["feature_metadata"],
     )
     if len(y_synthetic) == 0:
-        raise ValueError(
-            "Typed augmentation policy produced zero accepted synthetic rows and "
-            "cannot be credited as augmentation."
+        raise DegenerateAugmentationPool(
+            pool_statistics(generated["candidate_df"], partition.candidate_scope)
         )
     if len(X_synthetic) != len(y_synthetic):
         raise ValueError("Synthetic feature and label counts differ.")
