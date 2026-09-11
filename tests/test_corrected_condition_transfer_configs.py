@@ -19,6 +19,7 @@ from bh_augmentation.run_role_aware_condition_transfer import (
     _effective_policy_mode,
     _iter_role_transfer_policies,
 )
+from canonical_artifacts import require_canonical_artifacts
 
 CORRECTED_CONFIGS = [
     "configs/corrected_representation_baselines_xgboost.yaml",
@@ -46,6 +47,7 @@ def test_corrected_configs_never_use_legacy_feature_aliases(path: str) -> None:
 
 @pytest.mark.parametrize("path", CORRECTED_CONFIGS)
 def test_corrected_configs_use_saved_canonical_assignments(path: str) -> None:
+    require_canonical_artifacts()
     config = yaml.safe_load(Path(path).read_text())
     split_manifest = yaml.safe_load(
         Path(CANONICAL_SPLIT_DIRECTORY, "split_manifest.json").read_text()

@@ -20,6 +20,7 @@ from bh_augmentation.evaluation.representation_splits import (
     build_saved_random_split_unit,
 )
 from bh_augmentation.utils.corrected_runs import sha256_file, stable_hash
+from canonical_artifacts import require_canonical_artifacts
 
 pytest.importorskip("rdkit")
 pytest.importorskip("xgboost")
@@ -32,6 +33,7 @@ SMOKE_CONFIG = (
 
 @pytest.fixture(scope="module")
 def completed_bundle(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    require_canonical_artifacts()
     output = tmp_path_factory.mktemp("phase12") / "corrected-phase12-bundle"
     phase12.run_hidden_measured_calibration(
         SMOKE_CONFIG, output_directory=output
@@ -425,6 +427,7 @@ def test_smoke_bundle_passes_public_validator(completed_bundle: Path) -> None:
 
 
 def test_holdout_unit_retains_source_identity_column() -> None:
+    require_canonical_artifacts()
     config = yaml.safe_load(SMOKE_CONFIG.read_text())
     saved = load_saved_canonical_split_identities(
         config["dataset"]["path"],

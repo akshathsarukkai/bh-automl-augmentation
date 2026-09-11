@@ -30,6 +30,7 @@ from bh_augmentation.redesigned_ae_benchmark import (
 )
 from bh_augmentation.representations.redesigned_supervised_autoencoder import RoleBlock
 from bh_augmentation.utils.corrected_runs import sha256_file, stable_hash
+from canonical_artifacts import require_canonical_artifacts
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE_CONFIG = ROOT / "configs/redesigned_ae_benchmark_phase14_smoke.yaml"
@@ -55,6 +56,7 @@ def _candidate_configs(raw: dict[str, object]) -> list[tuple[str, object]]:
 
 @pytest.fixture(scope="module")
 def completed_bundle(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    require_canonical_artifacts()
     output = tmp_path_factory.mktemp("phase14") / "bundle"
     registry = tmp_path_factory.mktemp("phase14-registry")
     run_redesigned_ae_benchmark(
@@ -70,6 +72,7 @@ def structurally_invalid_run(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> tuple[Path, BaseException]:
     """Run the benchmark with one structural replay forced to fail."""
+    require_canonical_artifacts()
     output = tmp_path_factory.mktemp("phase14-structural") / "bundle"
     registry = tmp_path_factory.mktemp("phase14-structural-registry")
     original = benchmark_module._assert_selection

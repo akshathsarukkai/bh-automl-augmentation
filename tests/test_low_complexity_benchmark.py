@@ -19,6 +19,7 @@ from bh_augmentation.representations.low_complexity import (
     LOW_COMPLEXITY_METHODS,
 )
 from bh_augmentation.utils.corrected_runs import sha256_file, stable_hash
+from canonical_artifacts import require_canonical_artifacts
 
 pytest.importorskip("rdkit")
 
@@ -30,6 +31,7 @@ SMOKE_CONFIG = (
 
 @pytest.fixture(scope="module")
 def completed_bundle(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    require_canonical_artifacts()
     output = tmp_path_factory.mktemp("phase13") / "corrected-phase13"
     run_low_complexity_benchmark(SMOKE_CONFIG, output_directory=output)
     return output

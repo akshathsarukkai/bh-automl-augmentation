@@ -25,6 +25,7 @@ from bh_augmentation.prospective_package import (
     validate_prospective_package,
 )
 from bh_augmentation.utils.corrected_runs import sha256_file, stable_hash
+from canonical_artifacts import require_canonical_artifacts
 
 pytest.importorskip("rdkit")
 
@@ -43,6 +44,7 @@ _FORBIDDEN_CLAIM_TERMS = (
 
 @pytest.fixture(scope="module")
 def package(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    require_canonical_artifacts()
     output = tmp_path_factory.mktemp("phase18-package") / "corrected-package"
     build_prospective_package(CONFIG, output_directory=output)
     return output
@@ -280,6 +282,7 @@ def test_builder_refuses_to_overwrite_existing_package(package: Path) -> None:
 
 
 def test_two_builds_are_byte_identical(tmp_path: Path) -> None:
+    require_canonical_artifacts()
     first = tmp_path / "corrected-pkg-a"
     second = tmp_path / "corrected-pkg-b"
     config = _config(tmp_path)

@@ -29,6 +29,7 @@ from bh_augmentation.recommendation_simulation import (
     validate_recommendation_simulation,
 )
 from bh_augmentation.utils.corrected_runs import sha256_file, stable_hash
+from canonical_artifacts import require_canonical_artifacts
 
 pytest.importorskip("rdkit")
 
@@ -62,6 +63,7 @@ def _tiny_config(tmp_path: Path) -> dict[str, Any]:
 
 @pytest.fixture(scope="module")
 def completed_bundle(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    require_canonical_artifacts()
     output = tmp_path_factory.mktemp("phase18") / "corrected-phase18"
     run_recommendation_simulation(SMOKE_CONFIG, output_directory=output)
     return output
@@ -225,6 +227,7 @@ def test_saboteur_strategy_reading_a_future_label_fails_the_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A strategy that peeks at an unacquired outcome must abort the simulation."""
+    require_canonical_artifacts()
 
     def _saboteur(context: AcquisitionContext) -> AcquisitionSelection:
         stolen = [context.label_of(source_id) for source_id in context.candidate_source_ids]
@@ -387,6 +390,7 @@ def test_runner_refuses_to_overwrite_completed_output(completed_bundle: Path) ->
 
 
 def test_two_runs_produce_byte_identical_scientific_artifacts(tmp_path: Path) -> None:
+    require_canonical_artifacts()
     first = tmp_path / "corrected-run-a"
     second = tmp_path / "corrected-run-b"
     config = _tiny_config(tmp_path)
