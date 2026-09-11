@@ -49,10 +49,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          # RDKit is pinned to the version that produced the canonical dataset's
-          # stored canonical_reaction_key values (recorded in the
-          # dependency_versions block of
+          # The `science` extra pins RDKit to the version that produced the
+          # canonical dataset's stored canonical_reaction_key values (recorded
+          # in the dependency_versions block of
           # results/corrected_canonical_data_audit/run_manifest.json). Candidate
           # identities are recomputed live from roles, so a newer RDKit puts the
           # stored and generated identities in two different vocabularies: they
@@ -60,11 +59,12 @@ jobs:
           # nothing, and the identity-dependent tests error at fixture setup.
           # assert_stored_identities_match_roles turns that into a hard failure,
           # but CI should exercise the real contract rather than the failure.
-          # XGBoost stays an optional runtime dependency -- the library raises a
-          # helpful ImportError without it -- but the uncertainty estimators and
-          # the Phase 15 confirmatory method are XGBoost-based, so CI installs it
-          # to actually exercise those paths rather than skip them.
-          python -m pip install "rdkit==2023.9.6" xgboost
+          # The same extra pins numpy<2 (that RDKit build is compiled against
+          # the NumPy 1.x ABI and segfaults under 2.x) and pandas<3, and
+          # installs XGBoost: it stays an optional runtime dependency, but the
+          # uncertainty estimators and both confirmatory method families are
+          # XGBoost-based, so CI exercises those paths rather than skipping them.
+          python -m pip install -e ".[dev,science]"
 
       - name: Run tests
         # -ra prints the reason for every skip. Some modules skip themselves when
@@ -101,18 +101,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[dev]"
-          # RDKit is pinned to the version that produced the canonical dataset's
-          # stored canonical_reaction_key values (recorded in the
-          # dependency_versions block of
-          # results/corrected_canonical_data_audit/run_manifest.json). Candidate
-          # identities are recomputed live from roles, so a newer RDKit puts the
-          # stored and generated identities in two different vocabularies: they
-          # stop intersecting entirely, the eligibility gate then rejects
-          # nothing, and the identity-dependent tests error at fixture setup.
-          # assert_stored_identities_match_roles turns that into a hard failure,
-          # but CI should exercise the real contract rather than the failure.
-          python -m pip install "rdkit==2023.9.6"
+          # Same pinned scientific environment as the unit-test job; see the
+          # comment there for why RDKit, NumPy and pandas are held at these
+          # versions.
+          python -m pip install -e ".[dev,science]"
 
       - name: Confirm the committed smoke fixture is present
         run: |

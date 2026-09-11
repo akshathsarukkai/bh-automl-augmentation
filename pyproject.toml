@@ -33,9 +33,16 @@ dev = [
 ]
 # The scientific runners need RDKit pinned to the version that produced the
 # canonical dataset's stored reaction identities (see docs/CANDIDATE_SCOPE.md
-# section 7) and XGBoost for the confirmatory method family.
+# section 7) and XGBoost for the confirmatory method family. That RDKit build
+# is compiled against the NumPy 1.x C ABI; importing it next to NumPy 2.x
+# fails with "_ARRAY_API not found" and then segfaults, so the NumPy major
+# version is pinned with it. pandas 3 changes default string and copy
+# semantics that the validated environments (pandas 2.x) never exercised, so
+# it is held back as well until the suite has been run against it.
 science = [
   "rdkit==2023.9.6",
+  "numpy<2",
+  "pandas<3",
   "xgboost",
 ]
 
