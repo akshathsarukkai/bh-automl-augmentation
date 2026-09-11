@@ -242,6 +242,97 @@ def seed_cluster_percentile_interval(
     }
 
 
+def interpretation_table_verdict(
+    *,
+    mean_effect: float | None,
+    ci_lower: float | None,
+    ci_upper: float | None,
+    included_unit_count: int,
+    improved_unit_count: int,
+    degenerate_unit_count: int,
+    practical_minimum_effect: float,
+    maximum_degenerate_units: int,
+    minimum_included_units: int,
+    minimum_improved_units_for_positive: int,
+    planned_unit_count: int,
+    degenerate_override_rule: str,
+    underpowered_override_rule: str,
+    table_rule: str,
+    error_type: type[ValueError] | None = None,
+) -> dict[str, Any]:
+    """Apply a preregistered interpretation table as a pure boolean function.
+
+    Both preregistered experiments in this repository share one decision
+    structure: two overrides (too many degenerate units; too few surviving
+    units) that force ``inconclusive`` before the table is consulted, then four
+    mutually exclusive table conditions on the mean effect and its interval.
+    The thresholds and the rule names under which each decision is reported
+    are supplied by the caller from its own frozen document, so this function
+    encodes the *shape* of the rule and never a threshold.
+    """
+    error = PrimaryConfirmatoryAnalysisError if error_type is None else error_type
+    if degenerate_unit_count > maximum_degenerate_units:
+        return {
+            "verdict": "inconclusive",
+            "rule": degenerate_override_rule,
+            "reason": (
+                f"{degenerate_unit_count} of {planned_unit_count} units have a "
+                "degenerate transfer pool, above the preregistered maximum of "
+                f"{maximum_degenerate_units}; the degeneracy is the finding."
+            ),
+            "conditions": {},
+        }
+    if included_unit_count < minimum_included_units:
+        return {
+            "verdict": "inconclusive",
+            "rule": underpowered_override_rule,
+            "reason": (
+                f"Only {included_unit_count} units remain after exclusions, "
+                f"below the preregistered minimum of {minimum_included_units}; "
+                "the analysis is underpowered and no positive claim is made."
+            ),
+            "conditions": {},
+        }
+    if mean_effect is None or ci_lower is None or ci_upper is None:
+        raise error("The interpretation table requires a mean effect and an interval.")
+    conditions = {
+        "positive": (
+            mean_effect >= practical_minimum_effect
+            and ci_lower > 0.0
+            and improved_unit_count >= minimum_improved_units_for_positive
+        ),
+        "null": (
+            -practical_minimum_effect < ci_lower and ci_upper < practical_minimum_effect
+        ),
+        "negative": (mean_effect <= -practical_minimum_effect and ci_upper < 0.0),
+        "inconclusive": (
+            ci_upper >= practical_minimum_effect and ci_lower <= -practical_minimum_effect
+        ),
+    }
+    matched = [name for name in _VERDICTS if conditions[name]]
+    if len(matched) == 1:
+        return {
+            "verdict": matched[0],
+            "rule": table_rule,
+            "reason": _VERDICT_REASONS[matched[0]],
+            "conditions": conditions,
+        }
+    if not matched:
+        return {
+            "verdict": "undetermined_by_preregistered_table",
+            "rule": table_rule,
+            "reason": (
+                "No condition in the preregistered interpretation table holds "
+                "for this interval. The table is reported as it stands; no "
+                "post hoc rule is substituted."
+            ),
+            "conditions": conditions,
+        }
+    raise error(  # pragma: no cover - unreachable
+        f"Preregistered conditions are not mutually exclusive: {matched}."
+    )
+
+
 def preregistered_verdict(
     *,
     mean_effect: float | None,
@@ -251,7 +342,7 @@ def preregistered_verdict(
     improved_unit_count: int,
     degenerate_unit_count: int,
 ) -> dict[str, Any]:
-    """Apply Section 6 of the preregistration as a pure boolean function.
+    """Apply Section 6 of the Phase 15 preregistration as a pure boolean function.
 
     Section 5 overrides fire first: more than ``MAXIMUM_DEGENERATE_UNITS``
     degenerate units, or fewer than ``MINIMUM_INCLUDED_UNITS`` surviving units,
@@ -259,71 +350,21 @@ def preregistered_verdict(
     four table conditions are mutually exclusive by construction, so no
     tie-breaking judgement is ever exercised.
     """
-    if degenerate_unit_count > MAXIMUM_DEGENERATE_UNITS:
-        return {
-            "verdict": "inconclusive",
-            "rule": "section_5_degenerate_pool_override",
-            "reason": (
-                f"{degenerate_unit_count} of {len(PLANNED_SEEDS)} units have a "
-                "degenerate transfer pool, above the preregistered maximum of "
-                f"{MAXIMUM_DEGENERATE_UNITS}; the degeneracy is the finding."
-            ),
-            "conditions": {},
-        }
-    if included_unit_count < MINIMUM_INCLUDED_UNITS:
-        return {
-            "verdict": "inconclusive",
-            "rule": "section_5_underpowered_override",
-            "reason": (
-                f"Only {included_unit_count} units remain after exclusions, "
-                f"below the preregistered minimum of {MINIMUM_INCLUDED_UNITS}; "
-                "the analysis is underpowered and no positive claim is made."
-            ),
-            "conditions": {},
-        }
-    if mean_effect is None or ci_lower is None or ci_upper is None:
-        raise PrimaryConfirmatoryAnalysisError(
-            "The interpretation table requires a mean effect and an interval."
-        )
-    conditions = {
-        "positive": (
-            mean_effect >= PRACTICAL_MINIMUM_EFFECT
-            and ci_lower > 0.0
-            and improved_unit_count >= MINIMUM_IMPROVED_UNITS_FOR_POSITIVE
-        ),
-        "null": (
-            -PRACTICAL_MINIMUM_EFFECT < ci_lower
-            and ci_upper < PRACTICAL_MINIMUM_EFFECT
-        ),
-        "negative": (
-            mean_effect <= -PRACTICAL_MINIMUM_EFFECT and ci_upper < 0.0
-        ),
-        "inconclusive": (
-            ci_upper >= PRACTICAL_MINIMUM_EFFECT
-            and ci_lower <= -PRACTICAL_MINIMUM_EFFECT
-        ),
-    }
-    matched = [name for name in _VERDICTS if conditions[name]]
-    if len(matched) == 1:
-        return {
-            "verdict": matched[0],
-            "rule": "section_6_interpretation_table",
-            "reason": _VERDICT_REASONS[matched[0]],
-            "conditions": conditions,
-        }
-    if not matched:
-        return {
-            "verdict": "undetermined_by_preregistered_table",
-            "rule": "section_6_interpretation_table",
-            "reason": (
-                "No condition in the preregistered interpretation table holds "
-                "for this interval. The table is reported as it stands; no "
-                "post hoc rule is substituted."
-            ),
-            "conditions": conditions,
-        }
-    raise PrimaryConfirmatoryAnalysisError(  # pragma: no cover - unreachable
-        f"Preregistered conditions are not mutually exclusive: {matched}."
+    return interpretation_table_verdict(
+        mean_effect=mean_effect,
+        ci_lower=ci_lower,
+        ci_upper=ci_upper,
+        included_unit_count=included_unit_count,
+        improved_unit_count=improved_unit_count,
+        degenerate_unit_count=degenerate_unit_count,
+        practical_minimum_effect=PRACTICAL_MINIMUM_EFFECT,
+        maximum_degenerate_units=MAXIMUM_DEGENERATE_UNITS,
+        minimum_included_units=MINIMUM_INCLUDED_UNITS,
+        minimum_improved_units_for_positive=MINIMUM_IMPROVED_UNITS_FOR_POSITIVE,
+        planned_unit_count=len(PLANNED_SEEDS),
+        degenerate_override_rule="section_5_degenerate_pool_override",
+        underpowered_override_rule="section_5_underpowered_override",
+        table_rule="section_6_interpretation_table",
     )
 
 
@@ -502,7 +543,8 @@ def analyze_primary_confirmation(run_directory: str | Path) -> dict[str, Any]:
     return payload
 
 
-def _wilcoxon(deltas: Sequence[float]) -> dict[str, Any]:
+def wilcoxon_secondary(deltas: Sequence[float]) -> dict[str, Any]:
+    """Two-sided Wilcoxon signed-rank on paired deltas, labelled secondary."""
     values = np.asarray(list(deltas), dtype=float)
     nonzero = values[values != 0.0]
     if nonzero.size == 0:
@@ -527,6 +569,9 @@ def _wilcoxon(deltas: Sequence[float]) -> dict[str, Any]:
             "outcome; significance alone never establishes success."
         ),
     }
+
+
+_wilcoxon = wilcoxon_secondary
 
 
 def _evaluation_unit(seed: int) -> str:
