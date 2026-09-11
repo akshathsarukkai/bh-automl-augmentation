@@ -77,28 +77,27 @@ prefer held-out group splits such as held-out ligands or aryl halides.
 From the repository root:
 
 ```bash
-python -m pip install -e .
-python -m pip install -r requirements.txt
+python -m pip install -e ".[dev,science]"
 ```
 
-Run the fixture-data test suite first:
+The `science` extra installs XGBoost and RDKit pinned to `2023.9.6`, the
+version that produced the canonical dataset's stored reaction identities. A
+different RDKit canonicalizes differently and silently breaks the candidate
+eligibility gate (see `docs/CANDIDATE_SCOPE.md`, section 7), so the pin is part
+of the scientific contract, not a convenience.
+
+Run the test suite first (use `python -m pytest`, not the bare `pytest` script,
+so the repository root is on `sys.path`):
 
 ```bash
-pytest
+python -m pytest
 ```
 
-The tests use small synthetic fixtures and do not require internet access, the
-real Buchwald-Hartwig dataset, TDC, XGBoost, CatBoost, or Optuna.
-
-RDKit is optional for most of the repository, but required for Morgan
-fingerprints and real randomized SMILES behavior:
-
-```bash
-python -m pip install rdkit
-```
-
-If RDKit is unavailable, non-featurization utilities and their tests still run,
-but the three supported reaction feature modes require RDKit.
+The unit tests use small synthetic fixtures and do not require internet access,
+the real Buchwald-Hartwig dataset, TDC, CatBoost, or Optuna. Without RDKit or
+XGBoost the identity-dependent and confirmatory-method tests skip themselves and
+say so under `pytest -ra`. The full suite takes about 25 minutes because the
+Phase 14/15 benchmark module spawns isolated fit workers.
 
 ## Code Quality And CI
 

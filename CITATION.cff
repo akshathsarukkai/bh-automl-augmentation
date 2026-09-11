@@ -1,0 +1,19 @@
+cff-version: 1.2.0
+message: "If you use this code or its preregistered results, please cite it as below."
+title: "bh-automl-augmentation: preregistered evaluation of condition-transfer augmentation for low-data Buchwald-Hartwig yield prediction"
+type: software
+authors:
+  - family-names: Sarukkai
+    given-names: Akshath
+version: 0.1.0
+date-released: 2026-09-11
+license: MIT
+repository-code: "https://github.com/akshathsarukkai/bh-automl-augmentation"
+abstract: >-
+  Research code and preregistered confirmatory experiments testing whether
+  condition-transfer data augmentation improves low-data Buchwald-Hartwig
+  reaction-yield prediction. Includes canonical seven-role reaction identity,
+  group-safe splits, a repository-global one-shot outer-test evaluation
+  registry, hash-addressed result manifests, and two preregistered
+  confirmatory experiments whose verdicts are re-derivable from committed
+  artifacts.

@@ -5,9 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bh-automl-augmentation"
 version = "0.1.0"
-description = "MVP research code for safe augmentation in low-data Buchwald-Hartwig yield prediction."
+description = "Preregistered evaluation of condition-transfer augmentation for low-data Buchwald-Hartwig yield prediction."
 readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Akshath Sarukkai"}]
 requires-python = ">=3.10"
+classifiers = [
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Chemistry",
+]
 dependencies = [
   "pandas",
   "numpy",
@@ -23,6 +31,17 @@ dev = [
   "pytest",
   "ruff",
 ]
+# The scientific runners need RDKit pinned to the version that produced the
+# canonical dataset's stored reaction identities (see docs/CANDIDATE_SCOPE.md
+# section 7) and XGBoost for the confirmatory method family.
+science = [
+  "rdkit==2023.9.6",
+  "xgboost",
+]
+
+[project.urls]
+Repository = "https://github.com/akshathsarukkai/bh-automl-augmentation"
+Issues = "https://github.com/akshathsarukkai/bh-automl-augmentation/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

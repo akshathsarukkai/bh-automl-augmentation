@@ -1,11 +1,11 @@
-pandas
-numpy
-scikit-learn
-scipy
-pytest
-matplotlib
-PyYAML
-torch
+# Runtime dependencies are declared once, in pyproject.toml. Install the
+# package instead of this file:
+#
+#   python -m pip install -e ".[dev]"          # library + pytest + ruff
+#   python -m pip install -e ".[dev,science]"  # ... + pinned RDKit + XGBoost
+#
+# This file is kept only as a convenience mirror for tools that expect one.
+-e .[dev]
 
 # Optional dataset source, install manually when needed:
 # PyTDC
@@ -15,5 +15,5 @@ torch
 # canonical_reaction_key values, or stored and freshly computed reaction
 # identities land in two different vocabularies and stop intersecting. See
 # results/corrected_canonical_data_audit/run_manifest.json and
-# docs/CANDIDATE_SCOPE.md section 7.
+# docs/CANDIDATE_SCOPE.md section 7. The `science` extra pins it:
 # rdkit==2023.9.6
