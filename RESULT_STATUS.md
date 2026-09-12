@@ -70,10 +70,16 @@ executed clean-checkout reproduction verified, and what a human must supply.
 | Phase 13 low-complexity representation-learning baselines | Development evidence |
 | Phase 18 recommendation simulation (`results/autonomous_execution/phase_18/corrected-20260727-phase18-production-v1`) | Development evidence |
 | Phase 18 prospective package (`results/autonomous_execution/phase_18/corrected-20260728-phase18-prospective-package-v1`) | Development evidence |
+| Exploratory training-fraction sweep, observed-only transfer vs real-only at fractions 0.01 and 0.10, seeds 6–14 (`EXPLORATORY_FRACTION_SWEEP.md`; committed at `results/corrected_exploratory_fraction_sweep_analysis_v1`) | Development evidence |
 
 Every entry here is a leakage-audited result with a frozen plan, a hash-verified
 bundle, and a single outer-test evaluation per unit — but the hypothesis was not
 pre-registered ahead of seeing the result. None of these is a confirmatory claim.
+The training-fraction sweep in particular was declared post hoc, after both
+confirmatory verdicts were known; it applies no interpretation table and its
+descriptive result (mean paired RMSE reduction −0.415 at fraction 0.01 and
+−0.508 at 0.10, both intervals inside the ±1.0 band, augmentation never ahead)
+may not be quoted as a verdict.
 
 **The Phase 18 prospective package is a proposal, not a validated outcome.**
 Prospective laboratory validation has **not** been performed. The package

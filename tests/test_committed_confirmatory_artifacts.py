@@ -102,3 +102,49 @@ def test_observed_only_control_arm_degeneracy_is_committed_evidence() -> None:
             assert json.loads(record_path.read_text())["degenerate_unit_hash"] == (
                 row["degenerate_unit_hash"]
             )
+
+
+# ------------------------------------------------ exploratory fraction sweep
+
+SWEEP_ANALYSIS = ROOT / "results/corrected_exploratory_fraction_sweep_analysis_v1"
+SWEEP_POOL = ROOT / "results/corrected_exploratory_fraction_sweep_pool_accounting_v1"
+SWEEP_RUNS = {
+    0.01: "results/corrected_exploratory_fraction_sweep_f0p01",
+    0.10: "results/corrected_exploratory_fraction_sweep_f0p10",
+}
+
+
+def test_exploratory_sweep_is_rederived_and_carries_no_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts.run_exploratory_fraction_sweep_analysis import declaration_commit
+
+    from bh_augmentation.observed_only_confirmatory_analysis import exploratory_sweep_design
+
+    monkeypatch.chdir(ROOT)
+    summary = json.loads((SWEEP_ANALYSIS / "fraction_sweep_summary.json").read_text())
+    commit = declaration_commit(summary["declaration"]["document"])
+    assert summary["declaration"]["commit"] == commit
+    rows = {row["train_fraction"]: row for row in summary["rows"]}
+    assert set(rows) == {0.01, 0.05, 0.1}
+    assert rows[0.05]["label"] == "confirmatory" and rows[0.05]["verdict"] == "null"
+    for fraction, run_root in SWEEP_RUNS.items():
+        slug = f"{fraction:.2f}".replace(".", "p")
+        committed = json.loads((SWEEP_ANALYSIS / f"analysis_f{slug}.json").read_text())
+        design = exploratory_sweep_design(fraction, declaration_commit=commit)
+        payload = analyze_observed_only_confirmation(
+            run_root, str(SWEEP_POOL.relative_to(ROOT)), design=design
+        )
+        assert payload["analysis_hash"] == committed["analysis_hash"]
+        assert payload == committed
+        assert "preregistration" not in payload
+        assert payload["verdict"]["verdict"] == "not_applicable_exploratory"
+        assert payload["accounting"]["all_arm_unit_pairs_accounted_for"] is True
+        assert payload["accounting"]["planned_arm_unit_pairs"] == 18
+        assert rows[fraction]["label"] == "exploratory"
+        assert rows[fraction]["analysis_hash"] == committed["analysis_hash"]
+        assert (SWEEP_ANALYSIS / f"report_f{slug}.md").read_text() == (
+            render_observed_only_report(payload)
+        )
+    verification = verify_manifest(SWEEP_ANALYSIS)
+    assert verification.verified_output_count == 6, verification.to_dict()

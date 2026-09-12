@@ -38,6 +38,25 @@ observed-only rule admits reconstruct the hidden measured yields with Spearman
 0.76 and MAE 11.7 yield points, so the transfer is chemically informative even
 though it does not translate into outer-test gain.
 
+### Exploratory (post hoc, no verdict): effect versus training fraction
+
+Declared in `EXPLORATORY_FRACTION_SWEEP.md` before its outer tests were read
+and run on the same seeds at the two fractions the confirmatory work had not
+touched. It is descriptive only and cannot be promoted to a claim.
+
+| Label | Fraction | Labeled rows | Accepted synthetic rows per unit | Mean paired RMSE reduction (95% CI) | Units improved |
+| --- | ---: | ---: | --- | --- | --- |
+| exploratory | 0.01 | 32 | 22–27 | −0.415 [−0.806, −0.010] | 3 of 9 |
+| confirmatory | 0.05 | 159 | 101–125 | −0.377 [−0.746, −0.035] | 2 of 9 |
+| exploratory | 0.10 | 317 | 185–212 | −0.508 [−0.707, −0.273] | 1 of 9 |
+
+At no fraction does the augmented arm beat the matched real-only control, and
+every interval sits inside the ±1.0 RMSE band. The pseudo-labels get more
+accurate as the fraction grows (Spearman 0.64 → 0.76 → 0.78 against the
+withheld yields), while the outer-test effect does not improve. All 36 sweep
+units completed; none was degenerate. Full outputs, one analysis per fraction
+and the comparison table: `results/corrected_exploratory_fraction_sweep_analysis_v1/`.
+
 Two further structural findings: the supervised autoencoder failed its
 predefined retention criterion (Phase 14), and informed acquisition strategies
 recover about 4× the high-yield hits of random selection over a 320-experiment
@@ -55,10 +74,12 @@ python -m pytest tests/test_committed_confirmatory_artifacts.py -q
 
 That test recomputes each verdict from the committed per-unit outer-test
 metrics, frozen policies, claims, degenerate-unit records and pool accounting,
-compares the recomputed analysis hash with the committed one, and verifies both
-scientific manifests. To read the reports directly:
+compares the recomputed analysis hash with the committed one, and verifies the
+scientific manifests. It does the same for the exploratory sweep. To read the
+reports directly:
 
 - `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1/confirmatory_report.md`
+- `results/corrected_exploratory_fraction_sweep_analysis_v1/fraction_sweep_summary.md` (exploratory)
 - `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis/confirmatory_report.md`
 
 The full-scale inputs those runs consumed (the 12 MB canonical dataset and the

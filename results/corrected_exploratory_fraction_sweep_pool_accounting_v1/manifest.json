@@ -1,0 +1,196 @@
+{
+  "candidate_scope_modes": [
+    "observed_only_low_data",
+    "globally_unmeasured_prospective"
+  ],
+  "command": "scripts/run_candidate_scope_reanalysis.py --config configs/corrected_exploratory_fraction_sweep_pool_accounting.yaml --output-directory results/corrected_exploratory_fraction_sweep_pool_accounting_v1",
+  "config_hash": "18393def415fb4f0113f68cadcfb62eab45817806f4c7133df7f877ce101ab37",
+  "config_path": "configs/corrected_exploratory_fraction_sweep_pool_accounting.yaml",
+  "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+  "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+  "dependency_versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.11.16",
+    "rdkit": "2023.9.6",
+    "scikit-learn": "1.9.0",
+    "xgboost": "3.2.0"
+  },
+  "feature_metadata_hash": {
+    "seed=10|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=10|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=11|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=11|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=12|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=12|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=13|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=13|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=14|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=14|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=6|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=6|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=7|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=7|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=8|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=8|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=9|fraction=0.01": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=9|fraction=0.1": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe"
+  },
+  "git_commit": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+  "git_dirty": false,
+  "historical_results_loaded": false,
+  "output_directory": "results/corrected_exploratory_fraction_sweep_pool_accounting_v1",
+  "output_hashes": {
+    "candidate_audit.csv": "51dfb0dc5beb8108f822e7227b7d27c76ce401b0ecd18603f3700e5806ef10a7",
+    "candidate_pool_statistics.csv": "f54b5f2690d5479b72e507d92f9580de41461249a80bda5b78b7531a1992be2e",
+    "candidate_scope_comparison.csv": "385f26a0a6d106be27ba2ffb23ac4e38f3100458f73690e1609df59e21953c58",
+    "leakage_contracts.json": "d19105f4fac9762b941ad6c02f33772d2d51eada612674d9df3705201dc3c993",
+    "partition_audit.csv": "a93b150677c295add066aef307033c3786fadd5337dc637fcefab65962ea37ed",
+    "validation_metrics.csv": "5059579184b756809d9516083c40104f2549dcdb55c17c79410319170027c97f",
+    "withheld_cell_oracle.csv": "3876e573124b9f6d6c149183f4ac9b62c503ecb283b559c26d7cceea9c5af4d4",
+    "withheld_cell_oracle_by_change_type.csv": "8e1bc553539a3e72efd4615787ebcb8df41e96594ea0ad25a6c0a064804ee1ae"
+  },
+  "resolved_config": {
+    "candidate_scope": {
+      "modes": [
+        "observed_only_low_data",
+        "globally_unmeasured_prospective"
+      ]
+    },
+    "dataset": {
+      "path": "data/processed/bh_canonical_roles_v1.csv"
+    },
+    "features": {
+      "fingerprint_backend": "rdkit",
+      "kind": "bh_role_separated",
+      "n_bits": 2048,
+      "radius": 2
+    },
+    "metrics": [
+      "rmse",
+      "mae",
+      "r2",
+      "spearman"
+    ],
+    "models": [
+      {
+        "name": "xgboost",
+        "params": {
+          "learning_rate": 0.05,
+          "max_depth": 4,
+          "n_estimators": 300,
+          "n_jobs": 1,
+          "tree_method": "hist"
+        }
+      }
+    ],
+    "oracle": {
+      "high_yield_threshold": 80.0,
+      "top_k_fractions": [
+        0.1,
+        0.2
+      ]
+    },
+    "output": {
+      "directory": "results/corrected_exploratory_fraction_sweep_pool_accounting_v1"
+    },
+    "scientific_run": true,
+    "splits": {
+      "directory": "results/corrected_canonical_splits_phase15",
+      "seeds": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "train_fractions": [
+        0.01,
+        0.1
+      ]
+    },
+    "transfer": {
+      "anonymous": {
+        "candidates_per_real": 2,
+        "clip_y_max": 100.0,
+        "clip_y_min": 0.0,
+        "donor_similarity_backend": "rdkit",
+        "donor_similarity_n_bits": 2048,
+        "donor_similarity_radius": 2,
+        "donor_strategy": "nearest_substrate",
+        "fallback_policy": "reject",
+        "high_yield_threshold": 80.0,
+        "label_strategy": "teacher_ensemble",
+        "max_candidates_per_source": 1,
+        "max_teacher_std": null,
+        "min_similarity": 0.0,
+        "n_neighbors": 10,
+        "requested_roles": [
+          "ligand",
+          "base"
+        ],
+        "role_change_requirement": "all",
+        "synthetic_multiplier": 1.0,
+        "teacher_models": [
+          "extra_trees",
+          "random_forest"
+        ]
+      },
+      "typed": {
+        "clip_y_max": 100.0,
+        "clip_y_min": 0.0,
+        "donor_similarity_backend": "rdkit",
+        "donor_similarity_n_bits": 2048,
+        "donor_similarity_radius": 2,
+        "donor_strategy": "same_substrate_different_role",
+        "fallback_policy": "reject",
+        "label_strategy": "teacher_ensemble",
+        "max_candidates_per_source": 1,
+        "max_resample_attempts": 10,
+        "max_teacher_std": null,
+        "min_similarity": 0.0,
+        "role_change_requirement": "all",
+        "role_transfer_mode": "ligand_base",
+        "synthetic_multiplier": 1.0,
+        "teacher_models": [
+          "extra_trees",
+          "random_forest"
+        ]
+      }
+    }
+  },
+  "result_status": "corrected_revalidation",
+  "run_id": "corrected-20260912T003412Z",
+  "schema_version": "bh-candidate-scope-reanalysis-v1",
+  "seeds": [
+    42
+  ],
+  "split_hashes": {
+    "seed=10|fraction=0.01": "a5eb62a35fdf2925e51bbaff2dcad150175b234ef56102fa38a59a7881000f04",
+    "seed=10|fraction=0.1": "f2d89a77eb0b6f1441e9a1414c3fa4bd74f6d84e7040e8e51088ec39b9e5ac5d",
+    "seed=11|fraction=0.01": "1542884d66759eb57fa21b0f2274831771769a64bfd1cd7e36933864b1443726",
+    "seed=11|fraction=0.1": "6e91d5f568d87ec1f7db6f8ec73b3fa9c9ed1360d15cc54dccffe33c15957e85",
+    "seed=12|fraction=0.01": "1c89e43eddcb8754981d86b6db3be6a9d822213f82cbd586ae12531ede4426ec",
+    "seed=12|fraction=0.1": "37746112e03ae75ab00e4d151f2090c26415e77e57817baed8db05bf03ef11d4",
+    "seed=13|fraction=0.01": "96dbd4977e42db346cba195a04131c9caf8391023f12e08c8a8c47beb516080d",
+    "seed=13|fraction=0.1": "11169eb6c9751e8aae3fe91a9a3cf24672121a457252f80551196c6994847c66",
+    "seed=14|fraction=0.01": "c400fdb343320487683c99dbafde055602389675517d2934716abcf17d037856",
+    "seed=14|fraction=0.1": "d25d4cb6b8dceff66362de2d9993d4ba4492e74cb503be508b5fc8d13566cbb0",
+    "seed=6|fraction=0.01": "b88c4b9b7aafdd0d8ddda0182152f1e8c4f59bffde7606077e254ef023523d93",
+    "seed=6|fraction=0.1": "507938f4ca55c5ee3197e629abb4b3852050b962f00d9e780f888c1ad07be838",
+    "seed=7|fraction=0.01": "f2dd0971e69426d6d06df96a43bdb1f1a17d05c112276c7d82d9844b65f7d2a0",
+    "seed=7|fraction=0.1": "3c210547a97a327ce08a7ad9c8d8448f49ba6c0e79f593229cde48f49b22c458",
+    "seed=8|fraction=0.01": "fb874a9eb4a10e84c57760ed4c8bc2fbf906f9c25401a67c7265751dfd67dd5e",
+    "seed=8|fraction=0.1": "a53acb80af145c23e97522a829178727f2da345c58fc11a0751c4f6eaa0b15ab",
+    "seed=9|fraction=0.01": "374f52018244de6d47f3658743c21c3012e23e9114104c56bbf72fad5135253c",
+    "seed=9|fraction=0.1": "161a8dd8759c1b94fad188c22b09dbb57e769e4266cef4582672a63b0cf5b5f9"
+  },
+  "timestamp": "2026-09-12T00:34:12.804745+00:00",
+  "train_fractions": [
+    1.0
+  ]
+}

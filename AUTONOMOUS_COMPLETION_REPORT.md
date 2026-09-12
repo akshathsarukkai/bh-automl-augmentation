@@ -41,6 +41,12 @@
 >    through `dfbef2b` had in fact been pushed before this addendum, and the
 >    work described here has been pushed as well. The reproduction flag in
 >    section 12 is `--run-directory`, not `--result-directory`.
+> 5. **An exploratory training-fraction sweep was declared and run afterwards**
+>    (`EXPLORATORY_FRACTION_SWEEP.md`, fractions 0.01 and 0.10, seeds 6–14,
+>    36 units, none degenerate). It is development evidence with no verdict:
+>    mean paired RMSE reduction −0.415 [−0.806, −0.010] at 0.01 and −0.508
+>    [−0.707, −0.273] at 0.10, augmentation never ahead of real-only at any
+>    fraction. Committed at `results/corrected_exploratory_fraction_sweep_analysis_v1/`.
 >
 > Nothing here changes the Phase 14 or Phase 15 verdicts.
 

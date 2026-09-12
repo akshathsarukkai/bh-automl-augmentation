@@ -1,0 +1,21 @@
+{
+  "evaluation_unit": "seed=10|train_fraction=0.1|comparison=model_policy_search",
+  "final_evaluation_manifest_hash": "0fece6158721f182dc558e41f89d5cfb6225a4f95f8759d260e0b9cfcd3e5208",
+  "final_test_metrics_sha256": "0f77f7973a1c4e9c22f534580448b812b1f6a52f11364d1a69f0bf572edfbaeb",
+  "frozen_policy_hash": "dd05844a61d7be9ecb13d9fcaef7e981415b140401929b494f638aacb78b61b5",
+  "outer_test_prediction_batches": 1,
+  "schema_version": "bh-final-evaluation-claim-v1",
+  "scientific_binding": {
+    "canonicalization_version": "bh-rdkit-isomeric-v1",
+    "commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+    "config_hash": "d99e11cc4576eed3f178bd1a969010d56ba7e9081118fb1f9662f9094b5dfde2",
+    "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+    "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "per_seed_split_hash": "293c565befffceaabe5e8046f86867c57ec7071787ef85aa1aa653d9ebf94c07",
+    "source_id_split_hash": "f2d89a77eb0b6f1441e9a1414c3fa4bd74f6d84e7040e8e51088ec39b9e5ac5d",
+    "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+    "split_hash": "293c565befffceaabe5e8046f86867c57ec7071787ef85aa1aa653d9ebf94c07",
+    "split_schema_version": "bh-canonical-grouped-splits-v1"
+  },
+  "status": "complete"
+}

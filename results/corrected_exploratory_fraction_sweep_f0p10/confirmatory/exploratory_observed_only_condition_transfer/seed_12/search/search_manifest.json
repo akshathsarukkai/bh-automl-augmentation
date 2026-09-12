@@ -1,0 +1,202 @@
+{
+  "frozen_policy_hash": "293d5ba6b047a505d62a745cb6096dfb9a19dec4b4a94e68dfdf97396e1f3848",
+  "payload": {
+    "candidate_policy_hashes": [
+      "276c149e780e3e0542a4c41bd81d69632dbe7eaf09a357dbad03a9032165b281",
+      "cc4be03253e2014deef0672e362dca3753905be04a96da4e47ca1ab7d03007ce",
+      "b0e585993940053a3e26c581c5f2ad00a21945e54e910c49f9bd7eae2fa47e6a"
+    ],
+    "evaluation_unit": "seed=12|train_fraction=0.1|comparison=model_policy_search",
+    "lower_is_better": true,
+    "outer_test_labels_accessed": false,
+    "outer_test_metric_evaluations": 0,
+    "outer_test_predictions_generated": false,
+    "run_type": "policy_search",
+    "scientific_binding": {
+      "canonicalization_version": "bh-rdkit-isomeric-v1",
+      "commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "config_hash": "d7c109060d655a64ae3576bd5d571d35e45c0a32c7321d6b3924ea86e172cef1",
+      "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+      "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+      "per_seed_split_hash": "761b33155aa1dd42347514b222cf18af6d360cb062ec5814202b72f875b0c571",
+      "source_id_split_hash": "37746112e03ae75ab00e4d151f2090c26415e77e57817baed8db05bf03ef11d4",
+      "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+      "split_hash": "761b33155aa1dd42347514b222cf18af6d360cb062ec5814202b72f875b0c571",
+      "split_schema_version": "bh-canonical-grouped-splits-v1"
+    },
+    "scientific_config": {
+      "candidate_scope": {
+        "mode": "observed_only_low_data"
+      },
+      "dataset": {
+        "path": "data/processed/bh_canonical_roles_v1.csv"
+      },
+      "features": {
+        "fingerprint_backend": "rdkit",
+        "kind": "bh_role_separated",
+        "n_bits": 2048,
+        "radius": 2
+      },
+      "low_data": {
+        "train_fractions": [
+          0.1
+        ]
+      },
+      "metrics": [
+        "rmse",
+        "mae",
+        "r2",
+        "spearman"
+      ],
+      "policy_search": {
+        "lower_is_better": true,
+        "metrics": [
+          "rmse",
+          "mae",
+          "r2",
+          "spearman"
+        ],
+        "model_policies": [
+          {
+            "method": "anonymous",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.05,
+              "max_depth": 6,
+              "n_estimators": 300,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "anonymous-xgb-0",
+            "transfer_config": {
+              "candidates_per_real": 2,
+              "clip_y_max": 100.0,
+              "clip_y_min": 0.0,
+              "donor_similarity_backend": "rdkit",
+              "donor_similarity_n_bits": 2048,
+              "donor_similarity_radius": 2,
+              "donor_strategy": "nearest_substrate",
+              "fallback_policy": "reject",
+              "high_yield_threshold": 80.0,
+              "label_strategy": "teacher_ensemble",
+              "max_candidates_per_source": 1,
+              "max_teacher_std": null,
+              "min_similarity": 0.0,
+              "n_neighbors": 10,
+              "random_state": 12,
+              "requested_roles": [
+                "ligand",
+                "base"
+              ],
+              "role_change_requirement": "all",
+              "synthetic_multiplier": 1.0,
+              "teacher_models": [
+                "extra_trees",
+                "random_forest"
+              ]
+            }
+          },
+          {
+            "method": "anonymous",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.03,
+              "max_depth": 4,
+              "n_estimators": 500,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "anonymous-xgb-1",
+            "transfer_config": {
+              "candidates_per_real": 2,
+              "clip_y_max": 100.0,
+              "clip_y_min": 0.0,
+              "donor_similarity_backend": "rdkit",
+              "donor_similarity_n_bits": 2048,
+              "donor_similarity_radius": 2,
+              "donor_strategy": "nearest_substrate",
+              "fallback_policy": "reject",
+              "high_yield_threshold": 80.0,
+              "label_strategy": "teacher_ensemble",
+              "max_candidates_per_source": 1,
+              "max_teacher_std": null,
+              "min_similarity": 0.0,
+              "n_neighbors": 10,
+              "random_state": 12,
+              "requested_roles": [
+                "ligand",
+                "base"
+              ],
+              "role_change_requirement": "all",
+              "synthetic_multiplier": 1.0,
+              "teacher_models": [
+                "extra_trees",
+                "random_forest"
+              ]
+            }
+          },
+          {
+            "method": "anonymous",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.02,
+              "max_depth": 3,
+              "n_estimators": 800,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "anonymous-xgb-2",
+            "transfer_config": {
+              "candidates_per_real": 2,
+              "clip_y_max": 100.0,
+              "clip_y_min": 0.0,
+              "donor_similarity_backend": "rdkit",
+              "donor_similarity_n_bits": 2048,
+              "donor_similarity_radius": 2,
+              "donor_strategy": "nearest_substrate",
+              "fallback_policy": "reject",
+              "high_yield_threshold": 80.0,
+              "label_strategy": "teacher_ensemble",
+              "max_candidates_per_source": 1,
+              "max_teacher_std": null,
+              "min_similarity": 0.0,
+              "n_neighbors": 10,
+              "random_state": 12,
+              "requested_roles": [
+                "ligand",
+                "base"
+              ],
+              "role_change_requirement": "all",
+              "synthetic_multiplier": 1.0,
+              "teacher_models": [
+                "extra_trees",
+                "random_forest"
+              ]
+            }
+          }
+        ],
+        "selection_metric": "rmse"
+      },
+      "splits": {
+        "directory": "results/corrected_canonical_splits_phase15",
+        "method": "canonical_saved"
+      }
+    },
+    "search_metrics_sha256": "5684cff53b0e3ebbb54e3d34501ca6fd0cdf554d92e7b7046885f34d698d9e66",
+    "selected_policy_hash": "276c149e780e3e0542a4c41bd81d69632dbe7eaf09a357dbad03a9032165b281",
+    "selection_data_roles": [
+      "train",
+      "valid"
+    ],
+    "selection_metric": "rmse",
+    "supported_methods": [
+      "real_only",
+      "anonymous",
+      "role_aware"
+    ],
+    "test_evaluated": false
+  },
+  "schema_version": "bh-policy-search-manifest-v1",
+  "search_manifest_hash": "fe02f9a5db96c36e7da0d56c7f050f625b31397278ca02e89e5b503bd6c699c9",
+  "status": "complete"
+}

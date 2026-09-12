@@ -1,0 +1,77 @@
+{
+  "command": "python scripts/run_exploratory_fraction_sweep_analysis.py --run-root results/corrected_exploratory_fraction_sweep_f0p01 0.01 --run-root results/corrected_exploratory_fraction_sweep_f0p10 0.10 --pool-accounting-directory results/corrected_exploratory_fraction_sweep_pool_accounting_v1 --output-directory results/corrected_exploratory_fraction_sweep_analysis_v1",
+  "config_hash": "a97fd825073e0e5d7c1c913d96d3bf5a3b0e48723deeedb53f0fa0ce86ef06f9",
+  "created_at": "2026-09-12T00:47:55.588535Z",
+  "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+  "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+  "dependency_versions": {
+    "PyYAML": "6.0.3",
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.11.16",
+    "rdkit": "2023.9.6",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.17.1",
+    "torch": "2.13.0",
+    "xgboost": "3.2.0"
+  },
+  "exploratory": true,
+  "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+  "git_commit": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+  "git_dirty_at_execution": false,
+  "manifest_hash": "65886b35e43a21ee7824fa396801fb3427bf1cb3a327f33dc7b6d0ffbbdfcc52",
+  "output_directory": "results/corrected_exploratory_fraction_sweep_analysis_v1",
+  "output_hashes": {
+    "analysis_f0p01.json": "795022ac2d01b6fa025395858bcd3741a284d714d9c8feab87b9219b22ecf334",
+    "analysis_f0p10.json": "7f7c7f837355bada1efe8b435e3e58cc5ff5445f9b65d4980a81a8fc40980e5c",
+    "fraction_sweep_summary.json": "2c9bea3ff0a1e9cc8666ab55b4f5a3efd54c7dc9d02345ed703c15df3f8ec03c",
+    "fraction_sweep_summary.md": "c66302f30bc1e1692207f5cdc2e1b40360912afdae07953699e279cc710dd671",
+    "report_f0p01.md": "4243294c0fb67edf8dc8ecfb28317429170ac3ba511538bc03b2322bea9f40d5",
+    "report_f0p10.md": "1a104d2b93d607564be80411562be7007559dcfbc58a147ce7f8ad9828382066"
+  },
+  "plan_hash": "5b629dbcbc62312f07b2302eb468db8d5d4e97cf8da422179b83825d58d9cd49",
+  "platform_record": {
+    "byte_order": "little",
+    "cpu_count_affinity": null,
+    "cpu_count_logical": 8,
+    "environment": {
+      "KMP_DUPLICATE_LIB_OK": "True"
+    },
+    "float_repr_style": "short",
+    "machine": "arm64",
+    "max_size": 9223372036854775807,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "processor": "arm",
+    "python_compiler": "Clang 19.1.7 ",
+    "python_implementation": "CPython",
+    "python_version": "3.11.16",
+    "release": "25.5.0",
+    "system": "Darwin",
+    "torch": {
+      "cuda_available": false,
+      "deterministic_algorithms": false,
+      "num_interop_threads": 8,
+      "num_threads": 6,
+      "version": "2.13.0"
+    }
+  },
+  "resolved_scientific_config": {
+    "declaration": {
+      "commit": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "document": "EXPLORATORY_FRACTION_SWEEP.md"
+    },
+    "fractions": [
+      0.01,
+      0.1
+    ]
+  },
+  "row_counts": {
+    "fractions": 2,
+    "summary_rows": 3
+  },
+  "schema_version": "bh-scientific-run-manifest-v1",
+  "split_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+  "status": "exploratory_fraction_sweep_analysis_complete",
+  "summary_hash": "c6a123bf74a30dcdafa4a095c1fe7d3900cafb3db9f40345175b7b83c98d9ca3",
+  "verdict": "not_applicable_exploratory"
+}

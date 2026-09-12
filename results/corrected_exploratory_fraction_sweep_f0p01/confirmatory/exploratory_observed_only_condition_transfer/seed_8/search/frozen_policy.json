@@ -1,0 +1,70 @@
+{
+  "binding": {
+    "canonicalization_version": "bh-rdkit-isomeric-v1",
+    "commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+    "config_hash": "9be577b9425fc49c68fda06c1e231c2889e9b0ef466ce773ded4060d9d05bd1f",
+    "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+    "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "per_seed_split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+    "source_id_split_hash": "fb874a9eb4a10e84c57760ed4c8bc2fbf906f9c25401a67c7265751dfd67dd5e",
+    "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+    "split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+    "split_schema_version": "bh-canonical-grouped-splits-v1"
+  },
+  "frozen_policy_hash": "6b5bda328d953a816468976824e2b31837fe8c0cc6dac6f80760e9ce930041c9",
+  "lower_is_better": true,
+  "policy_id": "anonymous-xgb-2",
+  "resolved_policy": {
+    "method": "anonymous",
+    "model": "xgboost",
+    "model_params": {
+      "learning_rate": 0.02,
+      "max_depth": 3,
+      "n_estimators": 800,
+      "n_jobs": 1,
+      "tree_method": "hist"
+    },
+    "seed": 8,
+    "train_fraction": 0.01,
+    "transfer_config": {
+      "candidates_per_real": 2,
+      "clip_y_max": 100.0,
+      "clip_y_min": 0.0,
+      "donor_similarity_backend": "rdkit",
+      "donor_similarity_n_bits": 2048,
+      "donor_similarity_radius": 2,
+      "donor_strategy": "nearest_substrate",
+      "fallback_policy": "reject",
+      "high_yield_threshold": 80.0,
+      "label_strategy": "teacher_ensemble",
+      "max_candidates_per_source": 1,
+      "max_teacher_std": null,
+      "min_similarity": 0.0,
+      "n_neighbors": 10,
+      "random_state": 8,
+      "requested_roles": [
+        "ligand",
+        "base"
+      ],
+      "role_change_requirement": "all",
+      "synthetic_multiplier": 1.0,
+      "teacher_models": [
+        "extra_trees",
+        "random_forest"
+      ]
+    }
+  },
+  "resolved_policy_hash": "93e69b1711259e73044277072bf2d31006616f2f0d6fbcc78890c15d559c5be4",
+  "schema_version": "bh-frozen-policy-v1",
+  "search_manifest_hash": "03138ac2e44a6ba74ee1bf45b8a17ccadf78bb34f4bf3892bd0ff113ba1d02f8",
+  "selection_metric": "rmse",
+  "selection_value": 25.002337465791737,
+  "status": "frozen",
+  "training_protocol": {
+    "method": "real_only_or_training_only_typed_transfer",
+    "outer_test_prediction_batches": 1,
+    "refit_rows": "saved_canonical_training_subset",
+    "synthetic_rows": "training_sources_and_donors_only",
+    "validation_rows": "selection_only_not_refit"
+  }
+}

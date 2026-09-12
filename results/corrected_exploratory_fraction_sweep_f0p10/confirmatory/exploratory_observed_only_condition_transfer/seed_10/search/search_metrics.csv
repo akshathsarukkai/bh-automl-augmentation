@@ -1,0 +1,13 @@
+split,metric,value,policy_id,policy_hash,selected_policy,evaluation_unit,seed,train_fraction,method,model,n_train,n_validation
+valid,rmse,13.70263375986938,anonymous-xgb-0,e9bc5a73b7d2984353cfb09cdcace567122f6cd7bc61e662dbfdd80b33caed9c,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,mae,9.207426498198434,anonymous-xgb-0,e9bc5a73b7d2984353cfb09cdcace567122f6cd7bc61e662dbfdd80b33caed9c,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,r2,0.7529682118280645,anonymous-xgb-0,e9bc5a73b7d2984353cfb09cdcace567122f6cd7bc61e662dbfdd80b33caed9c,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,spearman,0.8594783282203651,anonymous-xgb-0,e9bc5a73b7d2984353cfb09cdcace567122f6cd7bc61e662dbfdd80b33caed9c,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,rmse,13.58420170607939,anonymous-xgb-1,711160a29c18c78d04598a25cfa1bbf4c3bf3030000b68a1d206a95e8488b333,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,mae,9.679360005596676,anonymous-xgb-1,711160a29c18c78d04598a25cfa1bbf4c3bf3030000b68a1d206a95e8488b333,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,r2,0.7572199564846,anonymous-xgb-1,711160a29c18c78d04598a25cfa1bbf4c3bf3030000b68a1d206a95e8488b333,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,spearman,0.8657965360534122,anonymous-xgb-1,711160a29c18c78d04598a25cfa1bbf4c3bf3030000b68a1d206a95e8488b333,False,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,rmse,13.576790121201102,anonymous-xgb-2,efca5ff8331244404489c88eb6294595bd23b90d14f0f83a0fae02ae317e6ce6,True,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,mae,10.003895202788371,anonymous-xgb-2,efca5ff8331244404489c88eb6294595bd23b90d14f0f83a0fae02ae317e6ce6,True,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,r2,0.7574848073846454,anonymous-xgb-2,efca5ff8331244404489c88eb6294595bd23b90d14f0f83a0fae02ae317e6ce6,True,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395
+valid,spearman,0.8724337519881441,anonymous-xgb-2,efca5ff8331244404489c88eb6294595bd23b90d14f0f83a0fae02ae317e6ce6,True,seed=10|train_fraction=0.1|comparison=model_policy_search,10,0.1,anonymous,xgboost,317,395

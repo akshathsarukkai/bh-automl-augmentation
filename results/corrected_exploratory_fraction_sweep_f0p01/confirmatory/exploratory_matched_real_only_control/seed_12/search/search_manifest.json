@@ -1,0 +1,121 @@
+{
+  "frozen_policy_hash": "f710e597e03fe5e39e687c3156841cefa6430927ced72970275ac214a5861c6c",
+  "payload": {
+    "candidate_policy_hashes": [
+      "e02fbcd8cd995a3e02d2d9d919efa73c1148eeec2e0990724b1419ff5533ff80",
+      "f3968d59405c90babc61eb627c5bfbd81c6d766e29e04ac8d1614e428fc0008e",
+      "d24a487d0431b9cf4b72f1ace0acbf1138a04b0471b689687977c0e80bc5f5c9"
+    ],
+    "evaluation_unit": "seed=12|train_fraction=0.01|comparison=model_policy_search",
+    "lower_is_better": true,
+    "outer_test_labels_accessed": false,
+    "outer_test_metric_evaluations": 0,
+    "outer_test_predictions_generated": false,
+    "run_type": "policy_search",
+    "scientific_binding": {
+      "canonicalization_version": "bh-rdkit-isomeric-v1",
+      "commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "config_hash": "d7dbe54337dc265c092271c70c267f8fa8862c098570533e8705556c6ea200b9",
+      "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+      "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+      "per_seed_split_hash": "761b33155aa1dd42347514b222cf18af6d360cb062ec5814202b72f875b0c571",
+      "source_id_split_hash": "1c89e43eddcb8754981d86b6db3be6a9d822213f82cbd586ae12531ede4426ec",
+      "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+      "split_hash": "761b33155aa1dd42347514b222cf18af6d360cb062ec5814202b72f875b0c571",
+      "split_schema_version": "bh-canonical-grouped-splits-v1"
+    },
+    "scientific_config": {
+      "candidate_scope": {
+        "mode": "observed_only_low_data"
+      },
+      "dataset": {
+        "path": "data/processed/bh_canonical_roles_v1.csv"
+      },
+      "features": {
+        "fingerprint_backend": "rdkit",
+        "kind": "bh_role_separated",
+        "n_bits": 2048,
+        "radius": 2
+      },
+      "low_data": {
+        "train_fractions": [
+          0.01
+        ]
+      },
+      "metrics": [
+        "rmse",
+        "mae",
+        "r2",
+        "spearman"
+      ],
+      "policy_search": {
+        "lower_is_better": true,
+        "metrics": [
+          "rmse",
+          "mae",
+          "r2",
+          "spearman"
+        ],
+        "model_policies": [
+          {
+            "method": "real_only",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.05,
+              "max_depth": 6,
+              "n_estimators": 300,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "real_only-xgb-0"
+          },
+          {
+            "method": "real_only",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.03,
+              "max_depth": 4,
+              "n_estimators": 500,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "real_only-xgb-1"
+          },
+          {
+            "method": "real_only",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.02,
+              "max_depth": 3,
+              "n_estimators": 800,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "real_only-xgb-2"
+          }
+        ],
+        "selection_metric": "rmse"
+      },
+      "splits": {
+        "directory": "results/corrected_canonical_splits_phase15",
+        "method": "canonical_saved"
+      }
+    },
+    "search_metrics_sha256": "695846e8532b6b91074b4ce5f04850fd878c995979f927adaff3dafc1084efd2",
+    "selected_policy_hash": "d24a487d0431b9cf4b72f1ace0acbf1138a04b0471b689687977c0e80bc5f5c9",
+    "selection_data_roles": [
+      "train",
+      "valid"
+    ],
+    "selection_metric": "rmse",
+    "supported_methods": [
+      "real_only",
+      "anonymous",
+      "role_aware"
+    ],
+    "test_evaluated": false
+  },
+  "schema_version": "bh-policy-search-manifest-v1",
+  "search_manifest_hash": "d44dd7ddb22ba48ab429464486f94482a9cdcb8de4c8b7ccebe17ab9dafaaac2",
+  "status": "complete"
+}

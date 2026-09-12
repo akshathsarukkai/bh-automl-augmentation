@@ -258,14 +258,23 @@ recompute each verdict without any gitignored input:
 | Result | Committed files |
 | --- | --- |
 | Phase 15 primary confirmation | `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1/` — `final_test_metrics.csv`, `pool_summary.csv`, `summary.csv`, `manifest.json`, `confirmatory_analysis.json`, `confirmatory_report.md`, `confirmatory_analysis_manifest.json` |
+| Exploratory fraction sweep (development evidence) | `results/corrected_exploratory_fraction_sweep_f0p01/` and `..._f0p10/` (same per-unit layout plus `search/pool_accounting.json` sidecars, registry snapshots, file indexes), `results/corrected_exploratory_fraction_sweep_analysis_v1/`, and `results/corrected_exploratory_fraction_sweep_pool_accounting_v1/` (all but its 39 MB `candidate_audit.csv`) |
 | Observed-only condition transfer | `results/corrected_candidate_scope_reanalysis_20260903T194209Z/confirmatory/<family>/seed_<n>/` (`search/` frozen policy, manifest, metrics or `degenerate_unit.json`; `final/` metrics, claim, manifest), `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/` (registry snapshots before and after, `run_file_index.json`, `observed_only_confirmatory_analysis/`), `results/corrected_candidate_scope_reanalysis_20260903T194209Z/candidate_scope_audit/`, and the treatment-size accounting under `results/corrected_observed_only_transfer_pool_accounting_v1/` (all but its 18 MB `candidate_audit.csv`, whose hash is recorded in that bundle's `manifest.json`) |
 
 ```bash
 python -m pytest tests/test_committed_confirmatory_artifacts.py -q
 ```
 
-re-derives both verdicts from those files, compares the recomputed analysis
-hashes with the committed ones, and verifies both analysis manifests. The
+re-derives both verdicts (and the exploratory sweep's analyses) from those
+files, compares the recomputed analysis hashes with the committed ones, and
+verifies the analysis manifests. One caveat for anyone *regenerating* candidate
+pools rather than re-deriving from committed files: after every run recorded
+here, `_cosine_similarity_matrix` gained float64 evaluation and rounding to ten
+decimals so that donor ties break identically across platforms (a
+permutation-stability test failed on Linux CI while passing on macOS). Pools
+regenerated with the new code can differ from the recorded ones only where two
+donors were tied to within 1e-10, and the committed pool accounting is the
+record of what the runs actually used. The
 per-unit files are the bytes the protocol wrote; `run_file_index.json` lists
 the SHA-256 of every file the observed-only run produced, including the ones
 too large to commit.

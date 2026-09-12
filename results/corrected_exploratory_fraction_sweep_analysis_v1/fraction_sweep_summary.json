@@ -1,0 +1,88 @@
+{
+  "confirmatory_reference": {
+    "analysis_hash": "134a3dc01fdec16d31b3a63d93e6b722766238cb494e0c60ebee96860f23e0bb",
+    "path": "results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis/confirmatory_analysis.json",
+    "verdict": "null"
+  },
+  "declaration": {
+    "commit": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+    "document": "EXPLORATORY_FRACTION_SWEEP.md"
+  },
+  "note": "Exploratory rows carry no verdict and cannot be promoted to a claim. The confirmatory row is the committed preregistered result, included for scale.",
+  "rows": [
+    {
+      "accepted_rows_globally_unmeasured_min_max": [
+        0,
+        0
+      ],
+      "accepted_rows_observed_only_min_max": [
+        22,
+        27
+      ],
+      "analysis_hash": "77ca51af62fe99e58bbc8caf38d7bb396534ce3a83860430b38e82e194e595d5",
+      "bootstrap_seed": 1701,
+      "ci_lower": -0.8060362090155676,
+      "ci_upper": -0.009683457505234274,
+      "degenerate_units": 0,
+      "failed_or_missing_units": 0,
+      "improved_units": 3,
+      "included_units": 9,
+      "label": "exploratory",
+      "mean_paired_rmse_reduction": -0.4151195869078374,
+      "n_labeled_train": null,
+      "train_fraction": 0.01,
+      "verdict": "not_applicable_exploratory",
+      "worsened_units": 6
+    },
+    {
+      "accepted_rows_globally_unmeasured_min_max": [
+        0,
+        2
+      ],
+      "accepted_rows_observed_only_min_max": [
+        101,
+        125
+      ],
+      "analysis_hash": "134a3dc01fdec16d31b3a63d93e6b722766238cb494e0c60ebee96860f23e0bb",
+      "bootstrap_seed": 1601,
+      "ci_lower": -0.746037148427509,
+      "ci_upper": -0.034749072348852286,
+      "degenerate_units": 0,
+      "failed_or_missing_units": 0,
+      "improved_units": 2,
+      "included_units": 9,
+      "label": "confirmatory",
+      "mean_paired_rmse_reduction": -0.3768799571329908,
+      "n_labeled_train": null,
+      "train_fraction": 0.05,
+      "verdict": "null",
+      "worsened_units": 7
+    },
+    {
+      "accepted_rows_globally_unmeasured_min_max": [
+        0,
+        3
+      ],
+      "accepted_rows_observed_only_min_max": [
+        185,
+        212
+      ],
+      "analysis_hash": "df2e372cade8dc51198f50cf4846097f021d4bb95a1b0b8c2b3667b74cd933f8",
+      "bootstrap_seed": 1701,
+      "ci_lower": -0.7070609080370789,
+      "ci_upper": -0.2729529018556516,
+      "degenerate_units": 0,
+      "failed_or_missing_units": 0,
+      "improved_units": 1,
+      "included_units": 9,
+      "label": "exploratory",
+      "mean_paired_rmse_reduction": -0.5081640874973863,
+      "n_labeled_train": null,
+      "train_fraction": 0.1,
+      "verdict": "not_applicable_exploratory",
+      "worsened_units": 8
+    }
+  ],
+  "schema_version": "bh-exploratory-fraction-sweep-summary-v1",
+  "summary_hash": "c6a123bf74a30dcdafa4a095c1fe7d3900cafb3db9f40345175b7b83c98d9ca3"
+}

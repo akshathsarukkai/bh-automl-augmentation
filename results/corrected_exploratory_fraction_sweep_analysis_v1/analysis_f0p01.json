@@ -1,0 +1,1134 @@
+{
+  "accounting": {
+    "all_arm_unit_pairs_accounted_for": true,
+    "all_planned_seeds_accounted_for": true,
+    "arm_unit_counts": {
+      "exploratory_matched_real_only_control": {
+        "complete": 9,
+        "degenerate": 0,
+        "missing": 0
+      },
+      "exploratory_observed_only_condition_transfer": {
+        "complete": 9,
+        "degenerate": 0,
+        "missing": 0
+      }
+    },
+    "degenerate_excluded_seeds": [],
+    "degenerate_excluded_unit_count": 0,
+    "failed_or_missing_seeds": [],
+    "failed_or_missing_unit_count": 0,
+    "included_seeds": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "included_unit_count": 9,
+    "planned_arm_unit_pairs": 18,
+    "planned_unit_count": 9
+  },
+  "analysis_hash": "77ca51af62fe99e58bbc8caf38d7bb396534ce3a83860430b38e82e194e595d5",
+  "declaration": {
+    "bootstrap_alpha": 0.05,
+    "bootstrap_replicates": 10000,
+    "bootstrap_seed": 1701,
+    "commit": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+    "comparator_family": "exploratory_matched_real_only_control",
+    "document": "EXPLORATORY_FRACTION_SWEEP.md",
+    "estimand": "comparator_rmse_minus_augmented_rmse_per_seed",
+    "interpretation_table_applied": false,
+    "label": "exploratory",
+    "maximum_degenerate_units": 2,
+    "metric": "rmse",
+    "minimum_improved_units_for_positive": 7,
+    "minimum_included_units": 7,
+    "planned_seeds": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "practical_minimum_effect": 1.0,
+    "primary_candidate_scope_mode": "observed_only_low_data",
+    "primary_family": "exploratory_observed_only_condition_transfer",
+    "secondary_control_candidate_scope_mode": "globally_unmeasured_prospective",
+    "secondary_control_family": null,
+    "train_fraction": 0.01,
+    "transfer_kind": "anonymous"
+  },
+  "oracle": {
+    "by_transfer_kind": {
+      "anonymous": {
+        "mean": {
+          "generated_candidate_count": 24.77777777777778,
+          "hidden_cell_coverage_fraction": 0.007911167872853696,
+          "hidden_overlap_count": 24.77777777777778,
+          "hidden_overlap_fraction_of_candidates": 1.0,
+          "high_yield_enrichment": 0.0,
+          "high_yield_precision": 0.0,
+          "high_yield_recall": 0.0,
+          "pseudo_label_bias": 1.1637559654116971,
+          "pseudo_label_mae": 14.875121594261158,
+          "pseudo_label_rmse": 19.675003269964808,
+          "pseudo_label_spearman": 0.6438263465643822,
+          "unique_canonical_candidate_count": 24.77777777777778
+        },
+        "per_seed": {
+          "10": {
+            "generated_candidate_count": 23.0,
+            "hidden_cell_coverage_fraction": 0.007343550446998723,
+            "hidden_overlap_count": 23.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": -2.6239815828220667,
+            "pseudo_label_mae": 19.053318466245404,
+            "pseudo_label_rmse": 25.093424201144224,
+            "pseudo_label_spearman": 0.4525691699604743,
+            "unique_canonical_candidate_count": 23.0
+          },
+          "11": {
+            "generated_candidate_count": 25.0,
+            "hidden_cell_coverage_fraction": 0.007982120051085569,
+            "hidden_overlap_count": 25.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": -1.8954197258604262,
+            "pseudo_label_mae": 14.820436091538234,
+            "pseudo_label_rmse": 20.708785795084342,
+            "pseudo_label_spearman": 0.6338461538461537,
+            "unique_canonical_candidate_count": 25.0
+          },
+          "12": {
+            "generated_candidate_count": 27.0,
+            "hidden_cell_coverage_fraction": 0.008620689655172414,
+            "hidden_overlap_count": 27.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": 0.0,
+            "high_yield_precision": 0.0,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": 7.49151203412649,
+            "pseudo_label_mae": 16.151061889087813,
+            "pseudo_label_rmse": 21.995606006302275,
+            "pseudo_label_spearman": 0.7075702075702076,
+            "unique_canonical_candidate_count": 27.0
+          },
+          "13": {
+            "generated_candidate_count": 26.0,
+            "hidden_cell_coverage_fraction": 0.008301404853128991,
+            "hidden_overlap_count": 26.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": 1.1166572309817193,
+            "pseudo_label_mae": 17.94926557058255,
+            "pseudo_label_rmse": 22.94702011377141,
+            "pseudo_label_spearman": 0.5582905982905982,
+            "unique_canonical_candidate_count": 26.0
+          },
+          "14": {
+            "generated_candidate_count": 25.0,
+            "hidden_cell_coverage_fraction": 0.007982120051085569,
+            "hidden_overlap_count": 25.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": -4.257347429621627,
+            "pseudo_label_mae": 12.247706683704234,
+            "pseudo_label_rmse": 17.841260981568034,
+            "pseudo_label_spearman": 0.8055395417331456,
+            "unique_canonical_candidate_count": 25.0
+          },
+          "6": {
+            "generated_candidate_count": 22.0,
+            "hidden_cell_coverage_fraction": 0.0070242656449553,
+            "hidden_overlap_count": 22.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": 0.0,
+            "high_yield_precision": 0.0,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": 8.961924873086451,
+            "pseudo_label_mae": 17.563593396014014,
+            "pseudo_label_rmse": 21.689669921126264,
+            "pseudo_label_spearman": 0.5471485036702428,
+            "unique_canonical_candidate_count": 22.0
+          },
+          "7": {
+            "generated_candidate_count": 24.0,
+            "hidden_cell_coverage_fraction": 0.007662835249042145,
+            "hidden_overlap_count": 24.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": 3.75623970328011,
+            "pseudo_label_mae": 15.035180662502633,
+            "pseudo_label_rmse": 18.379903024622774,
+            "pseudo_label_spearman": 0.5539130434782608,
+            "unique_canonical_candidate_count": 24.0
+          },
+          "8": {
+            "generated_candidate_count": 27.0,
+            "hidden_cell_coverage_fraction": 0.008620689655172414,
+            "hidden_overlap_count": 27.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": -2.285849241830896,
+            "pseudo_label_mae": 10.24083061075667,
+            "pseudo_label_rmse": 13.837198615570545,
+            "pseudo_label_spearman": 0.8277338135738362,
+            "unique_canonical_candidate_count": 27.0
+          },
+          "9": {
+            "generated_candidate_count": 24.0,
+            "hidden_cell_coverage_fraction": 0.007662835249042145,
+            "hidden_overlap_count": 24.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": 0.21006782736552143,
+            "pseudo_label_mae": 10.814700977918868,
+            "pseudo_label_rmse": 14.58216077049342,
+            "pseudo_label_spearman": 0.7078260869565216,
+            "unique_canonical_candidate_count": 24.0
+          }
+        },
+        "seeds": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ]
+      },
+      "typed": {
+        "mean": {
+          "generated_candidate_count": 16.88888888888889,
+          "hidden_cell_coverage_fraction": 0.00539236554562225,
+          "hidden_overlap_count": 16.88888888888889,
+          "hidden_overlap_fraction_of_candidates": 1.0,
+          "high_yield_enrichment": 0.0,
+          "high_yield_precision": 0.0,
+          "high_yield_recall": 0.0,
+          "pseudo_label_bias": 1.858725330603693,
+          "pseudo_label_mae": 14.436453003292664,
+          "pseudo_label_rmse": 19.10626115466372,
+          "pseudo_label_spearman": 0.6720131600886309,
+          "unique_canonical_candidate_count": 16.88888888888889
+        },
+        "per_seed": {
+          "10": {
+            "generated_candidate_count": 19.0,
+            "hidden_cell_coverage_fraction": 0.006066411238825032,
+            "hidden_overlap_count": 19.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": -2.8788241073540184,
+            "pseudo_label_mae": 21.814093135223217,
+            "pseudo_label_rmse": 27.45383287532069,
+            "pseudo_label_spearman": 0.3543859649122807,
+            "unique_canonical_candidate_count": 19.0
+          },
+          "11": {
+            "generated_candidate_count": 19.0,
+            "hidden_cell_coverage_fraction": 0.006066411238825032,
+            "hidden_overlap_count": 19.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": -2.0102895390097673,
+            "pseudo_label_mae": 15.006833021373055,
+            "pseudo_label_rmse": 20.97741161079094,
+            "pseudo_label_spearman": 0.6947368421052632,
+            "unique_canonical_candidate_count": 19.0
+          },
+          "12": {
+            "generated_candidate_count": 17.0,
+            "hidden_cell_coverage_fraction": 0.005427841634738187,
+            "hidden_overlap_count": 17.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": 0.0,
+            "high_yield_precision": 0.0,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": 5.164325800725511,
+            "pseudo_label_mae": 18.970231256843963,
+            "pseudo_label_rmse": 24.51776649246563,
+            "pseudo_label_spearman": 0.6544117647058824,
+            "unique_canonical_candidate_count": 17.0
+          },
+          "13": {
+            "generated_candidate_count": 19.0,
+            "hidden_cell_coverage_fraction": 0.006066411238825032,
+            "hidden_overlap_count": 19.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": 1.174204135932364,
+            "pseudo_label_mae": 12.926198563730946,
+            "pseudo_label_rmse": 18.379128710729354,
+            "pseudo_label_spearman": 0.6596491228070176,
+            "unique_canonical_candidate_count": 19.0
+          },
+          "14": {
+            "generated_candidate_count": 13.0,
+            "hidden_cell_coverage_fraction": 0.004150702426564496,
+            "hidden_overlap_count": 13.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": 1.3143451925359027,
+            "pseudo_label_mae": 10.861772056248201,
+            "pseudo_label_rmse": 15.451127125708524,
+            "pseudo_label_spearman": 0.888584059327378,
+            "unique_canonical_candidate_count": 13.0
+          },
+          "6": {
+            "generated_candidate_count": 16.0,
+            "hidden_cell_coverage_fraction": 0.005108556832694764,
+            "hidden_overlap_count": 16.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": 0.0,
+            "high_yield_precision": 0.0,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": 10.112842472472538,
+            "pseudo_label_mae": 18.640306164820824,
+            "pseudo_label_rmse": 23.58997781228551,
+            "pseudo_label_spearman": 0.5,
+            "unique_canonical_candidate_count": 16.0
+          },
+          "7": {
+            "generated_candidate_count": 16.0,
+            "hidden_cell_coverage_fraction": 0.005108556832694764,
+            "hidden_overlap_count": 16.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": 3.395039956960014,
+            "pseudo_label_mae": 13.472947923977951,
+            "pseudo_label_rmse": 17.33668050535793,
+            "pseudo_label_spearman": 0.6558823529411765,
+            "unique_canonical_candidate_count": 16.0
+          },
+          "8": {
+            "generated_candidate_count": 16.0,
+            "hidden_cell_coverage_fraction": 0.005108556832694764,
+            "hidden_overlap_count": 16.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": null,
+            "pseudo_label_bias": 0.7793709730859868,
+            "pseudo_label_mae": 10.011503386447028,
+            "pseudo_label_rmse": 13.806419807482548,
+            "pseudo_label_spearman": 0.7581153928222084,
+            "unique_canonical_candidate_count": 16.0
+          },
+          "9": {
+            "generated_candidate_count": 17.0,
+            "hidden_cell_coverage_fraction": 0.005427841634738187,
+            "hidden_overlap_count": 17.0,
+            "hidden_overlap_fraction_of_candidates": 1.0,
+            "high_yield_enrichment": null,
+            "high_yield_precision": null,
+            "high_yield_recall": 0.0,
+            "pseudo_label_bias": -0.32248690991529155,
+            "pseudo_label_mae": 8.224191520968784,
+            "pseudo_label_rmse": 10.444005451832334,
+            "pseudo_label_spearman": 0.8823529411764707,
+            "unique_canonical_candidate_count": 17.0
+          }
+        },
+        "seeds": [
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14
+        ]
+      }
+    },
+    "family": "withheld_cell_transfer_oracle",
+    "label": "secondary_non_selecting",
+    "note": "Measures how well frozen pseudo-labels reconstruct hidden outer-training cells. It never influenced generation, ranking, teacher fitting, policy selection, weights or student fitting, and it is not substituted for the primary outcome."
+  },
+  "per_unit_rows": [
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 22,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 22.416484207653436,
+      "augmented_selected_policy_id": "anonymous-xgb-1",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 21.793043358773797,
+      "comparator_selected_policy_id": "real_only-xgb-1",
+      "evaluation_unit": "seed=6|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": -0.623440848879639,
+      "quarantined_candidates": 10,
+      "seed": 6,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 24,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 21.39326020297042,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 21.24972502708987,
+      "comparator_selected_policy_id": "real_only-xgb-1",
+      "evaluation_unit": "seed=7|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": -0.14353517588055098,
+      "quarantined_candidates": 5,
+      "seed": 7,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 27,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 26.036890320636168,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 26.194766292863477,
+      "comparator_selected_policy_id": "real_only-xgb-2",
+      "evaluation_unit": "seed=8|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": 0.1578759722273091,
+      "quarantined_candidates": 3,
+      "seed": 8,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 24,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 22.428599580251454,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 21.520826069479746,
+      "comparator_selected_policy_id": "real_only-xgb-2",
+      "evaluation_unit": "seed=9|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": -0.9077735107717082,
+      "quarantined_candidates": 7,
+      "seed": 9,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 23,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 22.83471059863284,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 21.904335338000298,
+      "comparator_selected_policy_id": "real_only-xgb-0",
+      "evaluation_unit": "seed=10|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": -0.9303752606325411,
+      "quarantined_candidates": 7,
+      "seed": 10,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 25,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 19.989506293411694,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 20.516950887022322,
+      "comparator_selected_policy_id": "real_only-xgb-2",
+      "evaluation_unit": "seed=11|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": 0.5274445936106282,
+      "quarantined_candidates": 6,
+      "seed": 11,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 27,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 24.87345727090496,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 24.095301522197143,
+      "comparator_selected_policy_id": "real_only-xgb-2",
+      "evaluation_unit": "seed=12|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": -0.7781557487078175,
+      "quarantined_candidates": 5,
+      "seed": 12,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 26,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 22.844327298387533,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 21.458910916577892,
+      "comparator_selected_policy_id": "real_only-xgb-0",
+      "evaluation_unit": "seed=13|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": -1.385416381809641,
+      "quarantined_candidates": 4,
+      "seed": 13,
+      "status": "included",
+      "status_reason": ""
+    },
+    {
+      "accepted_synthetic_rows_globally_unmeasured": 0,
+      "accepted_synthetic_rows_observed_only": 25,
+      "augmented_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "augmented_rmse": 25.45250518336777,
+      "augmented_selected_policy_id": "anonymous-xgb-2",
+      "both_arms_evaluated": true,
+      "comparator_commit_hash": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "comparator_rmse": 25.799805262041193,
+      "comparator_selected_policy_id": "real_only-xgb-2",
+      "evaluation_unit": "seed=14|train_fraction=0.01|comparison=model_policy_search",
+      "generated_candidates": 32,
+      "paired_delta_rmse_reduction": 0.34730007867342394,
+      "quarantined_candidates": 6,
+      "seed": 14,
+      "status": "included",
+      "status_reason": ""
+    }
+  ],
+  "primary": {
+    "bootstrap": {
+      "alpha": 0.05,
+      "ci_lower": -0.8060362090155676,
+      "ci_upper": -0.009683457505234274,
+      "cluster_count": 9,
+      "mean": -0.4151195869078374,
+      "method": "percentile_bootstrap_over_seed_clusters",
+      "replicates": 10000,
+      "seed": 1701
+    },
+    "improved_unit_count": 3,
+    "mean_paired_rmse_reduction": -0.4151195869078374,
+    "paired_deltas": [
+      -0.623440848879639,
+      -0.14353517588055098,
+      0.1578759722273091,
+      -0.9077735107717082,
+      -0.9303752606325411,
+      0.5274445936106282,
+      -0.7781557487078175,
+      -1.385416381809641,
+      0.34730007867342394
+    ],
+    "tied_unit_count": 0,
+    "worsened_unit_count": 6
+  },
+  "run": {
+    "commit_hashes": [
+      "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59"
+    ],
+    "config_hash_by_family": {
+      "exploratory_matched_real_only_control": [
+        "d7dbe54337dc265c092271c70c267f8fa8862c098570533e8705556c6ea200b9"
+      ],
+      "exploratory_observed_only_condition_transfer": [
+        "17530509e661c54c7081e999c4f534c0d5ff8bd3f16a41cce9c67a6524cdd868",
+        "209eb820f1dcc1f1c3810899eb22d27800e22d37477ebc58c0f84e451c560097",
+        "3460a78720998e0526fbcf543fb55cafa67426e1f3902b7460747c1c73dd647b",
+        "668624f315f03a5b45078a2577955ad9e8a4a661f92b8420ceaf051832500fe9",
+        "9acd41be0f0b482cd72f038cf3b16ee442d2c3086529bd9a7b1b07f572e2445a",
+        "9be577b9425fc49c68fda06c1e231c2889e9b0ef466ce773ded4060d9d05bd1f",
+        "9f5db65cc067d8afc091dded582ea312b97e4035c8e6bd962545dd60016fb9ef",
+        "dec276a799f40830c6ac0e8af856a46a30507c4e5dab7a6765bb6c3cf8bb5d67",
+        "e7436dc49e9a932f77f1cc08ebe3dcbb0784e65895c0e93b779ab2f685406f2e"
+      ]
+    },
+    "confirmatory_directory": "results/corrected_exploratory_fraction_sweep_f0p01/confirmatory",
+    "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+    "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+    "equal_arm_search_budget": true,
+    "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "pool_accounting": {
+      "config_hash": "18393def415fb4f0113f68cadcfb62eab45817806f4c7133df7f877ce101ab37",
+      "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+      "directory": "results/corrected_exploratory_fraction_sweep_pool_accounting_v1",
+      "git_commit": "2f7c74f0c0bf84cd2d2a74c2cb7b70134c3cee59",
+      "leakage_contracts": {
+        "evaluation_registry_claimed": false,
+        "hidden_outer_train_influences": [],
+        "hidden_outer_train_read_stage": "after_candidate_and_pseudo_label_freeze",
+        "outer_test_labels_accessed": false
+      },
+      "manifest_hash": "20c2e88e986253e59d67228dd495ff81dd8ca11dffc30b5c5a59527755dca87c",
+      "run_id": "corrected-20260912T003412Z",
+      "split_directory": "results/corrected_canonical_splits_phase15"
+    },
+    "run_root": "results/corrected_exploratory_fraction_sweep_f0p01",
+    "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+    "split_hash_by_seed": {
+      "10": "293c565befffceaabe5e8046f86867c57ec7071787ef85aa1aa653d9ebf94c07",
+      "11": "d3e0443d48ea6cb358e8bb6fc656d92ae0edff6ee31c4514baf898c5e4533b9f",
+      "12": "761b33155aa1dd42347514b222cf18af6d360cb062ec5814202b72f875b0c571",
+      "13": "8db7d3581e1581ec417c4eaa303489d756900ff8319e064fab3ee745e20377ac",
+      "14": "92a061200729b261d123e1f3ff0e50d16ed937de029ac22d00041dcfd43f862e",
+      "6": "6c3236b9da6826c163613a66bfab9fe3d099499c8d39e0726d0e6ad936dcc859",
+      "7": "fbfcbd4b1cc705c3279230426cfe9a3b1f374ff83d6d52348a984472ac303bb3",
+      "8": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "9": "fd961beb4124fa6b8919c0eb7ecd44e8bedf074427ce43b4b3a39fb369738553"
+    }
+  },
+  "schema_version": "bh-exploratory-fraction-sweep-analysis-v1",
+  "secondary": {
+    "label": "secondary",
+    "note": "Secondary. The interval and the practical margin decide the outcome; significance alone never establishes success.",
+    "p_value": 0.12890625,
+    "statistic": 9.0,
+    "test": "wilcoxon_signed_rank_two_sided"
+  },
+  "secondary_control_arm": null,
+  "treatment_size": {
+    "accepted_synthetic_rows_by_seed": {
+      "globally_unmeasured_prospective": {
+        "10": 0,
+        "11": 0,
+        "12": 0,
+        "13": 0,
+        "14": 0,
+        "6": 0,
+        "7": 0,
+        "8": 0,
+        "9": 0
+      },
+      "observed_only_low_data": {
+        "10": 23,
+        "11": 25,
+        "12": 27,
+        "13": 26,
+        "14": 25,
+        "6": 22,
+        "7": 24,
+        "8": 27,
+        "9": 24
+      }
+    },
+    "pool_counts_by_rule": {
+      "globally_unmeasured_prospective": {
+        "anonymous": {
+          "10": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "11": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "12": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "13": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "14": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "6": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "7": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "8": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "9": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 32,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          }
+        },
+        "typed": {
+          "10": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 25,
+            "rejected_already_measured": 25,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "11": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 25,
+            "rejected_already_measured": 25,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "12": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 19,
+            "rejected_already_measured": 19,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "13": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 23,
+            "rejected_already_measured": 23,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "14": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 16,
+            "rejected_already_measured": 16,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "6": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 22,
+            "rejected_already_measured": 22,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "7": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 21,
+            "rejected_already_measured": 21,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "8": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 20,
+            "rejected_already_measured": 20,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          },
+          "9": {
+            "accepted_candidate_count": 0,
+            "generated_candidate_count": 21,
+            "rejected_already_measured": 21,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 0,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 0
+          }
+        }
+      },
+      "observed_only_low_data": {
+        "anonymous": {
+          "10": {
+            "accepted_candidate_count": 23,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 7,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 23
+          },
+          "11": {
+            "accepted_candidate_count": 25,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 1,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 6,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 25
+          },
+          "12": {
+            "accepted_candidate_count": 27,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 5,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 27
+          },
+          "13": {
+            "accepted_candidate_count": 26,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 4,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 26
+          },
+          "14": {
+            "accepted_candidate_count": 25,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 1,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 6,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 25
+          },
+          "6": {
+            "accepted_candidate_count": 22,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 10,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 22
+          },
+          "7": {
+            "accepted_candidate_count": 24,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 1,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 5,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 24
+          },
+          "8": {
+            "accepted_candidate_count": 27,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 3,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 27
+          },
+          "9": {
+            "accepted_candidate_count": 24,
+            "generated_candidate_count": 32,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 1,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 7,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 24
+          }
+        },
+        "typed": {
+          "10": {
+            "accepted_candidate_count": 19,
+            "generated_candidate_count": 25,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 4,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 19
+          },
+          "11": {
+            "accepted_candidate_count": 19,
+            "generated_candidate_count": 25,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 1,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 5,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 19
+          },
+          "12": {
+            "accepted_candidate_count": 17,
+            "generated_candidate_count": 19,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 2,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 17
+          },
+          "13": {
+            "accepted_candidate_count": 19,
+            "generated_candidate_count": 23,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 2,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 19
+          },
+          "14": {
+            "accepted_candidate_count": 13,
+            "generated_candidate_count": 16,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 1,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 2,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 13
+          },
+          "6": {
+            "accepted_candidate_count": 16,
+            "generated_candidate_count": 22,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 0,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 6,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 16
+          },
+          "7": {
+            "accepted_candidate_count": 16,
+            "generated_candidate_count": 21,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 1,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 2,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 16
+          },
+          "8": {
+            "accepted_candidate_count": 16,
+            "generated_candidate_count": 20,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 2,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 2,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 16
+          },
+          "9": {
+            "accepted_candidate_count": 17,
+            "generated_candidate_count": 21,
+            "rejected_already_measured": 0,
+            "rejected_duplicate_synthetic": 0,
+            "rejected_observed_in_labeled_train": 1,
+            "rejected_other": 0,
+            "rejected_quarantined_held_out_identity": 3,
+            "rejected_source_identical": 0,
+            "unique_accepted_identity_count": 17
+          }
+        }
+      }
+    },
+    "source": "validation-only pool accounting that regenerates each unit's candidate pool from labeled_train under each eligibility rule; the 2026-09-03 protocol run recorded no per-unit counts",
+    "totals_by_rule": {
+      "globally_unmeasured_prospective": {
+        "anonymous": {
+          "accepted_candidate_count": 0,
+          "generated_candidate_count": 288,
+          "rejected_already_measured": 288,
+          "rejected_duplicate_synthetic": 0,
+          "rejected_observed_in_labeled_train": 0,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 0,
+          "rejected_source_identical": 0,
+          "unique_accepted_identity_count": 0
+        },
+        "typed": {
+          "accepted_candidate_count": 0,
+          "generated_candidate_count": 192,
+          "rejected_already_measured": 192,
+          "rejected_duplicate_synthetic": 0,
+          "rejected_observed_in_labeled_train": 0,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 0,
+          "rejected_source_identical": 0,
+          "unique_accepted_identity_count": 0
+        }
+      },
+      "observed_only_low_data": {
+        "anonymous": {
+          "accepted_candidate_count": 223,
+          "generated_candidate_count": 288,
+          "rejected_already_measured": 0,
+          "rejected_duplicate_synthetic": 1,
+          "rejected_observed_in_labeled_train": 11,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 53,
+          "rejected_source_identical": 0,
+          "unique_accepted_identity_count": 223
+        },
+        "typed": {
+          "accepted_candidate_count": 152,
+          "generated_candidate_count": 192,
+          "rejected_already_measured": 0,
+          "rejected_duplicate_synthetic": 1,
+          "rejected_observed_in_labeled_train": 11,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 28,
+          "rejected_source_identical": 0,
+          "unique_accepted_identity_count": 152
+        }
+      }
+    }
+  },
+  "verdict": {
+    "conditions": {},
+    "reason": "This design is exploratory and post hoc; it applies no preregistered interpretation table and yields no verdict. The interval is reported descriptively.",
+    "rule": "no_interpretation_table",
+    "verdict": "not_applicable_exploratory"
+  }
+}
