@@ -327,10 +327,15 @@ def test_result_status_reports_the_phase_14_and_phase_15_outcomes_accurately() -
     assert "secondary ablation" in text
     assert "failed" in text
 
-    # Phase 15: exactly one confirmatory result exists and it is a null.
-    assert "confirmatory-evidence class contains exactly one result" in text
-    assert "it is a\nnull" in text or "and it is a null" in text
-    assert "null" in text
+    # Two confirmatory results exist (Phase 15 at fraction 0.2 and the
+    # observed-only transfer experiment at fraction 0.05); both are nulls and
+    # the document must say so in those words.
+    assert "confirmatory-evidence class contains exactly two results" in text
+    assert "both are\nnulls" in text or "both are nulls" in text
+    assert "Verdict **null**" in text
+    assert "observed-only condition transfer" in text
+    # The second experiment's degenerate control arm is a reported result.
+    assert "degenerate on 8 of 9 units" in text
 
     # A null must not be dressed up as a positive finding.
     for overclaim in (

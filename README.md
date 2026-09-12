@@ -1,13 +1,77 @@
-# AutoML-Guided Data Augmentation for Low-Data Buchwald-Hartwig Yield Prediction
+# Condition-Transfer Augmentation for Low-Data Buchwald-Hartwig Yield Prediction
 
-This repository is an MVP research-code package for evaluating whether
+This repository is a research-code package for evaluating whether
 reaction-aware data augmentation can improve low-data Buchwald-Hartwig reaction
-yield prediction.
+yield prediction. It is built around preregistration, one-shot outer-test
+evaluation through a repository-global registry, and hash-addressed result
+manifests, so that every headline number can be re-derived from committed files.
 
-The v0 scope is deliberately conservative. It focuses on reproducible data
-loading, cleaning, splitting, featurization, classical regression baselines,
-safe augmentation, decision-oriented evaluation, and lightweight reporting.
-Generative synthetic reaction data is out of scope for v0.
+## Status and Headline Results
+
+Two preregistered confirmatory experiments have been executed. **Both verdicts
+are null**: anonymous condition-transfer augmentation with teacher pseudo-labels
+produces no practically meaningful change in low-data yield prediction relative
+to a matched real-only XGBoost baseline on this dataset.
+
+| Experiment | Preregistered at | Regime | Mean paired RMSE reduction (95% CI) | Units improved | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| Phase 15 primary confirmation | `13fbfde` (`PRIMARY_EXPERIMENT.md`) | fraction 0.2, seeds 5–14, 335–362 accepted synthetic rows per unit | −0.661 [−0.845, −0.478] | 0 of 10 | **null** |
+| Observed-only condition transfer | `c6aab9e` (`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md`) | fraction 0.05, seeds 6–14, 101–125 accepted synthetic rows per unit | −0.377 [−0.746, −0.035] | 2 of 9 | **null** |
+
+Positive values would favour augmentation. Both intervals exclude zero on the
+harmful side and both lie entirely inside the ±1.0 RMSE practical-equivalence
+band the preregistrations fixed in advance, which those documents define as a
+null: a practically meaningful benefit and a practically meaningful harm are
+both excluded. Neither result is out-of-distribution evidence.
+
+The second experiment also settles a methodological question. The canonical
+dataset is a near-complete factorial, and the historical eligibility rule
+rejected any synthetic reaction that existed *anywhere* in it, which suppressed
+the treatment to 0–2 accepted rows per unit. Deciding eligibility from the rows
+the low-data learner actually observed restores it to 101–125 rows per unit. The
+verdict is null either way, so the earlier nulls were not artifacts of an
+empty treatment. The control arm run under the historical rule was degenerate on
+8 of 9 units, and that degeneracy is reported as its result.
+
+Secondary, non-selecting evidence: pseudo-labels for the withheld cells that the
+observed-only rule admits reconstruct the hidden measured yields with Spearman
+0.76 and MAE 11.7 yield points, so the transfer is chemically informative even
+though it does not translate into outer-test gain.
+
+Two further structural findings: the supervised autoencoder failed its
+predefined retention criterion (Phase 14), and informed acquisition strategies
+recover about 4× the high-yield hits of random selection over a 320-experiment
+budget (Phase 18, development evidence). `RESULT_STATUS.md` classifies every
+result family; `AUTONOMOUS_COMPLETION_REPORT.md` is the narrative record.
+
+### How To Verify The Headline Results
+
+Both confirmatory bundles are committed, unlike the rest of `results/`. From a
+fresh clone with the `science` extra installed:
+
+```bash
+python -m pytest tests/test_committed_confirmatory_artifacts.py -q
+```
+
+That test recomputes each verdict from the committed per-unit outer-test
+metrics, frozen policies, claims, degenerate-unit records and pool accounting,
+compares the recomputed analysis hash with the committed one, and verifies both
+scientific manifests. To read the reports directly:
+
+- `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1/confirmatory_report.md`
+- `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis/confirmatory_report.md`
+
+The full-scale inputs those runs consumed (the 12 MB canonical dataset and the
+split directories) are gitignored; `docs/REPRODUCIBILITY.md` gives the
+regeneration commands and their pinned hashes.
+
+## Historical Scope
+
+The original v0 scope was deliberately conservative: reproducible data loading,
+cleaning, splitting, featurization, classical regression baselines, safe
+augmentation, decision-oriented evaluation, and lightweight reporting. The
+sections below document that machinery and the experiments layered on it.
+Generative synthetic reaction data remains out of scope.
 
 ## Project Overview
 
@@ -62,7 +126,10 @@ condition tokens parsed from `reaction_smiles`. Stress-test `product_key` and
 - It does not test generative chemistry models.
 - It does not create generative synthetic reaction data.
 - It does not pseudo-label measured validation or test reactions.
-- It does not train deep learning models.
+- It does not use deep learning as a confirmatory method. Torch-based
+  representation learners (a supervised autoencoder, matched MLPs, a
+  feature-space GAN) exist as development controls; the autoencoder failed
+  its retention criterion and none of them enters a confirmatory claim.
 - It does not provide a web app or dashboard.
 - It does not claim random split performance is real chemistry
   generalization.
@@ -741,8 +808,15 @@ records **1 accepted candidate out of 2,540 generated** under the global rule
 against **1,704** under the observed-only rule. `RESULT_STATUS.md` records which
 result families this affected and which it did not, `docs/CANDIDATE_SCOPE.md` is
 the methodology reference, and
-`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md` freezes the new confirmatory
+`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md` freezes the confirmatory
 experiment that follows from it.
+
+That experiment has been executed (see *Status and Headline Results*). On the
+nine confirmatory units the observed-only rule accepted 999 of 1,431 generated
+anonymous-transfer candidates and the global rule accepted 2. The outer-test
+verdict under the observed-only rule is **null**. The full analysis, with every
+unit and both arms accounted for, is committed at
+`results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis/`.
 
 ## Corrected Revalidation
 
@@ -753,7 +827,8 @@ validation RMSE, and evaluate test data only for matched baselines and selected
 policies. The corrected representation baseline reports every canonical
 representation rather than selecting one by test performance.
 
-Run the complete corrected workflow manually with:
+Run the complete corrected workflow manually with (`caffeinate` keeps a Mac
+awake; omit it on Linux):
 
 ```bash
 caffeinate -dimsu bash scripts/run_corrected_revalidation.sh \
@@ -782,6 +857,27 @@ It requires an environment whose RDKit matches the one that built the canonical
 dataset (`rdkit==2023.9.6`); a preflight check fails fast otherwise, because a
 different canonicalization would make the stored and generated identity
 vocabularies disjoint and silently accept every candidate.
+
+The 2026-09-03 execution of that script completed every primary and comparator
+unit and then aborted at the first globally-unmeasured control unit whose
+candidate pool accepted zero rows, an outcome the preregistration expects for
+that arm. `scripts/resume_observed_only_confirmatory.sh` finishes such a run in
+place: it leaves complete units untouched, runs pending units with
+`scripts/run_policy_search.py --record-degenerate` so a degenerate unit is
+recorded rather than crashed on, and performs the closing hash-verification and
+registry-snapshot steps. The per-unit treatment size the preregistration
+requires comes from a validation-only regeneration of each unit's candidate
+pool under both rules:
+
+```bash
+RUN_LABEL=20260903T194209Z bash scripts/resume_observed_only_confirmatory.sh
+python -B scripts/run_candidate_scope_reanalysis.py \
+  --config configs/corrected_observed_only_transfer_pool_accounting.yaml \
+  --output-directory results/corrected_observed_only_transfer_pool_accounting_v1
+python -B scripts/run_observed_only_confirmatory_analysis.py \
+  --run-root results/corrected_candidate_scope_reanalysis_20260903T194209Z \
+  --pool-accounting-directory results/corrected_observed_only_transfer_pool_accounting_v1
+```
 
 ## Suggested Experiment Order
 
@@ -832,6 +928,16 @@ vocabularies disjoint and silently accept every candidate.
 - If TDC does not expose separated components, use
   `reaction_role_concat_delta`, which derives roles from the parsed reaction
   record, or use a richer processed dataset with explicit components.
+
+## License
+
+This repository is released under the MIT License; see `LICENSE`.
+
+## Citation
+
+If you use this code or cite its preregistered results, please use the metadata
+in `CITATION.cff`. Both confirmatory verdicts are nulls and should be cited as
+such; no positive augmentation effect is claimed anywhere in this repository.
 
 ## Future Extensions
 

@@ -242,7 +242,33 @@ Two further items a clean checkout cannot supply:
   CPUs, BLAS/OpenMP thread counts, or dependency versions can change
   floating-point reduction order. That is exactly why `platform_record` and
   `dependency_versions` are in the manifest: divergence can be attributed rather
-  than guessed at.
+  than guessed at. A concrete instance: two executions of the development
+  candidate-scope reanalysis on this machine agree on every candidate count and
+  on the oracle metrics to three decimals, but their validation RMSEs differ by
+  up to 0.6 because, through a config-forwarding defect since fixed, XGBoost ran
+  with its default thread count. Under the confirmatory protocol every policy
+  pins `n_jobs: 1`.
+
+## 4a. What IS committed: the two confirmatory bundles
+
+The two confirmatory results are the exception to the gitignored `results/`
+tree. Their small, re-derivable artifacts are force-tracked so a clone can
+recompute each verdict without any gitignored input:
+
+| Result | Committed files |
+| --- | --- |
+| Phase 15 primary confirmation | `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1/` — `final_test_metrics.csv`, `pool_summary.csv`, `summary.csv`, `manifest.json`, `confirmatory_analysis.json`, `confirmatory_report.md`, `confirmatory_analysis_manifest.json` |
+| Observed-only condition transfer | `results/corrected_candidate_scope_reanalysis_20260903T194209Z/confirmatory/<family>/seed_<n>/` (`search/` frozen policy, manifest, metrics or `degenerate_unit.json`; `final/` metrics, claim, manifest), `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/` (registry snapshots before and after, `run_file_index.json`, `observed_only_confirmatory_analysis/`), `results/corrected_candidate_scope_reanalysis_20260903T194209Z/candidate_scope_audit/`, and the treatment-size accounting under `results/corrected_observed_only_transfer_pool_accounting_v1/` (all but its 18 MB `candidate_audit.csv`, whose hash is recorded in that bundle's `manifest.json`) |
+
+```bash
+python -m pytest tests/test_committed_confirmatory_artifacts.py -q
+```
+
+re-derives both verdicts from those files, compares the recomputed analysis
+hashes with the committed ones, and verifies both analysis manifests. The
+per-unit files are the bytes the protocol wrote; `run_file_index.json` lists
+the SHA-256 of every file the observed-only run produced, including the ones
+too large to commit.
 
 ## 5. Continuous integration
 

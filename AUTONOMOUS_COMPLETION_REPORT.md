@@ -1,5 +1,49 @@
 # Autonomous completion report
 
+> **Addendum, 2026-09-11 — the observed-only transfer experiment is complete,
+> and this report's remote status is stale.** Four things have changed since
+> the addendum below was written; no historical number in this report is
+> edited.
+>
+> 1. **The preregistered observed-only condition transfer experiment
+>    (`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md`, frozen at `c6aab9e`) has
+>    been executed and its verdict is null.** Seeds 6–14 at training fraction
+>    0.05: mean paired RMSE reduction −0.377, 95% seed-cluster bootstrap
+>    [−0.746, −0.035] at seed 1601, inside the ±1.0 practical-equivalence band;
+>    2 of 9 units improved; Wilcoxon p = 0.098 (secondary). The treatment was
+>    real this time — 101–125 accepted synthetic rows per unit under the
+>    observed-only rule against 0–2 under the historical global rule — and the
+>    globally-unmeasured control arm was degenerate on 8 of 9 units, which is
+>    reported as that arm's result. The confirmatory-evidence class now holds
+>    two results, both nulls. Analysis and report:
+>    `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis/`.
+> 2. **How the run actually went.** The 2026-09-03 execution completed all 18
+>    primary and comparator units and then crashed at the first degenerate
+>    control unit, because `policy_search.py` raised on a zero-accepted-row
+>    pool and the driver ran under `set -e` — the preregistration's expected
+>    control outcome was unrepresentable in code. The 18 consumed outer-test
+>    units were left exactly as evaluated. `--record-degenerate` now records
+>    such a unit without searching or claiming an outer test;
+>    `scripts/resume_observed_only_confirmatory.sh` completed control seeds
+>    7–14 that way on 2026-09-11 at commit `46d9b90`. The arms therefore bind
+>    two code commits, both recorded in the analysis.
+> 3. **A defect in the development reanalysis.**
+>    `candidate_scope_reanalysis._resolved_models` forwarded the nested
+>    `params` block as a single keyword, which XGBoost silently ignored. The
+>    development validation RMSEs — including the section 8b table inside the
+>    frozen preregistration — were fitted with XGBoost defaults (which also
+>    use all threads, so those numbers were not bit-reproducible: two runs of
+>    the same development config differ by up to 0.6 validation RMSE). Pool
+>    counts and oracle metrics never depended on the model and are unaffected;
+>    the two runs agree on every count and on the oracle metrics to three
+>    decimals. Fixed going forward; the preregistration is not edited.
+> 4. **Remote status.** Section 14 below says nothing was pushed. Everything
+>    through `dfbef2b` had in fact been pushed before this addendum, and the
+>    work described here has been pushed as well. The reproduction flag in
+>    section 12 is `--run-directory`, not `--result-directory`.
+>
+> Nothing here changes the Phase 14 or Phase 15 verdicts.
+
 > **Addendum, 2026-08-25 — candidate-scope audit.** A repository-wide audit of
 > candidate-eligibility semantics ran after this report was written. It does not
 > change the Phase 15 confirmatory verdict, which was already scoped to the rows

@@ -1,0 +1,43 @@
+{
+  "binding": {
+    "canonicalization_version": "bh-rdkit-isomeric-v1",
+    "commit_hash": "08f91d92da8053df3d8fe6904f6478bd4a648056",
+    "config_hash": "b7d34e536d76a9c82b02c700ab97354553b58d3510dbb67889e32c562e9b4601",
+    "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+    "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "per_seed_split_hash": "92a061200729b261d123e1f3ff0e50d16ed937de029ac22d00041dcfd43f862e",
+    "source_id_split_hash": "e8ee464ec8d574e5201fc3d827d6c25e7fc6e48f3b6f781393c280aa387882a5",
+    "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+    "split_hash": "92a061200729b261d123e1f3ff0e50d16ed937de029ac22d00041dcfd43f862e",
+    "split_schema_version": "bh-canonical-grouped-splits-v1"
+  },
+  "frozen_policy_hash": "f1ec70f68af11c3c1277163b5e2fca1aaa126d9aaffc7f76e65960352abfd9b2",
+  "lower_is_better": true,
+  "policy_id": "real_only-xgb-1",
+  "resolved_policy": {
+    "method": "real_only",
+    "model": "xgboost",
+    "model_params": {
+      "learning_rate": 0.03,
+      "max_depth": 4,
+      "n_estimators": 500,
+      "n_jobs": 1,
+      "tree_method": "hist"
+    },
+    "seed": 14,
+    "train_fraction": 0.05
+  },
+  "resolved_policy_hash": "6818e6b7f2f7b3dd5bf80841907aee1121a9c82120110ab6c7f6169dc0e2683f",
+  "schema_version": "bh-frozen-policy-v1",
+  "search_manifest_hash": "7e2b0217b008a8635a2290172013189aed07c5c100e4c18afe17239c39d012dc",
+  "selection_metric": "rmse",
+  "selection_value": 13.706941379336785,
+  "status": "frozen",
+  "training_protocol": {
+    "method": "real_only_or_training_only_typed_transfer",
+    "outer_test_prediction_batches": 1,
+    "refit_rows": "saved_canonical_training_subset",
+    "synthetic_rows": "training_sources_and_donors_only",
+    "validation_rows": "selection_only_not_refit"
+  }
+}

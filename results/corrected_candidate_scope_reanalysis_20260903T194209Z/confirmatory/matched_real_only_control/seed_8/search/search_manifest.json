@@ -1,0 +1,121 @@
+{
+  "frozen_policy_hash": "ff1415793f8d187e45aec0850af4ec70c61a328472c88c6e3aa5ec3c1133937a",
+  "payload": {
+    "candidate_policy_hashes": [
+      "3689037492e927f6bd9941f7dbd6e89b8d08042d3504cad36fb2e9c2a8a20ee2",
+      "32b1bcf789f3749fe1bbe65b92ba60a70daf2359d7a604ff6377cec5df6a537d",
+      "5548f11d2a2954c5d30e8f49aef7a4e3716a3540ec9b30aa0759626b48c426bc"
+    ],
+    "evaluation_unit": "seed=8|train_fraction=0.05|comparison=model_policy_search",
+    "lower_is_better": true,
+    "outer_test_labels_accessed": false,
+    "outer_test_metric_evaluations": 0,
+    "outer_test_predictions_generated": false,
+    "run_type": "policy_search",
+    "scientific_binding": {
+      "canonicalization_version": "bh-rdkit-isomeric-v1",
+      "commit_hash": "08f91d92da8053df3d8fe6904f6478bd4a648056",
+      "config_hash": "b7d34e536d76a9c82b02c700ab97354553b58d3510dbb67889e32c562e9b4601",
+      "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+      "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+      "per_seed_split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "source_id_split_hash": "da95824226080a53225bde320b48fdc7b5afd82257b61656386cd4a791b8f5a2",
+      "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+      "split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "split_schema_version": "bh-canonical-grouped-splits-v1"
+    },
+    "scientific_config": {
+      "candidate_scope": {
+        "mode": "observed_only_low_data"
+      },
+      "dataset": {
+        "path": "data/processed/bh_canonical_roles_v1.csv"
+      },
+      "features": {
+        "fingerprint_backend": "rdkit",
+        "kind": "bh_role_separated",
+        "n_bits": 2048,
+        "radius": 2
+      },
+      "low_data": {
+        "train_fractions": [
+          0.05
+        ]
+      },
+      "metrics": [
+        "rmse",
+        "mae",
+        "r2",
+        "spearman"
+      ],
+      "policy_search": {
+        "lower_is_better": true,
+        "metrics": [
+          "rmse",
+          "mae",
+          "r2",
+          "spearman"
+        ],
+        "model_policies": [
+          {
+            "method": "real_only",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.05,
+              "max_depth": 6,
+              "n_estimators": 300,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "real_only-xgb-0"
+          },
+          {
+            "method": "real_only",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.03,
+              "max_depth": 4,
+              "n_estimators": 500,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "real_only-xgb-1"
+          },
+          {
+            "method": "real_only",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.02,
+              "max_depth": 3,
+              "n_estimators": 800,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "real_only-xgb-2"
+          }
+        ],
+        "selection_metric": "rmse"
+      },
+      "splits": {
+        "directory": "results/corrected_canonical_splits_phase15",
+        "method": "canonical_saved"
+      }
+    },
+    "search_metrics_sha256": "2bce07cee20f5aae2c24b01407d206393104e116c0a97b61a06582a8107755ae",
+    "selected_policy_hash": "5548f11d2a2954c5d30e8f49aef7a4e3716a3540ec9b30aa0759626b48c426bc",
+    "selection_data_roles": [
+      "train",
+      "valid"
+    ],
+    "selection_metric": "rmse",
+    "supported_methods": [
+      "real_only",
+      "anonymous",
+      "role_aware"
+    ],
+    "test_evaluated": false
+  },
+  "schema_version": "bh-policy-search-manifest-v1",
+  "search_manifest_hash": "25541bfe346c8f7eb1578cefaf5be7cdaa0cf46c1e3738662150aaec4cab7914",
+  "status": "complete"
+}

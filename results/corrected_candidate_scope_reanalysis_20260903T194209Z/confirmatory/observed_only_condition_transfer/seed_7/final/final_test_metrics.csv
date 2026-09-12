@@ -1,0 +1,5 @@
+split,metric,value,evaluation_unit,frozen_policy_hash,seed,train_fraction,method,model,n_refit,n_test,test_prediction_batch
+test,rmse,13.735473905271181,seed=7|train_fraction=0.05|comparison=model_policy_search,7d742c1fb1fa75ce8d36058f7eb6965678e60d9d1d9fb932790ff6029bed1d5d,7,0.05,anonymous,xgboost,159,396,1
+test,mae,10.119721141145236,seed=7|train_fraction=0.05|comparison=model_policy_search,7d742c1fb1fa75ce8d36058f7eb6965678e60d9d1d9fb932790ff6029bed1d5d,7,0.05,anonymous,xgboost,159,396,1
+test,r2,0.7172962426074498,seed=7|train_fraction=0.05|comparison=model_policy_search,7d742c1fb1fa75ce8d36058f7eb6965678e60d9d1d9fb932790ff6029bed1d5d,7,0.05,anonymous,xgboost,159,396,1
+test,spearman,0.8653215355149757,seed=7|train_fraction=0.05|comparison=model_policy_search,7d742c1fb1fa75ce8d36058f7eb6965678e60d9d1d9fb932790ff6029bed1d5d,7,0.05,anonymous,xgboost,159,396,1

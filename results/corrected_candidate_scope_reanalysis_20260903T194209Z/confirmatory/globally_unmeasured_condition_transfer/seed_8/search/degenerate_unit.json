@@ -1,0 +1,288 @@
+{
+  "degenerate_unit_hash": "e7c96e303a2dbac70ac6ec8419722ff5fc8d908ee19511bfcfd0dd2f3feb744a",
+  "payload": {
+    "candidate_policy_hashes": [
+      "cdd5aa9296cb37d361cfa8333b68a9c8aa5a989d834d9cef2700ac00ff917aa2",
+      "84a22084170014f67f6034061c6642facb128003e2d57b3f5073b7cef078a02f",
+      "56dbf3755bcd4c5119ee397b23dd91d333c8443220e6b416dfc5f300821e270c"
+    ],
+    "candidate_scope_mode": "globally_unmeasured_prospective",
+    "evaluation_unit": "seed=8|train_fraction=0.05|comparison=model_policy_search",
+    "family": "globally_unmeasured_condition_transfer",
+    "frozen_policy_written": false,
+    "n_train": 159,
+    "n_validation": 395,
+    "outer_test_labels_accessed": false,
+    "outer_test_predictions_generated": false,
+    "per_policy": [
+      {
+        "method": "anonymous",
+        "model": "xgboost",
+        "policy_hash": "cdd5aa9296cb37d361cfa8333b68a9c8aa5a989d834d9cef2700ac00ff917aa2",
+        "policy_id": "anonymous-xgb-0",
+        "pool_statistics": {
+          "accepted_candidate_count": 0,
+          "candidate_scope_mode": "globally_unmeasured_prospective",
+          "candidate_scope_provenance": "explicit",
+          "consults_complete_dataset": true,
+          "generated_candidate_count": 159,
+          "global_identity_count": 3955,
+          "global_identity_hash": "5a5e3f74e3df8a98957d7dfcbec9bfcd886ecc5518ea3c101f3bece27c30ca13",
+          "observed_identity_count": 159,
+          "observed_identity_hash": "71e57ba590f8ddc683c702c14d6ba8219caba669f6999c93426f8e8ed6ba4439",
+          "quarantine_identity_count": 791,
+          "quarantine_identity_hash": "c707fb58d06bf74ff194b0a151bb8680d3e77f79388859d98639faf873af8f03",
+          "quarantine_overlap_with_observed_count": 0,
+          "quarantine_role": "validation_or_outer_test_partition_identity",
+          "rejected_already_measured": 159,
+          "rejected_duplicate_synthetic": 0,
+          "rejected_observed_in_labeled_train": 0,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 0,
+          "rejected_source_identical": 0,
+          "schema_version": "bh-candidate-scope-v1",
+          "selected_candidate_count": 0,
+          "unique_accepted_identity_count": 0
+        }
+      },
+      {
+        "method": "anonymous",
+        "model": "xgboost",
+        "policy_hash": "84a22084170014f67f6034061c6642facb128003e2d57b3f5073b7cef078a02f",
+        "policy_id": "anonymous-xgb-1",
+        "pool_statistics": {
+          "accepted_candidate_count": 0,
+          "candidate_scope_mode": "globally_unmeasured_prospective",
+          "candidate_scope_provenance": "explicit",
+          "consults_complete_dataset": true,
+          "generated_candidate_count": 159,
+          "global_identity_count": 3955,
+          "global_identity_hash": "5a5e3f74e3df8a98957d7dfcbec9bfcd886ecc5518ea3c101f3bece27c30ca13",
+          "observed_identity_count": 159,
+          "observed_identity_hash": "71e57ba590f8ddc683c702c14d6ba8219caba669f6999c93426f8e8ed6ba4439",
+          "quarantine_identity_count": 791,
+          "quarantine_identity_hash": "c707fb58d06bf74ff194b0a151bb8680d3e77f79388859d98639faf873af8f03",
+          "quarantine_overlap_with_observed_count": 0,
+          "quarantine_role": "validation_or_outer_test_partition_identity",
+          "rejected_already_measured": 159,
+          "rejected_duplicate_synthetic": 0,
+          "rejected_observed_in_labeled_train": 0,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 0,
+          "rejected_source_identical": 0,
+          "schema_version": "bh-candidate-scope-v1",
+          "selected_candidate_count": 0,
+          "unique_accepted_identity_count": 0
+        }
+      },
+      {
+        "method": "anonymous",
+        "model": "xgboost",
+        "policy_hash": "56dbf3755bcd4c5119ee397b23dd91d333c8443220e6b416dfc5f300821e270c",
+        "policy_id": "anonymous-xgb-2",
+        "pool_statistics": {
+          "accepted_candidate_count": 0,
+          "candidate_scope_mode": "globally_unmeasured_prospective",
+          "candidate_scope_provenance": "explicit",
+          "consults_complete_dataset": true,
+          "generated_candidate_count": 159,
+          "global_identity_count": 3955,
+          "global_identity_hash": "5a5e3f74e3df8a98957d7dfcbec9bfcd886ecc5518ea3c101f3bece27c30ca13",
+          "observed_identity_count": 159,
+          "observed_identity_hash": "71e57ba590f8ddc683c702c14d6ba8219caba669f6999c93426f8e8ed6ba4439",
+          "quarantine_identity_count": 791,
+          "quarantine_identity_hash": "c707fb58d06bf74ff194b0a151bb8680d3e77f79388859d98639faf873af8f03",
+          "quarantine_overlap_with_observed_count": 0,
+          "quarantine_role": "validation_or_outer_test_partition_identity",
+          "rejected_already_measured": 159,
+          "rejected_duplicate_synthetic": 0,
+          "rejected_observed_in_labeled_train": 0,
+          "rejected_other": 0,
+          "rejected_quarantined_held_out_identity": 0,
+          "rejected_source_identical": 0,
+          "schema_version": "bh-candidate-scope-v1",
+          "selected_candidate_count": 0,
+          "unique_accepted_identity_count": 0
+        }
+      }
+    ],
+    "reason": "Typed augmentation policy produced zero accepted synthetic rows and cannot be credited as augmentation.",
+    "registry_claimed": false,
+    "run_type": "policy_search_degenerate_pool",
+    "scientific_binding": {
+      "canonicalization_version": "bh-rdkit-isomeric-v1",
+      "commit_hash": "46d9b90b28d3628d2c5abf6246d8bb29ee6cf9c0",
+      "config_hash": "b6173ae2c5ed56430db59eb4faddb6947ad9532e696a1937497c1d15f6effcd8",
+      "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+      "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+      "per_seed_split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "source_id_split_hash": "da95824226080a53225bde320b48fdc7b5afd82257b61656386cd4a791b8f5a2",
+      "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+      "split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "split_schema_version": "bh-canonical-grouped-splits-v1"
+    },
+    "scientific_config": {
+      "candidate_scope": {
+        "mode": "globally_unmeasured_prospective"
+      },
+      "dataset": {
+        "path": "data/processed/bh_canonical_roles_v1.csv"
+      },
+      "features": {
+        "fingerprint_backend": "rdkit",
+        "kind": "bh_role_separated",
+        "n_bits": 2048,
+        "radius": 2
+      },
+      "low_data": {
+        "train_fractions": [
+          0.05
+        ]
+      },
+      "metrics": [
+        "rmse",
+        "mae",
+        "r2",
+        "spearman"
+      ],
+      "policy_search": {
+        "lower_is_better": true,
+        "metrics": [
+          "rmse",
+          "mae",
+          "r2",
+          "spearman"
+        ],
+        "model_policies": [
+          {
+            "method": "anonymous",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.05,
+              "max_depth": 6,
+              "n_estimators": 300,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "anonymous-xgb-0",
+            "transfer_config": {
+              "candidates_per_real": 2,
+              "clip_y_max": 100.0,
+              "clip_y_min": 0.0,
+              "donor_similarity_backend": "rdkit",
+              "donor_similarity_n_bits": 2048,
+              "donor_similarity_radius": 2,
+              "donor_strategy": "nearest_substrate",
+              "fallback_policy": "reject",
+              "high_yield_threshold": 80.0,
+              "label_strategy": "teacher_ensemble",
+              "max_candidates_per_source": 1,
+              "max_teacher_std": null,
+              "min_similarity": 0.0,
+              "n_neighbors": 10,
+              "random_state": 8,
+              "requested_roles": [
+                "ligand",
+                "base"
+              ],
+              "role_change_requirement": "all",
+              "synthetic_multiplier": 1.0,
+              "teacher_models": [
+                "extra_trees",
+                "random_forest"
+              ]
+            }
+          },
+          {
+            "method": "anonymous",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.03,
+              "max_depth": 4,
+              "n_estimators": 500,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "anonymous-xgb-1",
+            "transfer_config": {
+              "candidates_per_real": 2,
+              "clip_y_max": 100.0,
+              "clip_y_min": 0.0,
+              "donor_similarity_backend": "rdkit",
+              "donor_similarity_n_bits": 2048,
+              "donor_similarity_radius": 2,
+              "donor_strategy": "nearest_substrate",
+              "fallback_policy": "reject",
+              "high_yield_threshold": 80.0,
+              "label_strategy": "teacher_ensemble",
+              "max_candidates_per_source": 1,
+              "max_teacher_std": null,
+              "min_similarity": 0.0,
+              "n_neighbors": 10,
+              "random_state": 8,
+              "requested_roles": [
+                "ligand",
+                "base"
+              ],
+              "role_change_requirement": "all",
+              "synthetic_multiplier": 1.0,
+              "teacher_models": [
+                "extra_trees",
+                "random_forest"
+              ]
+            }
+          },
+          {
+            "method": "anonymous",
+            "model": "xgboost",
+            "params": {
+              "learning_rate": 0.02,
+              "max_depth": 3,
+              "n_estimators": 800,
+              "n_jobs": 1,
+              "tree_method": "hist"
+            },
+            "policy_id": "anonymous-xgb-2",
+            "transfer_config": {
+              "candidates_per_real": 2,
+              "clip_y_max": 100.0,
+              "clip_y_min": 0.0,
+              "donor_similarity_backend": "rdkit",
+              "donor_similarity_n_bits": 2048,
+              "donor_similarity_radius": 2,
+              "donor_strategy": "nearest_substrate",
+              "fallback_policy": "reject",
+              "high_yield_threshold": 80.0,
+              "label_strategy": "teacher_ensemble",
+              "max_candidates_per_source": 1,
+              "max_teacher_std": null,
+              "min_similarity": 0.0,
+              "n_neighbors": 10,
+              "random_state": 8,
+              "requested_roles": [
+                "ligand",
+                "base"
+              ],
+              "role_change_requirement": "all",
+              "synthetic_multiplier": 1.0,
+              "teacher_models": [
+                "extra_trees",
+                "random_forest"
+              ]
+            }
+          }
+        ],
+        "selection_metric": "rmse"
+      },
+      "splits": {
+        "directory": "results/corrected_canonical_splits_phase15",
+        "method": "canonical_saved"
+      }
+    },
+    "seed": 8,
+    "test_evaluated": false,
+    "train_fraction": 0.05
+  },
+  "schema_version": "bh-degenerate-search-unit-v1",
+  "status": "degenerate_no_frozen_policy"
+}

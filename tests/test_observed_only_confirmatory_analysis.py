@@ -292,9 +292,15 @@ def write_pool_accounting(
     (root / "manifest.json").write_text(
         json.dumps(
             {
-                "manifest_hash": "m" * 64,
+                "run_id": "corrected-pool-accounting-fixture",
+                "git_commit": "0" * 40,
+                "config_hash": "c" * 64,
                 "dataset_hash": DATASET_HASH,
-                "split_directory": "results/corrected_canonical_splits_phase15",
+                "result_status": "corrected_revalidation",
+                "historical_results_loaded": False,
+                "resolved_config": {
+                    "splits": {"directory": "results/corrected_canonical_splits_phase15"}
+                },
             }
         )
     )
@@ -473,6 +479,12 @@ def test_end_to_end_accounts_for_all_27_arm_units(tmp_path: Path) -> None:
     assert payload["secondary"]["label"] == "secondary"
     assert payload["run"]["equal_arm_search_budget"] is True
     assert payload["run"]["dataset_hash"] == DATASET_HASH
+    assert payload["run"]["pool_accounting"]["run_id"] == "corrected-pool-accounting-fixture"
+    assert len(payload["run"]["pool_accounting"]["manifest_hash"]) == 64
+    assert (
+        payload["run"]["pool_accounting"]["split_directory"]
+        == "results/corrected_canonical_splits_phase15"
+    )
     sizes = payload["treatment_size"]["accepted_synthetic_rows_by_seed"]
     assert sizes[PRIMARY_SCOPE_MODE]["7"] == 307
     assert sizes[SECONDARY_CONTROL_SCOPE_MODE]["7"] == 0

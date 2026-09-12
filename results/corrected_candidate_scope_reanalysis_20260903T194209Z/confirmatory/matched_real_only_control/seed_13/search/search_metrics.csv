@@ -1,0 +1,13 @@
+split,metric,value,policy_id,policy_hash,selected_policy,evaluation_unit,seed,train_fraction,method,model,n_train,n_validation
+valid,rmse,15.236450473226665,real_only-xgb-0,f0da09218e13404037710e31e47ff22bbd9c515680f20a28a12a8eca24a1183d,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,mae,10.162930273828156,real_only-xgb-0,f0da09218e13404037710e31e47ff22bbd9c515680f20a28a12a8eca24a1183d,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,r2,0.6744482057693879,real_only-xgb-0,f0da09218e13404037710e31e47ff22bbd9c515680f20a28a12a8eca24a1183d,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,spearman,0.8279986590555092,real_only-xgb-0,f0da09218e13404037710e31e47ff22bbd9c515680f20a28a12a8eca24a1183d,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,rmse,14.333702077361718,real_only-xgb-1,687a1e8a69c0cbd4510882b173ed4a3311a1cfc008f6f11bea1d647542530489,True,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,mae,10.03270293868418,real_only-xgb-1,687a1e8a69c0cbd4510882b173ed4a3311a1cfc008f6f11bea1d647542530489,True,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,r2,0.7118827694039025,real_only-xgb-1,687a1e8a69c0cbd4510882b173ed4a3311a1cfc008f6f11bea1d647542530489,True,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,spearman,0.8352925206250197,real_only-xgb-1,687a1e8a69c0cbd4510882b173ed4a3311a1cfc008f6f11bea1d647542530489,True,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,rmse,15.037301278306225,real_only-xgb-2,ca17be8decad04b08b71c825d79cccc5c22b791e9ea63dc6624f0807890393e5,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,mae,11.01892398384553,real_only-xgb-2,ca17be8decad04b08b71c825d79cccc5c22b791e9ea63dc6624f0807890393e5,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,r2,0.6829028879173293,real_only-xgb-2,ca17be8decad04b08b71c825d79cccc5c22b791e9ea63dc6624f0807890393e5,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395
+valid,spearman,0.8226663798538985,real_only-xgb-2,ca17be8decad04b08b71c825d79cccc5c22b791e9ea63dc6624f0807890393e5,False,seed=13|train_fraction=0.05|comparison=model_policy_search,13,0.05,real_only,xgboost,159,395

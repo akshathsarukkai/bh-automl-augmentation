@@ -1,0 +1,40 @@
+{
+  "final_evaluation_manifest_hash": "188e0bd7e385d2e7de1e36e57e40eff822db48c0d279a8b04b8a759803d7d3dd",
+  "payload": {
+    "evaluation_unit": "seed=8|train_fraction=0.05|comparison=model_policy_search",
+    "final_test_metrics_sha256": "f5f12b028e5982da02552ce93d9002cb5cb1af10ef6e18e02936f836663696b4",
+    "frozen_policy_hash": "fd2532a1621ec93e8948893066d0838fee9ca948eba080bfd3dc43b4686e2db6",
+    "outer_test_labels_accessed": true,
+    "outer_test_prediction_batches": 1,
+    "per_unit_test_evaluation_counts": {
+      "seed=8|train_fraction=0.05|comparison=model_policy_search": 1
+    },
+    "refit_data_roles": [
+      "train"
+    ],
+    "refit_source_id_hash": "ad7a22168e5b38237521031aefe2002edf56c062cbeafd011404c02fe8007824",
+    "run_type": "final_evaluation",
+    "scientific_binding": {
+      "canonicalization_version": "bh-rdkit-isomeric-v1",
+      "commit_hash": "08f91d92da8053df3d8fe6904f6478bd4a648056",
+      "config_hash": "af60c336cdb97f6d304a0b3e20bb66d4d09eb4f25a3e6802ad81e7874571e26c",
+      "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+      "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+      "per_seed_split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "source_id_split_hash": "da95824226080a53225bde320b48fdc7b5afd82257b61656386cd4a791b8f5a2",
+      "split_aggregate_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+      "split_hash": "1dcf5443c4b362720a3f55fad32d2838ca5d2d75363453b7650a09108bef4c1f",
+      "split_schema_version": "bh-canonical-grouped-splits-v1"
+    },
+    "search_manifest_hash": "9011ad0197061b2bf6864f080e5b9d8c34cc8fe01052010939b7c75a03156217",
+    "selected_method": "anonymous",
+    "selection_data_roles": [
+      "train",
+      "valid"
+    ],
+    "test_evaluated": true,
+    "test_source_id_hash": "3e5d70971388e01a4bed48a895c625c3cf3a807aaa529ce63d4faa53da477e75"
+  },
+  "schema_version": "bh-final-evaluation-manifest-v1",
+  "status": "complete"
+}

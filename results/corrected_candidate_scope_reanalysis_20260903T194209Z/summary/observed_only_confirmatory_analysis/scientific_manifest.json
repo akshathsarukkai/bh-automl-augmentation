@@ -1,0 +1,98 @@
+{
+  "analysis_hash": "134a3dc01fdec16d31b3a63d93e6b722766238cb494e0c60ebee96860f23e0bb",
+  "command": "python scripts/run_observed_only_confirmatory_analysis.py --run-root results/corrected_candidate_scope_reanalysis_20260903T194209Z --pool-accounting-directory results/corrected_observed_only_transfer_pool_accounting_v1 --output-directory results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis",
+  "config_hash": "5fa27a1ac59c195d4b6fa0059d4c06f606d728486dd89fbb535f419ea2caa72f",
+  "created_at": "2026-09-11T23:42:42.507270Z",
+  "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+  "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+  "dependency_versions": {
+    "PyYAML": "6.0.3",
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.11.16",
+    "rdkit": "2023.9.6",
+    "scikit-learn": "1.9.0",
+    "scipy": "1.17.1",
+    "torch": "2.13.0",
+    "xgboost": "3.2.0"
+  },
+  "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+  "git_commit": "a3ddc1c4c4045f2e51dc8582d438f0699f711c24",
+  "git_dirty_at_execution": true,
+  "manifest_hash": "861e99960117b0a683bb2726029985616a5f2faf676ffa84cb680f20daeced2b",
+  "output_directory": "results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis",
+  "output_hashes": {
+    "confirmatory_analysis.json": "0ba45387812d20dbbd0ff20061a4c04d0f8c8b4da004237bcab267aae7109bbf",
+    "confirmatory_report.md": "53bb372e68f0c73b675f6bd189d4c05f163fc2a0970d31403c118e68f5c46bc3"
+  },
+  "plan_hash": "07b63f4b7bf9b4afa56fb7a601a2dcce5a0288b7d722cc0191cbe8b3b84bb9a7",
+  "platform_record": {
+    "byte_order": "little",
+    "cpu_count_affinity": null,
+    "cpu_count_logical": 8,
+    "environment": {
+      "KMP_DUPLICATE_LIB_OK": "True"
+    },
+    "float_repr_style": "short",
+    "machine": "arm64",
+    "max_size": 9223372036854775807,
+    "platform": "macOS-26.5.1-arm64-arm-64bit",
+    "processor": "arm",
+    "python_compiler": "Clang 19.1.7 ",
+    "python_implementation": "CPython",
+    "python_version": "3.11.16",
+    "release": "25.5.0",
+    "system": "Darwin",
+    "torch": {
+      "cuda_available": false,
+      "deterministic_algorithms": false,
+      "num_interop_threads": 8,
+      "num_threads": 6,
+      "version": "2.13.0"
+    }
+  },
+  "pool_accounting_manifest_hash": "7d4908830292e4678c5577d49755b9d96a32034f24be989079bed5a02407a830",
+  "preregistration_commit": "c6aab9e705613d5b5fca3ffa145f54db4fdaa463",
+  "preregistration_document": "PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md",
+  "resolved_scientific_config": {
+    "bootstrap_alpha": 0.05,
+    "bootstrap_replicates": 10000,
+    "bootstrap_seed": 1601,
+    "commit": "c6aab9e705613d5b5fca3ffa145f54db4fdaa463",
+    "comparator_family": "matched_real_only_control",
+    "document": "PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md",
+    "estimand": "comparator_rmse_minus_augmented_rmse_per_seed",
+    "maximum_degenerate_units": 2,
+    "metric": "rmse",
+    "minimum_improved_units_for_positive": 7,
+    "minimum_included_units": 7,
+    "planned_seeds": [
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "practical_minimum_effect": 1.0,
+    "primary_candidate_scope_mode": "observed_only_low_data",
+    "primary_family": "observed_only_condition_transfer",
+    "secondary_control_candidate_scope_mode": "globally_unmeasured_prospective",
+    "secondary_control_family": "globally_unmeasured_condition_transfer",
+    "train_fraction": 0.05,
+    "transfer_kind": "anonymous"
+  },
+  "row_counts": {
+    "included_units": 9,
+    "paired_deltas": 9,
+    "per_unit_rows": 9,
+    "secondary_control_rows": 9
+  },
+  "schema_version": "bh-scientific-run-manifest-v1",
+  "split_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+  "status": "observed_only_confirmatory_analysis_complete",
+  "verdict": "null"
+}

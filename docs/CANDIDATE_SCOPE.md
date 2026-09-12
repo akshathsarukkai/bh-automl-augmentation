@@ -134,6 +134,21 @@ This failure mode is invisible on a sparse dataset, where global rejection
 removes few candidates. It is only obvious on a saturated design matrix, where
 the gate stops filtering bad chemistry and starts filtering *all* chemistry.
 
+### What the confirmatory experiment found
+
+The preregistered experiment that followed from this audit
+(`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md`, seeds 6–14 at fraction 0.05) has
+been executed. On those nine units the observed-only rule accepted **999** of
+1,431 generated anonymous-transfer candidates (101–125 per unit, against 159
+real rows); the global rule accepted **2**, and the control arm run under it
+was degenerate on 8 of 9 units. So the correction does exactly what this
+document predicts: it makes the treatment exist.
+
+It does not make the treatment work. The outer-test verdict is **null**: mean
+paired RMSE reduction −0.377, 95% interval [−0.746, −0.035], inside the ±1.0
+practical-equivalence band; 2 of 9 units improved. The committed analysis is
+`results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis/`.
+
 ---
 
 ## 6. Retrospective withheld-cell reconstruction
@@ -175,6 +190,14 @@ produces a number outside [0, 1] and means nothing.
 
 **This diagnostic is secondary and non-selecting.** It measures the mechanism,
 not the benchmark, and may not be substituted for a null primary outcome.
+
+On the nine confirmatory units (seeds 6–14, fraction 0.05, observed-only rule)
+the anonymous-transfer pseudo-labels cover 3.7% of the hidden cells with MAE
+11.7, RMSE 16.3, Spearman 0.76 and bias +1.7 yield points; typed transfer is
+slightly better on every metric. This is the coherent-but-uncomfortable case
+section 8 of the preregistration anticipated: the transfer reconstructs
+withheld chemistry with useful rank accuracy, and that accuracy does not
+translate into outer-test predictive gain.
 
 ---
 

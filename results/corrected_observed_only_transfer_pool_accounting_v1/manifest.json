@@ -1,0 +1,177 @@
+{
+  "candidate_scope_modes": [
+    "observed_only_low_data",
+    "globally_unmeasured_prospective"
+  ],
+  "command": "scripts/run_candidate_scope_reanalysis.py --config configs/corrected_observed_only_transfer_pool_accounting.yaml --output-directory results/corrected_observed_only_transfer_pool_accounting_v1",
+  "config_hash": "4a807897da89c62dfea66bd3e9a891c42d6987de3ea290786dd49f0622863092",
+  "config_path": "configs/corrected_observed_only_transfer_pool_accounting.yaml",
+  "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+  "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+  "dependency_versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.11.16",
+    "rdkit": "2023.9.6",
+    "scikit-learn": "1.9.0",
+    "xgboost": "3.2.0"
+  },
+  "feature_metadata_hash": {
+    "seed=10|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=11|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=12|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=13|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=14|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=6|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=7|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=8|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+    "seed=9|fraction=0.05": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe"
+  },
+  "git_commit": "a3ddc1c4c4045f2e51dc8582d438f0699f711c24",
+  "git_dirty": false,
+  "historical_results_loaded": false,
+  "output_directory": "results/corrected_observed_only_transfer_pool_accounting_v1",
+  "output_hashes": {
+    "candidate_audit.csv": "a2f2e78f8ec76e3dc84ce0b29fe09d366d3ddedd75c7e95649a6888b4c798534",
+    "candidate_pool_statistics.csv": "e6af9d87a7b54337b6feed9e2975b5b3060df62d9957bec2c9ffb3490b9e49db",
+    "candidate_scope_comparison.csv": "7f909d4757d5960187c80244fb31b891ab856b571f7ef204e2bbf4d80d90a812",
+    "leakage_contracts.json": "cc1e118df73fdb9ea983ad9c06542c6bc8a811dfcf845f6135f928dd55a7c929",
+    "partition_audit.csv": "113c7528b2923a630a6d8871ee21a19a8eab8b3c06828afb8875b7a9cacae427",
+    "validation_metrics.csv": "245a7fd4b683233695546a277328f4b836ce6e1866e5dd5b5fe6014dc9eeaf5b",
+    "withheld_cell_oracle.csv": "b1b5d3bc01ff279db567f10eb4b3a335ece347cbab910523bc853ac206ecca17",
+    "withheld_cell_oracle_by_change_type.csv": "2894a37046524ff43db82c7a90dac96e488a5554296dfd1bfb6ffabca2d46dd9"
+  },
+  "resolved_config": {
+    "candidate_scope": {
+      "modes": [
+        "observed_only_low_data",
+        "globally_unmeasured_prospective"
+      ]
+    },
+    "dataset": {
+      "path": "data/processed/bh_canonical_roles_v1.csv"
+    },
+    "features": {
+      "fingerprint_backend": "rdkit",
+      "kind": "bh_role_separated",
+      "n_bits": 2048,
+      "radius": 2
+    },
+    "metrics": [
+      "rmse",
+      "mae",
+      "r2",
+      "spearman"
+    ],
+    "models": [
+      {
+        "name": "xgboost",
+        "params": {
+          "learning_rate": 0.05,
+          "max_depth": 4,
+          "n_estimators": 300,
+          "n_jobs": 1,
+          "tree_method": "hist"
+        }
+      }
+    ],
+    "oracle": {
+      "high_yield_threshold": 80.0,
+      "top_k_fractions": [
+        0.1,
+        0.2
+      ]
+    },
+    "output": {
+      "directory": "results/corrected_observed_only_transfer_pool_accounting_v1"
+    },
+    "scientific_run": true,
+    "splits": {
+      "directory": "results/corrected_canonical_splits_phase15",
+      "seeds": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ],
+      "train_fractions": [
+        0.05
+      ]
+    },
+    "transfer": {
+      "anonymous": {
+        "candidates_per_real": 2,
+        "clip_y_max": 100.0,
+        "clip_y_min": 0.0,
+        "donor_similarity_backend": "rdkit",
+        "donor_similarity_n_bits": 2048,
+        "donor_similarity_radius": 2,
+        "donor_strategy": "nearest_substrate",
+        "fallback_policy": "reject",
+        "high_yield_threshold": 80.0,
+        "label_strategy": "teacher_ensemble",
+        "max_candidates_per_source": 1,
+        "max_teacher_std": null,
+        "min_similarity": 0.0,
+        "n_neighbors": 10,
+        "requested_roles": [
+          "ligand",
+          "base"
+        ],
+        "role_change_requirement": "all",
+        "synthetic_multiplier": 1.0,
+        "teacher_models": [
+          "extra_trees",
+          "random_forest"
+        ]
+      },
+      "typed": {
+        "clip_y_max": 100.0,
+        "clip_y_min": 0.0,
+        "donor_similarity_backend": "rdkit",
+        "donor_similarity_n_bits": 2048,
+        "donor_similarity_radius": 2,
+        "donor_strategy": "same_substrate_different_role",
+        "fallback_policy": "reject",
+        "label_strategy": "teacher_ensemble",
+        "max_candidates_per_source": 1,
+        "max_resample_attempts": 10,
+        "max_teacher_std": null,
+        "min_similarity": 0.0,
+        "role_change_requirement": "all",
+        "role_transfer_mode": "ligand_base",
+        "synthetic_multiplier": 1.0,
+        "teacher_models": [
+          "extra_trees",
+          "random_forest"
+        ]
+      }
+    }
+  },
+  "result_status": "corrected_revalidation",
+  "run_id": "corrected-20260911T234023Z",
+  "schema_version": "bh-candidate-scope-reanalysis-v1",
+  "seeds": [
+    42
+  ],
+  "split_hashes": {
+    "seed=10|fraction=0.05": "489b08bb7cdb7363511bbc2e1be5791933c6a6a2e33d414de429c43b38f8ec3e",
+    "seed=11|fraction=0.05": "4633c21fdfe0e88df31ec0f65b7c8c5ceabff0a3746856c3e597219bf523cfac",
+    "seed=12|fraction=0.05": "a7029d13807c74db2e6ad6a0b8c1bcc92ec45e26d2347f766fe014aaf2e3d512",
+    "seed=13|fraction=0.05": "e30e338eb584c55ebc9642ab70369a678ad52ebe6d6529bac5ba8e3d24c17a7f",
+    "seed=14|fraction=0.05": "e8ee464ec8d574e5201fc3d827d6c25e7fc6e48f3b6f781393c280aa387882a5",
+    "seed=6|fraction=0.05": "5ecc9ad2cd66c035702b7ac5b45699a2af057cb6008ac39df90de75570f54eda",
+    "seed=7|fraction=0.05": "6766a96a79576f8f4fc3794b41141bb771c209e430a6c6ac28fc185a3ce70f07",
+    "seed=8|fraction=0.05": "da95824226080a53225bde320b48fdc7b5afd82257b61656386cd4a791b8f5a2",
+    "seed=9|fraction=0.05": "71e561dff9ee4d33de2c45f5703e2d68645b60820a685affdc271aa0deefff29"
+  },
+  "timestamp": "2026-09-11T23:40:23.966733+00:00",
+  "train_fractions": [
+    1.0
+  ]
+}

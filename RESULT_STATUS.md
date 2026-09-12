@@ -18,12 +18,16 @@ Every method and result family below carries **exactly one** status.
 | **Deprecated** | Superseded and not to be used for new work. Not necessarily wrong; simply replaced. |
 | **Externally blocked** | Cannot progress without something a human must supply (licensed data, network access). No result is claimed either way. |
 
-**The confirmatory-evidence class contains exactly one result, and it is a
-null.** Phase 15 preregistered and executed one primary confirmatory hypothesis:
-anonymous condition-transfer augmentation against a matched real-only XGBoost
-baseline. The verdict was null — no practically meaningful change in either
-direction. Everything else in this repository is development evidence,
-experimental, invalidated, deprecated, or externally blocked.
+**The confirmatory-evidence class contains exactly two results, and both are
+nulls.** Phase 15 preregistered and executed one primary confirmatory
+hypothesis: anonymous condition-transfer augmentation against a matched
+real-only XGBoost baseline at training fraction 0.2. The verdict was null — no
+practically meaningful change in either direction. The observed-only condition
+transfer experiment then asked the same question at training fraction 0.05
+under the eligibility rule a low-data learner can actually apply, on fresh
+evaluation units, and its preregistered verdict is also null. Everything else in
+this repository is development evidence, experimental, invalidated, deprecated,
+or externally blocked.
 
 ## Infrastructure and contracts
 
@@ -145,15 +149,20 @@ direction.** See `docs/EXTERNAL_DATASETS.md`.
 | Phase | State |
 | --- | --- |
 | Phase 14 — reassess the supervised autoencoder | **Complete. Development evidence.** The supervised autoencoder **failed** its predefined retention criterion and is classified as a **secondary ablation**. It is not a supported method and was excluded from confirmation. Authoritative output: `results/autonomous_execution/phase_14/corrected-20260728-851d64e-phase14-production-v3`. |
-| Phase 15 — primary confirmatory hypothesis | **Complete. Confirmatory evidence — the only entry in that class.** Verdict **null**: anonymous condition-transfer augmentation produces no practically meaningful change relative to a matched real-only XGBoost baseline. Preregistered at `13fbfde` before any result existed. Authoritative output: `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`. |
-| Candidate-scope reanalysis — observed-only condition transfer | **Preregistered, not yet executed.** `PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md` freezes a new confirmatory experiment on seeds 6–14 at training fraction 0.05, comparing observed-only condition transfer against a matched real-only control, with a globally-unmeasured prospective control and a withheld-cell oracle diagnostic as declared secondary evidence. Development evidence: `results/corrected_candidate_scope_development_v1`. |
+| Phase 15 — primary confirmatory hypothesis | **Complete. Confirmatory evidence — the first of two entries in that class.** Verdict **null**: anonymous condition-transfer augmentation produces no practically meaningful change relative to a matched real-only XGBoost baseline. Preregistered at `13fbfde` before any result existed. Authoritative output: `results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1`. |
+| Candidate-scope reanalysis — observed-only condition transfer | **Complete. Confirmatory evidence — the second entry in that class.** Preregistered at `c6aab9e` (`PREREGISTRATION_OBSERVED_ONLY_TRANSFER.md`) before any confirmatory outcome existed; the document is unmodified. Seeds 6–14 at training fraction 0.05, observed-only anonymous condition transfer against a matched real-only XGBoost control with equal search budgets. Verdict **null**: mean paired RMSE reduction −0.377, 95% seed-cluster bootstrap [−0.746, −0.035] (10,000 replicates, seed 1601), entirely inside the ±1.0 RMSE practical-equivalence band; 2 of 9 units improved; Wilcoxon p = 0.098 (secondary). The treatment existed this time: 101–125 accepted synthetic rows per unit against 159 real rows, versus 0–2 under the historical global rule. The globally-unmeasured control arm was degenerate on 8 of 9 units, which is its result. Authoritative outputs (committed): `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis`, per-unit arms under `results/corrected_candidate_scope_reanalysis_20260903T194209Z/confirmatory/`, treatment-size accounting under `results/corrected_observed_only_transfer_pool_accounting_v1`. Development evidence: `results/corrected_candidate_scope_development_v1`. |
 | Phase 18 — prospective preparation | The recommendation simulation and the prospective package are both committed and classified as development evidence above. **Prospective laboratory validation has not been performed**, so no phase claims a wet-lab outcome. |
 
-The confirmatory-evidence class contains exactly one result, and that result is
-a null. Its scope is training fraction 0.2, canonical grouped random splits, one
-dataset, and **candidate eligibility decided from the rows each phase could
-observe** (§ *Candidate-scope semantics* below). It is **not** OOD evidence and
-must not be quoted as one.
+The confirmatory-evidence class contains exactly two results, and both are
+nulls. Phase 15's scope is training fraction 0.2; the observed-only transfer
+experiment's scope is training fraction 0.05 with 101–125 accepted synthetic
+rows per unit. Both use canonical grouped random splits, one dataset, and
+**candidate eligibility decided from the rows the learner could observe**
+(§ *Candidate-scope semantics* below). Both are random-split results: each is
+**not** OOD evidence and must not be quoted as one. Together they say: on this
+dataset, anonymous condition transfer with teacher pseudo-labels neither helps
+nor practically harms low-data yield prediction, whether or not the treatment is
+suppressed by the eligibility rule.
 
 No prospective laboratory claim is made by any phase.
 
@@ -200,6 +209,7 @@ in the file.
 | Corrected anonymous / role-aware condition transfer | `observed_only_low_data` | Materially affected; their candidate pools were suppressed by the same rule. Existing bundles are retained under their executed protocol and are not cited as low-data augmentation-benefit evidence. |
 | Frozen-policy search / final evaluation (Phases 5, 6) | `observed_only_low_data` | Latent only. No completed final evaluation on that chain selected an augmenting method, so no published metric changed. |
 | External reaction-family validation | `observed_only_low_data` | Semantics corrected in code, config and tests. The empirical datasets remain **externally blocked**; no run was fabricated. |
+| Observed-only condition transfer confirmatory (seeds 6–14, fraction 0.05) | `observed_only_low_data` primary; `globally_unmeasured_prospective` control | **This is the experiment the correction motivated.** Under the observed-only rule the treatment carried 999 accepted rows across the nine units (of 1,431 generated); under the global rule, 2. The outer-test verdict is null either way. Committed: `results/corrected_candidate_scope_reanalysis_20260903T194209Z/summary/observed_only_confirmatory_analysis`. |
 
 ## Why role-aware v2 is invalid
 

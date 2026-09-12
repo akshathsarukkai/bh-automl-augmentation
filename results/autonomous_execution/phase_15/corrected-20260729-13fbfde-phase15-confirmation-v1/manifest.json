@@ -1,0 +1,375 @@
+{
+  "candidate_count": 420,
+  "canonical_split_hash": "9ddb713ace55842aa8794a0d30a457dea92c3338d479b51c7d7a48eafed9b50c",
+  "command": "python scripts/run_redesigned_ae_benchmark.py --config configs/primary_confirmatory_phase15.yaml --output-directory results/autonomous_execution/phase_15/corrected-20260729-13fbfde-phase15-confirmation-v1",
+  "config_hash": "587deec926a518591bf9f97ffed7e48e6d5f03fffd20a48984e995fc8accb762",
+  "dataset_hash": "df61cb657747e7f7715ff93060b869550a154a435f6e325d84448477f161d365",
+  "dependency_versions": {
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "python": "3.12.12",
+    "rdkit": "2023.9.6",
+    "scikit-learn": "1.2.2",
+    "torch": "2.10.0",
+    "xgboost": "3.3.0"
+  },
+  "evaluation_unit_count": 10,
+  "feature_metadata_hash": "d935e2d9cb2ffcdb080a9ee23d157f653217252629b2ec4f268208855cdaeebe",
+  "final_evaluation_anchor_hash": "55de9d46424962cee12654f7ae50fc03fb330e515d1041f8becaf2c1cfbd0385",
+  "frozen_document_hash": "d7591515a2b19576082508939c5771c39f3f989ba0fab476a67863d93036bf2c",
+  "git_commit": "13fbfdef7ac0cfd05dda2c1c33bb6a59b4d64fff",
+  "git_dirty_at_execution": true,
+  "manifest_hash": "e4be0ed026b9d3bae8852ffe5e85e62e48f6a54bf29f3b2e874d703016370318",
+  "method_family_count": 7,
+  "minimum_control_search_budget": 3,
+  "outer_test_labels_accessed_after_retention_freeze": true,
+  "output_hashes": {
+    "benchmark_plan.json": "acf8c4fdf9a20cad5278f3ec96c98fa9be71a5ae41108e1c9c1b38061f82ada0",
+    "candidate_policies.csv": "f76021759f551d5bd0fd74f68c66f7e0765145a3fccafcd3e5ca9aec03babd5a",
+    "evaluation_claims.csv": "ed0b96c25ad38ca383c58f87735854fc7aaa6a1e7a30895943c92d068a656305",
+    "final_predictions.csv": "922d86d55a1d1c05303b51cc5572b047c0ec427a23fd578f1a9d19e0b88e62b1",
+    "final_test_metrics.csv": "46b32d6137cddef6bad879ff77818674ff5240cf901adcb09e7c5c64cb780548",
+    "frozen_method_policies.json": "d6bd606ac98f24ae5fb775b00accdcdba15bb1e45c04686e1b3dd6da7e254f3c",
+    "partition_assignments.csv": "8284d696ce9b5073d19cae4776861c1745604789971a3be04b7f3f4796a8ec13",
+    "placement_metrics.csv": "3c05e4baafd333903347918be8907573f9e9f8d0da12e6579e6fa86a8672d7ac",
+    "placement_predictions.csv": "7f3fbc0d52ba5627ad0759b7981c060f45b9ab1747f57b65df2c97c5ae7735a7",
+    "pool_candidate_audit.csv": "abaf7bcc0437fbd2cba9c63f8e9f5b67d9c76724065e704cba988228a774e061",
+    "pool_summary.csv": "91ccb3e5d6d5a3a7e83e3139528aae5791a27c300fd14123378f4f7f61fc5c9a",
+    "reconstruction_metrics.csv": "9ddb1808cb60939826a5462cacadfc42d584c3e8a5ea53fe81c83ee93c3cf702",
+    "refit_audit.csv": "5991a073f77f69d7fa863073107519d41392099fa77da0780c3add2c15db0e34",
+    "resource_metrics.csv": "0c7580297a498503091f0bcca0b03c17015951efe44084f60df9df3a47a26ca2",
+    "retention_decision.json": "2a927feedebe7e0b191a40367512846414d02f41009bd6a9ed96b42c28b276fc",
+    "search_metrics.csv": "7b885e25b8c594544da6c1f842848067ddea2b01ffa694b6d88d17bba196a4f1",
+    "search_predictions.csv": "e902366489347d32784206314ba30ace662fb65a02b5ad46ba185bc87cf78db2",
+    "split_units.csv": "16bfed194254b6f0c07585bd3b47fee6d51b217c46c79d6e9ff3c59f0c72a3fa",
+    "summary.csv": "9df8aaad20ac4832c7e52ce40f714c41d56b6d0f368b03bedc23753d386608fc",
+    "test_evaluation_registry.json": "39944cd6579abb3af194409da208bbc74346ed289c0556e4270cd8810af8c5a9"
+  },
+  "placement_evidence_hash": "c3518ff990442e99b82d9080fe8bb9df9af7a4459f04152dd7266cbe2e0d94c4",
+  "plan_hash": "f998c7354f228c1c5eb6c61cf7437873d9264d734449e75083464c307edfcf08",
+  "resolved_scientific_config": {
+    "anonymous_config": {
+      "candidates_per_real": 2,
+      "clip_y_max": 100.0,
+      "clip_y_min": 0.0,
+      "donor_similarity_backend": "rdkit",
+      "donor_similarity_n_bits": 2048,
+      "donor_similarity_radius": 2,
+      "donor_strategy": "nearest_substrate",
+      "fallback_policy": "reject",
+      "high_yield_threshold": 80.0,
+      "label_strategy": "teacher_ensemble",
+      "max_candidates_per_source": 1,
+      "max_teacher_std": null,
+      "min_similarity": 0.0,
+      "n_neighbors": 10,
+      "requested_roles": [
+        "ligand",
+        "base"
+      ],
+      "role_change_requirement": "all",
+      "synthetic_multiplier": 1.0,
+      "teacher_models": [
+        "extra_trees",
+        "random_forest"
+      ]
+    },
+    "base_seed": 1400,
+    "dataset_path": "data/processed/bh_canonical_roles_v1.csv",
+    "feature_config": {
+      "fingerprint_backend": "rdkit",
+      "kind": "bh_role_separated",
+      "n_bits": 2048,
+      "radius": 2
+    },
+    "fractions": [
+      0.2
+    ],
+    "methods": {
+      "ae_candidates": [
+        {
+          "candidate_id": "ae-baseline-128-16-rec025-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-rec0-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.0,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-rec01-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.1,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-rec05-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.5,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-rec1-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 1.0,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-bce-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "binary_cross_entropy",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-256-32-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 256,
+          "latent_dim": 32,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-mask01-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.1,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-supervised1-anonymous",
+          "data_protocol": "anonymous",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 1.0
+        },
+        {
+          "candidate_id": "ae-typed",
+          "data_protocol": "typed",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 0.25
+        },
+        {
+          "candidate_id": "ae-real-only",
+          "data_protocol": "real_only",
+          "hidden_dim": 128,
+          "latent_dim": 16,
+          "masking_probability": 0.0,
+          "positive_bit_weight": 5.0,
+          "reconstruction_objective": "positive_bit_weighted_mse",
+          "role_balanced_reconstruction": true,
+          "synthetic_reconstruction_weight": 0.25,
+          "synthetic_supervised_weight": 0.25
+        }
+      ],
+      "control_latent_dims": [
+        16,
+        32
+      ],
+      "ridge_alphas": [
+        0.1,
+        1.0,
+        10.0
+      ],
+      "training": {
+        "batch_size": 64,
+        "internal_valid_fraction": 0.2,
+        "learning_rate": 0.001,
+        "max_epochs": 200,
+        "patience": 20,
+        "weight_decay": 1e-05
+      },
+      "transfer_supervised_weights": [
+        0.25,
+        1.0
+      ],
+      "transfer_xgboost_supervised_weights": [
+        1.0
+      ],
+      "xgboost_candidates": [
+        {
+          "learning_rate": 0.05,
+          "max_depth": 6,
+          "n_estimators": 300,
+          "n_jobs": 1
+        },
+        {
+          "learning_rate": 0.03,
+          "max_depth": 4,
+          "n_estimators": 500,
+          "n_jobs": 1
+        },
+        {
+          "learning_rate": 0.02,
+          "max_depth": 3,
+          "n_estimators": 800,
+          "n_jobs": 1
+        }
+      ]
+    },
+    "metrics": [
+      "rmse",
+      "mae",
+      "r2",
+      "spearman"
+    ],
+    "policy_valid_fraction": 0.2,
+    "retention_config": {
+      "ae_family": "redesigned_supervised_ae",
+      "bootstrap_alpha": 0.05,
+      "bootstrap_reps": 10000,
+      "bootstrap_seed": 1401,
+      "control_families": [
+        "truncated_svd",
+        "linear_autoencoder",
+        "direct_xgboost",
+        "matched_direct_mlp",
+        "anonymous_transfer_without_ae",
+        "typed_transfer_without_ae"
+      ],
+      "fractions": [
+        0.2
+      ],
+      "no_practical_loss_threshold": 1.0,
+      "practical_margin": 1.0,
+      "required_margin_wins_per_fraction": 4,
+      "seeds": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14
+      ]
+    },
+    "seeds": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14
+    ],
+    "selection_metric": "rmse",
+    "split_directory": "results/corrected_canonical_splits_phase15",
+    "typed_config": {
+      "clip_y_max": 100.0,
+      "clip_y_min": 0.0,
+      "donor_similarity_backend": "rdkit",
+      "donor_similarity_n_bits": 2048,
+      "donor_similarity_radius": 2,
+      "donor_strategy": "same_substrate_different_role",
+      "fallback_policy": "reject",
+      "label_strategy": "teacher_ensemble",
+      "max_candidates_per_source": 1,
+      "max_resample_attempts": 10,
+      "max_teacher_std": null,
+      "min_similarity": 0.0,
+      "role_change_requirement": "all",
+      "role_transfer_mode": "ligand_base",
+      "synthetic_multiplier": 1.0,
+      "teacher_models": [
+        "extra_trees",
+        "random_forest"
+      ]
+    }
+  },
+  "retention_data_role": "placement_validation",
+  "retention_decision_hash": "722e96cd8289cb08e4bd346238605c497bfddf76d598bb779b1a7640537a55c7",
+  "retention_placement": "secondary_ablation",
+  "row_counts": {
+    "evaluation_claims": 70,
+    "final_predictions": 27720,
+    "final_test_metrics": 280,
+    "placement_metrics": 280,
+    "placement_predictions": 27650,
+    "pool_candidate_audit": 18260,
+    "pool_summary": 40,
+    "reconstruction_metrics": 1950,
+    "refit_audit": 560,
+    "resource_metrics": 560,
+    "search_metrics": 1680,
+    "search_predictions": 52920,
+    "summary": 28
+  },
+  "schema_version": "bh-redesigned-ae-benchmark-v1",
+  "search_budget_by_family": {
+    "anonymous_transfer_without_ae": 3,
+    "direct_xgboost": 3,
+    "linear_autoencoder": 6,
+    "matched_direct_mlp": 10,
+    "redesigned_supervised_ae": 11,
+    "truncated_svd": 6,
+    "typed_transfer_without_ae": 3
+  },
+  "selection_scope": "within_family_inner_policy_validation",
+  "status": "corrected_revalidation_complete",
+  "test_evaluation_count_per_unit_family": 1,
+  "test_used_for_selection_or_retention": false
+}

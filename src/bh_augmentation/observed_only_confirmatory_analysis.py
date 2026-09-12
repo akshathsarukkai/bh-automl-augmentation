@@ -347,12 +347,26 @@ def load_pool_accounting(pool_directory: str | Path) -> dict[str, Any]:
             oracle_rows.setdefault(kind, {})[int(row["seed"])] = {
                 field: _clean_float(row[field]) for field in ORACLE_FIELDS if field in row
             }
-    manifest = json.loads((root / "manifest.json").read_text())
+    manifest_path = root / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("result_status") != "corrected_revalidation" or manifest.get(
+        "historical_results_loaded"
+    ) is not False:
+        raise ObservedOnlyConfirmatoryAnalysisError(
+            "The pool accounting bundle is not a corrected, history-free run."
+        )
     return {
         "directory": str(root),
-        "manifest_hash": manifest.get("manifest_hash"),
+        # The reanalysis manifest carries per-output hashes but no self-hash, so
+        # the analysis binds to the SHA-256 of the manifest file as written.
+        "manifest_hash": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+        "run_id": manifest.get("run_id"),
+        "git_commit": manifest.get("git_commit"),
+        "config_hash": manifest.get("config_hash"),
         "dataset_hash": manifest.get("dataset_hash"),
-        "split_directory": manifest.get("split_directory"),
+        "split_directory": dict(manifest.get("resolved_config", {}))
+        .get("splits", {})
+        .get("directory"),
         "leakage_contracts": {
             key: contracts.get(key)
             for key in (
@@ -548,6 +562,9 @@ def analyze_observed_only_confirmation(
                 for key in (
                     "directory",
                     "manifest_hash",
+                    "run_id",
+                    "git_commit",
+                    "config_hash",
                     "dataset_hash",
                     "split_directory",
                     "leakage_contracts",

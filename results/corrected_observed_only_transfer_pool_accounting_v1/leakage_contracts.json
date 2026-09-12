@@ -1,0 +1,54 @@
+{
+  "candidate_pool_statistics_sha256": "420769380484502a641e93afef4c0857521119e62d3f3e6e6835caa81fefc720",
+  "candidate_scope_modes": [
+    "observed_only_low_data",
+    "globally_unmeasured_prospective"
+  ],
+  "evaluation_registry_claimed": false,
+  "frozen_bundle_hashes": [
+    "00bd0a2fe844d03b71bff4f6993866cf55904c27d9302d17e024ed5a3bb948dd",
+    "05aec97821d918066239de8ba00fdac0322974299af077bd299d3726e25d5650",
+    "06502a88a9ca84b0203723ec2a751c0884a941fe294187a3af42b47f18e3cf0a",
+    "283a2524127c02007a87a00d58fe5d044ebd0b1b16ad11b1d0fcfd3c7e9a249f",
+    "29c8834a99a9e8eccd735350224ae80beea46ca81cf3c73e01a2e1ee4383ef22",
+    "3a76feef81074875ee713c04f257a97b25daabddaaf4d78d61c2e51c9f64b0eb",
+    "3aa86ff7be7f6497a770517634bf9ff8c35c81e6f03468485294a9a54e3b65be",
+    "3ea8aa0947e9c7cdd09af6c9b3a21504b56aab2c6133150b600bbf8c8eff2ffd",
+    "564132d75e33b1b78de8af2a349d01bda81116cf5a4cb7093a6c5ca6259e3c0c",
+    "5d6b33dab64c7b4768f531ba082f53747338ddc2b3939e24b2b6db3b1c6a91a9",
+    "682a4a1f5818d1180ce3b79e35469eaa79504c91b1725ccb8025d8220c5ecc13",
+    "77f6fb29866a85496bbab4d9cece8ef260cf363cf09657a7a22fbfb2401192dd",
+    "7d1fcd6968621ab2f145cc910400ed67b38028a27e0adc03f72f63bbde7be891",
+    "7f095f9d30ef939c312f4b100351c26851a257001f4f631694d6335805048b3f",
+    "88d35c8d8420907ae79b5a4e3c22441196d566bb9003e79a93e412473b91c4d4",
+    "8a380d63af0f7e5c9f7a39d708bb50390e00e9daafb4f26fdb487334e28a76d8",
+    "8ca71b7de066bcb15114ea94b4780b21f764aeb0fa4397178beff41b6aa6388b",
+    "8e37917509a6c259c5db56675551274e9bf132494579283c31c874f7fb72d35f",
+    "ae20f28f7af7859af6c4d9315263c378e9f0afbd2986dfc574c2c60ecf0e179e",
+    "af6e24a88e5a8346a32dedb866c8d41a83706f48709d5676129762a5210835ad",
+    "b05eaaf77a3eae654a749b568104cdee251f9b594fbe20c0513d59f60e7e01a0",
+    "c0a21ae0266250c091dc74ff9586015e021cf9674727b93e1178b4d8f00dfc84",
+    "d9313a5160378dcf007a2035bc9617e7e15157b7e4bebc4b16c2c843b6a12cc2",
+    "e259ee7aa77e83838ff7eea6984aa329b83157bf07e1df581211b0fcbee0e4ef",
+    "e599aee6a2e3608de496d58d0f2fe5e569212cbc0daa162ab0e2ff00c954cb95",
+    "f9bb901a00c628a6cf051ee9fa8cf92cb7fd3d289c2889555e9b87f7b2c5eb20",
+    "fae43d2d7a8e81a9020ee183441debc5600d6ab7a562a16f70fffbf4d8499bb6",
+    "fc15ae789eb345a669b55a355bce1e588a2c95b94ae435fee160f5a1c46c0feb",
+    "fc67e860cb692d85a26bf3bd210e77619a040a5fb4187272bc58faf95909abd9"
+  ],
+  "hidden_outer_train_influences": [],
+  "hidden_outer_train_read_stage": "after_candidate_and_pseudo_label_freeze",
+  "outer_test_labels_accessed": false,
+  "outer_test_materialized": false,
+  "outer_test_predictions_generated": false,
+  "result_families": [
+    "globally_unmeasured_condition_transfer",
+    "observed_only_condition_transfer",
+    "withheld_cell_transfer_oracle"
+  ],
+  "schema_version": "bh-candidate-scope-reanalysis-v1",
+  "selection_data_roles": [
+    "labeled_train",
+    "valid"
+  ]
+}
