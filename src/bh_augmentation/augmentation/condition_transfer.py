@@ -840,10 +840,21 @@ def _token_group_similarity_matrix(
     return _cosine_similarity_matrix(np.vstack(fingerprints).astype(np.float32))
 
 
+#: Cosine similarities are rounded to this many decimals before they are used to
+#: rank donors. A BLAS matrix product is not bit-reproducible across row orders
+#: or platforms, so two structurally identical pairs can otherwise differ by one
+#: unit in the last place and break a tie differently on another machine -- the
+#: permutation-stability test caught exactly that on Linux CI after passing on
+#: macOS. Ten decimals are far below any chemically meaningful difference.
+SIMILARITY_DECIMALS = 10
+
+
 def _cosine_similarity_matrix(X: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(X, axis=1, keepdims=True)
-    normalized = X / np.maximum(norms, 1e-12)
-    return np.clip(normalized @ normalized.T, -1.0, 1.0)
+    values = np.asarray(X, dtype=np.float64)
+    norms = np.linalg.norm(values, axis=1, keepdims=True)
+    normalized = values / np.maximum(norms, 1e-12)
+    similarity = np.clip(normalized @ normalized.T, -1.0, 1.0)
+    return np.round(similarity, SIMILARITY_DECIMALS)
 
 
 def _nearest_support_distance(

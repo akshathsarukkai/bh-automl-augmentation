@@ -354,7 +354,6 @@ def test_candidate_generation_is_permutation_stable_and_source_capped(
         )
 
     original_result = generate(train)
-    permuted_result = generate(permuted)
     comparison_columns = [
         "source_reaction_smiles",
         "donor_reaction_smiles",
@@ -362,10 +361,16 @@ def test_candidate_generation_is_permutation_stable_and_source_capped(
         "candidate_rank",
         "kept",
     ]
-    pd.testing.assert_frame_equal(
-        original_result["candidate_df"][comparison_columns].reset_index(drop=True),
-        permuted_result["candidate_df"][comparison_columns].reset_index(drop=True),
-    )
+    # Several fixture rows tie on substrate and product similarity, so the
+    # donor choice must not depend on how a BLAS product rounds a tie under a
+    # different row order. Check more than one permutation.
+    for permutation_seed in (17, 3, 29, 101):
+        permuted = train.sample(frac=1.0, random_state=permutation_seed).reset_index(drop=True)
+        permuted_result = generate(permuted)
+        pd.testing.assert_frame_equal(
+            original_result["candidate_df"][comparison_columns].reset_index(drop=True),
+            permuted_result["candidate_df"][comparison_columns].reset_index(drop=True),
+        )
 
     candidates = original_result["candidate_df"]
     generated_counts = candidates.groupby("source_row_id").size()
