@@ -33,6 +33,7 @@ import json
 import math
 import subprocess
 from collections.abc import Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +104,143 @@ ORACLE_FIELDS = (
 )
 
 
+@dataclass(frozen=True)
+class ExperimentDesign:
+    """The frozen design an analysis is bound to.
+
+    The default instance, :data:`CONFIRMATORY_DESIGN`, is the preregistered
+    observed-only experiment.  The exploratory training-fraction sweep
+    (``EXPLORATORY_FRACTION_SWEEP.md``) reuses the same loaders, accounting and
+    estimand with a different fraction, families and bootstrap seed, no
+    secondary control arm, and -- because it is not preregistered -- no
+    interpretation table and therefore no verdict.
+    """
+
+    label: str
+    document: str
+    commit: str
+    primary_family: str
+    comparator_family: str
+    secondary_control_family: str | None
+    primary_scope_mode: str
+    secondary_control_scope_mode: str
+    transfer_kind: str
+    metric: str
+    train_fraction: float
+    planned_seeds: tuple[int, ...]
+    practical_minimum_effect: float
+    bootstrap_replicates: int
+    bootstrap_alpha: float
+    bootstrap_seed: int
+    maximum_degenerate_units: int
+    minimum_included_units: int
+    minimum_improved_units_for_positive: int
+    apply_interpretation_table: bool
+    design_payload_key: str
+    schema_version: str
+
+    @property
+    def arm_families(self) -> tuple[str, ...]:
+        families = [self.primary_family, self.comparator_family]
+        if self.secondary_control_family is not None:
+            families.append(self.secondary_control_family)
+        return tuple(families)
+
+    def design_record(self) -> dict[str, Any]:
+        """The frozen-design block written into every payload."""
+        record: dict[str, Any] = {
+            "document": self.document,
+            "commit": self.commit,
+            "primary_family": self.primary_family,
+            "comparator_family": self.comparator_family,
+            "secondary_control_family": self.secondary_control_family,
+            "primary_candidate_scope_mode": self.primary_scope_mode,
+            "secondary_control_candidate_scope_mode": self.secondary_control_scope_mode,
+            "transfer_kind": self.transfer_kind,
+            "metric": self.metric,
+            "train_fraction": self.train_fraction,
+            "estimand": "comparator_rmse_minus_augmented_rmse_per_seed",
+            "planned_seeds": list(self.planned_seeds),
+            "practical_minimum_effect": self.practical_minimum_effect,
+            "bootstrap_replicates": self.bootstrap_replicates,
+            "bootstrap_alpha": self.bootstrap_alpha,
+            "bootstrap_seed": self.bootstrap_seed,
+            "maximum_degenerate_units": self.maximum_degenerate_units,
+            "minimum_included_units": self.minimum_included_units,
+            "minimum_improved_units_for_positive": self.minimum_improved_units_for_positive,
+        }
+        if self.label != "confirmatory":
+            record["label"] = self.label
+            record["interpretation_table_applied"] = self.apply_interpretation_table
+        return record
+
+
+CONFIRMATORY_DESIGN = ExperimentDesign(
+    label="confirmatory",
+    document=PREREGISTRATION_DOCUMENT,
+    commit=PREREGISTRATION_COMMIT,
+    primary_family=PRIMARY_FAMILY,
+    comparator_family=COMPARATOR_FAMILY,
+    secondary_control_family=SECONDARY_CONTROL_FAMILY,
+    primary_scope_mode=PRIMARY_SCOPE_MODE,
+    secondary_control_scope_mode=SECONDARY_CONTROL_SCOPE_MODE,
+    transfer_kind=TRANSFER_KIND,
+    metric=PRIMARY_METRIC,
+    train_fraction=PRIMARY_TRAIN_FRACTION,
+    planned_seeds=PLANNED_SEEDS,
+    practical_minimum_effect=PRACTICAL_MINIMUM_EFFECT,
+    bootstrap_replicates=BOOTSTRAP_REPLICATES,
+    bootstrap_alpha=BOOTSTRAP_ALPHA,
+    bootstrap_seed=BOOTSTRAP_SEED,
+    maximum_degenerate_units=MAXIMUM_DEGENERATE_UNITS,
+    minimum_included_units=MINIMUM_INCLUDED_UNITS,
+    minimum_improved_units_for_positive=MINIMUM_IMPROVED_UNITS_FOR_POSITIVE,
+    apply_interpretation_table=True,
+    design_payload_key="preregistration",
+    schema_version=OBSERVED_ONLY_CONFIRMATORY_SCHEMA_VERSION,
+)
+
+#: EXPLORATORY_FRACTION_SWEEP.md, section 2. Post hoc, descriptive, no verdict.
+EXPLORATORY_SWEEP_DOCUMENT = "EXPLORATORY_FRACTION_SWEEP.md"
+EXPLORATORY_SWEEP_SCHEMA_VERSION = "bh-exploratory-fraction-sweep-analysis-v1"
+EXPLORATORY_BOOTSTRAP_SEED = 1701
+EXPLORATORY_FRACTIONS = (0.01, 0.10)
+EXPLORATORY_PRIMARY_FAMILY = "exploratory_observed_only_condition_transfer"
+EXPLORATORY_COMPARATOR_FAMILY = "exploratory_matched_real_only_control"
+
+
+def exploratory_sweep_design(train_fraction: float, *, declaration_commit: str) -> ExperimentDesign:
+    """The exploratory sweep design at one training fraction."""
+    if not any(math.isclose(train_fraction, value) for value in EXPLORATORY_FRACTIONS):
+        raise ObservedOnlyConfirmatoryAnalysisError(
+            f"Fraction {train_fraction} is not part of the declared sweep {EXPLORATORY_FRACTIONS}."
+        )
+    return ExperimentDesign(
+        label="exploratory",
+        document=EXPLORATORY_SWEEP_DOCUMENT,
+        commit=declaration_commit,
+        primary_family=EXPLORATORY_PRIMARY_FAMILY,
+        comparator_family=EXPLORATORY_COMPARATOR_FAMILY,
+        secondary_control_family=None,
+        primary_scope_mode=PRIMARY_SCOPE_MODE,
+        secondary_control_scope_mode=SECONDARY_CONTROL_SCOPE_MODE,
+        transfer_kind=TRANSFER_KIND,
+        metric=PRIMARY_METRIC,
+        train_fraction=float(train_fraction),
+        planned_seeds=PLANNED_SEEDS,
+        practical_minimum_effect=PRACTICAL_MINIMUM_EFFECT,
+        bootstrap_replicates=BOOTSTRAP_REPLICATES,
+        bootstrap_alpha=BOOTSTRAP_ALPHA,
+        bootstrap_seed=EXPLORATORY_BOOTSTRAP_SEED,
+        maximum_degenerate_units=MAXIMUM_DEGENERATE_UNITS,
+        minimum_included_units=MINIMUM_INCLUDED_UNITS,
+        minimum_improved_units_for_positive=MINIMUM_IMPROVED_UNITS_FOR_POSITIVE,
+        apply_interpretation_table=False,
+        design_payload_key="declaration",
+        schema_version=EXPLORATORY_SWEEP_SCHEMA_VERSION,
+    )
+
+
 class ObservedOnlyConfirmatoryAnalysisError(ValueError):
     """Raised when the confirmatory artifacts cannot support the analysis."""
 
@@ -126,7 +264,13 @@ def preregistration_plan_hash(repository_root: str | Path = ".") -> str:
 # --------------------------------------------------------------- arm loading
 
 
-def load_arm_unit(confirmatory_root: str | Path, family: str, seed: int) -> dict[str, Any]:
+def load_arm_unit(
+    confirmatory_root: str | Path,
+    family: str,
+    seed: int,
+    *,
+    train_fraction: float = PRIMARY_TRAIN_FRACTION,
+) -> dict[str, Any]:
     """Load one (arm, seed) unit and classify it.
 
     ``status`` is ``complete`` (a single hash-verified outer-test evaluation),
@@ -135,7 +279,7 @@ def load_arm_unit(confirmatory_root: str | Path, family: str, seed: int) -> dict
     the search, final and claim artifacts raises rather than being repaired.
     """
     unit_dir = Path(confirmatory_root) / family / f"seed_{int(seed)}"
-    unit = evaluation_unit(seed)
+    unit = evaluation_unit(seed, train_fraction)
     record: dict[str, Any] = {
         "family": family,
         "seed": int(seed),
@@ -145,7 +289,11 @@ def load_arm_unit(confirmatory_root: str | Path, family: str, seed: int) -> dict
     metrics_path = unit_dir / "final" / "final_test_metrics.csv"
     degenerate_path = unit_dir / "search" / "degenerate_unit.json"
     if metrics_path.is_file():
-        record.update(_load_complete_unit(unit_dir, family=family, seed=seed, unit=unit))
+        record.update(
+            _load_complete_unit(
+                unit_dir, family=family, seed=seed, unit=unit, train_fraction=train_fraction
+            )
+        )
         record["status"] = "complete"
         return record
     if degenerate_path.is_file():
@@ -161,7 +309,14 @@ def load_arm_unit(confirmatory_root: str | Path, family: str, seed: int) -> dict
     return record
 
 
-def _load_complete_unit(unit_dir: Path, *, family: str, seed: int, unit: str) -> dict[str, Any]:
+def _load_complete_unit(
+    unit_dir: Path,
+    *,
+    family: str,
+    seed: int,
+    unit: str,
+    train_fraction: float = PRIMARY_TRAIN_FRACTION,
+) -> dict[str, Any]:
     metrics = pd.read_csv(unit_dir / "final" / "final_test_metrics.csv", float_precision="round_trip")
     rows = metrics.loc[
         metrics["split"].astype(str).eq("test") & metrics["metric"].astype(str).eq(PRIMARY_METRIC)
@@ -173,7 +328,7 @@ def _load_complete_unit(unit_dir: Path, *, family: str, seed: int, unit: str) ->
         )
     row = rows.iloc[0]
     if int(row["seed"]) != int(seed) or not math.isclose(
-        float(row["train_fraction"]), PRIMARY_TRAIN_FRACTION
+        float(row["train_fraction"]), train_fraction
     ):
         raise ObservedOnlyConfirmatoryAnalysisError(
             f"{family} seed {seed}: metrics row belongs to seed {row['seed']} at fraction "
@@ -291,18 +446,31 @@ def _load_degenerate_arm(path: Path, *, family: str, unit: str) -> dict[str, Any
     }
 
 
-def load_arms(confirmatory_root: str | Path) -> dict[str, dict[int, dict[str, Any]]]:
-    """Load every planned (arm, seed) unit."""
+def load_arms(
+    confirmatory_root: str | Path,
+    design: ExperimentDesign = CONFIRMATORY_DESIGN,
+) -> dict[str, dict[int, dict[str, Any]]]:
+    """Load every planned (arm, seed) unit of a design."""
     return {
-        family: {seed: load_arm_unit(confirmatory_root, family, seed) for seed in PLANNED_SEEDS}
-        for family in ARM_FAMILIES
+        family: {
+            seed: load_arm_unit(
+                confirmatory_root, family, seed, train_fraction=design.train_fraction
+            )
+            for seed in design.planned_seeds
+        }
+        for family in design.arm_families
     }
 
 
 # ------------------------------------------------------------ pool accounting
 
 
-def load_pool_accounting(pool_directory: str | Path) -> dict[str, Any]:
+def load_pool_accounting(
+    pool_directory: str | Path,
+    *,
+    train_fraction: float = PRIMARY_TRAIN_FRACTION,
+    primary_scope_mode: str = PRIMARY_SCOPE_MODE,
+) -> dict[str, Any]:
     """Load per-seed candidate counts under both rules and the oracle metrics.
 
     The pool accounting run regenerates each unit's candidate pool from
@@ -321,7 +489,7 @@ def load_pool_accounting(pool_directory: str | Path) -> dict[str, Any]:
             "it cannot serve as treatment-size accounting."
         )
     at_fraction = pool.loc[
-        pool["train_fraction"].astype(float).sub(PRIMARY_TRAIN_FRACTION).abs().lt(1e-12)
+        pool["train_fraction"].astype(float).sub(train_fraction).abs().lt(1e-12)
     ]
     counts: dict[str, dict[str, dict[int, dict[str, int]]]] = {}
     for _, row in at_fraction.iterrows():
@@ -339,8 +507,8 @@ def load_pool_accounting(pool_directory: str | Path) -> dict[str, Any]:
     if oracle_path.is_file():
         oracle = pd.read_csv(oracle_path, float_precision="round_trip")
         selected = oracle.loc[
-            oracle["candidate_scope_mode"].astype(str).eq(PRIMARY_SCOPE_MODE)
-            & oracle["train_fraction"].astype(float).sub(PRIMARY_TRAIN_FRACTION).abs().lt(1e-12)
+            oracle["candidate_scope_mode"].astype(str).eq(primary_scope_mode)
+            & oracle["train_fraction"].astype(float).sub(train_fraction).abs().lt(1e-12)
         ]
         for _, row in selected.iterrows():
             kind = str(row["transfer_kind"])
@@ -395,21 +563,36 @@ def _clean_float(value: Any) -> float | None:
 def analyze_observed_only_confirmation(
     run_root: str | Path,
     pool_accounting_directory: str | Path,
+    *,
+    design: ExperimentDesign = CONFIRMATORY_DESIGN,
 ) -> dict[str, Any]:
-    """Compute the complete preregistered analysis for one confirmatory run."""
+    """Compute the complete frozen-design analysis for one run.
+
+    With the default design this is the preregistered confirmatory analysis.
+    An exploratory design uses the same loaders, accounting and estimand but
+    applies no interpretation table and reports no verdict.
+    """
     root = Path(run_root)
-    arms = load_arms(root / "confirmatory")
-    accounting = load_pool_accounting(pool_accounting_directory)
-    primary_counts = accounting["counts"].get(PRIMARY_SCOPE_MODE, {}).get(TRANSFER_KIND, {})
-    control_counts = (
-        accounting["counts"].get(SECONDARY_CONTROL_SCOPE_MODE, {}).get(TRANSFER_KIND, {})
+    arms = load_arms(root / "confirmatory", design)
+    accounting = load_pool_accounting(
+        pool_accounting_directory,
+        train_fraction=design.train_fraction,
+        primary_scope_mode=design.primary_scope_mode,
     )
-    _cross_check_counts(arms, primary_counts, control_counts)
+    primary_counts = (
+        accounting["counts"].get(design.primary_scope_mode, {}).get(design.transfer_kind, {})
+    )
+    control_counts = (
+        accounting["counts"]
+        .get(design.secondary_control_scope_mode, {})
+        .get(design.transfer_kind, {})
+    )
+    _cross_check_counts(arms, primary_counts, control_counts, design)
 
     unit_rows: list[dict[str, Any]] = []
-    for seed in PLANNED_SEEDS:
-        augmented = arms[PRIMARY_FAMILY][seed]
-        comparator = arms[COMPARATOR_FAMILY][seed]
+    for seed in design.planned_seeds:
+        augmented = arms[design.primary_family][seed]
+        comparator = arms[design.comparator_family][seed]
         both_complete = augmented["status"] == "complete" and comparator["status"] == "complete"
         accepted = primary_counts.get(seed, {}).get("accepted_candidate_count")
         if augmented["status"] == "degenerate":
@@ -436,7 +619,7 @@ def analyze_observed_only_confirmation(
         unit_rows.append(
             {
                 "seed": int(seed),
-                "evaluation_unit": evaluation_unit(seed),
+                "evaluation_unit": evaluation_unit(seed, design.train_fraction),
                 "comparator_rmse": comparator.get("rmse"),
                 "augmented_rmse": augmented.get("rmse"),
                 "paired_delta_rmse_reduction": delta,
@@ -473,34 +656,47 @@ def analyze_observed_only_confirmation(
     if deltas:
         bootstrap = seed_cluster_percentile_interval(
             deltas,
-            replicates=BOOTSTRAP_REPLICATES,
-            alpha=BOOTSTRAP_ALPHA,
-            seed=BOOTSTRAP_SEED,
+            replicates=design.bootstrap_replicates,
+            alpha=design.bootstrap_alpha,
+            seed=design.bootstrap_seed,
         )
         mean_effect = bootstrap["mean"]
 
-    verdict = interpretation_table_verdict(
-        mean_effect=mean_effect,
-        ci_lower=bootstrap["ci_lower"] if bootstrap else None,
-        ci_upper=bootstrap["ci_upper"] if bootstrap else None,
-        included_unit_count=len(included),
-        improved_unit_count=improved,
-        degenerate_unit_count=len(degenerate),
-        practical_minimum_effect=PRACTICAL_MINIMUM_EFFECT,
-        maximum_degenerate_units=MAXIMUM_DEGENERATE_UNITS,
-        minimum_included_units=MINIMUM_INCLUDED_UNITS,
-        minimum_improved_units_for_positive=MINIMUM_IMPROVED_UNITS_FOR_POSITIVE,
-        planned_unit_count=len(PLANNED_SEEDS),
-        degenerate_override_rule="section_6_degenerate_pool_override",
-        underpowered_override_rule="section_6_underpowered_override",
-        table_rule="section_7_interpretation_table",
-        error_type=ObservedOnlyConfirmatoryAnalysisError,
-    )
+    if design.apply_interpretation_table:
+        verdict = interpretation_table_verdict(
+            mean_effect=mean_effect,
+            ci_lower=bootstrap["ci_lower"] if bootstrap else None,
+            ci_upper=bootstrap["ci_upper"] if bootstrap else None,
+            included_unit_count=len(included),
+            improved_unit_count=improved,
+            degenerate_unit_count=len(degenerate),
+            practical_minimum_effect=design.practical_minimum_effect,
+            maximum_degenerate_units=design.maximum_degenerate_units,
+            minimum_included_units=design.minimum_included_units,
+            minimum_improved_units_for_positive=design.minimum_improved_units_for_positive,
+            planned_unit_count=len(design.planned_seeds),
+            degenerate_override_rule="section_6_degenerate_pool_override",
+            underpowered_override_rule="section_6_underpowered_override",
+            table_rule="section_7_interpretation_table",
+            error_type=ObservedOnlyConfirmatoryAnalysisError,
+        )
+    else:
+        verdict = {
+            "verdict": "not_applicable_exploratory",
+            "rule": "no_interpretation_table",
+            "reason": (
+                "This design is exploratory and post hoc; it applies no preregistered "
+                "interpretation table and yields no verdict. The interval is reported "
+                "descriptively."
+            ),
+            "conditions": {},
+        }
 
     control_rows = []
-    for seed in PLANNED_SEEDS:
-        unit = arms[SECONDARY_CONTROL_FAMILY][seed]
-        comparator = arms[COMPARATOR_FAMILY][seed]
+    control_family = design.secondary_control_family
+    for seed in (design.planned_seeds if control_family is not None else ()):
+        unit = arms[control_family][seed]
+        comparator = arms[design.comparator_family][seed]
         control_rows.append(
             {
                 "seed": int(seed),
@@ -529,30 +725,10 @@ def analyze_observed_only_confirmation(
     for row in control_rows:
         control_statuses[row["status"]] += 1
 
-    binding_summary = _binding_summary(arms)
+    binding_summary = _binding_summary(arms, design)
     payload: dict[str, Any] = {
-        "schema_version": OBSERVED_ONLY_CONFIRMATORY_SCHEMA_VERSION,
-        "preregistration": {
-            "document": PREREGISTRATION_DOCUMENT,
-            "commit": PREREGISTRATION_COMMIT,
-            "primary_family": PRIMARY_FAMILY,
-            "comparator_family": COMPARATOR_FAMILY,
-            "secondary_control_family": SECONDARY_CONTROL_FAMILY,
-            "primary_candidate_scope_mode": PRIMARY_SCOPE_MODE,
-            "secondary_control_candidate_scope_mode": SECONDARY_CONTROL_SCOPE_MODE,
-            "transfer_kind": TRANSFER_KIND,
-            "metric": PRIMARY_METRIC,
-            "train_fraction": PRIMARY_TRAIN_FRACTION,
-            "estimand": "comparator_rmse_minus_augmented_rmse_per_seed",
-            "planned_seeds": list(PLANNED_SEEDS),
-            "practical_minimum_effect": PRACTICAL_MINIMUM_EFFECT,
-            "bootstrap_replicates": BOOTSTRAP_REPLICATES,
-            "bootstrap_alpha": BOOTSTRAP_ALPHA,
-            "bootstrap_seed": BOOTSTRAP_SEED,
-            "maximum_degenerate_units": MAXIMUM_DEGENERATE_UNITS,
-            "minimum_included_units": MINIMUM_INCLUDED_UNITS,
-            "minimum_improved_units_for_positive": MINIMUM_IMPROVED_UNITS_FOR_POSITIVE,
-        },
+        "schema_version": design.schema_version,
+        design.design_payload_key: design.design_record(),
         "run": {
             "run_root": str(root),
             "confirmatory_directory": str(root / "confirmatory"),
@@ -570,16 +746,16 @@ def analyze_observed_only_confirmation(
                     "leakage_contracts",
                 )
             },
-            "equal_arm_search_budget": _equal_search_budget(arms),
+            "equal_arm_search_budget": _equal_search_budget(arms, design),
         },
         "per_unit_rows": unit_rows,
         "accounting": {
-            "planned_unit_count": len(PLANNED_SEEDS),
+            "planned_unit_count": len(design.planned_seeds),
             "included_unit_count": len(included),
             "degenerate_excluded_unit_count": len(degenerate),
             "failed_or_missing_unit_count": len(failed),
             "all_planned_seeds_accounted_for": (
-                len(included) + len(degenerate) + len(failed) == len(PLANNED_SEEDS)
+                len(included) + len(degenerate) + len(failed) == len(design.planned_seeds)
             ),
             "included_seeds": [row["seed"] for row in included],
             "degenerate_excluded_seeds": [row["seed"] for row in degenerate],
@@ -589,16 +765,16 @@ def analyze_observed_only_confirmation(
                     status: sum(1 for unit in arms[family].values() if unit["status"] == status)
                     for status in ("complete", "degenerate", "missing")
                 }
-                for family in ARM_FAMILIES
+                for family in design.arm_families
             },
-            "planned_arm_unit_pairs": len(ARM_FAMILIES) * len(PLANNED_SEEDS),
+            "planned_arm_unit_pairs": len(design.arm_families) * len(design.planned_seeds),
             "all_arm_unit_pairs_accounted_for": all(
                 sum(
                     1 for unit in arms[family].values() if unit["status"] in
                     ("complete", "degenerate", "missing")
                 )
-                == len(PLANNED_SEEDS)
-                for family in ARM_FAMILIES
+                == len(design.planned_seeds)
+                for family in design.arm_families
             ),
         },
         "primary": {
@@ -617,13 +793,13 @@ def analyze_observed_only_confirmation(
                 "protocol run recorded no per-unit counts"
             ),
             "accepted_synthetic_rows_by_seed": {
-                PRIMARY_SCOPE_MODE: {
+                design.primary_scope_mode: {
                     str(seed): primary_counts.get(seed, {}).get("accepted_candidate_count")
-                    for seed in PLANNED_SEEDS
+                    for seed in design.planned_seeds
                 },
-                SECONDARY_CONTROL_SCOPE_MODE: {
+                design.secondary_control_scope_mode: {
                     str(seed): control_counts.get(seed, {}).get("accepted_candidate_count")
-                    for seed in PLANNED_SEEDS
+                    for seed in design.planned_seeds
                 },
             },
             "pool_counts_by_rule": {
@@ -635,16 +811,20 @@ def analyze_observed_only_confirmation(
             },
             "totals_by_rule": _pool_totals(accounting["counts"]),
         },
-        "secondary_control_arm": {
-            "family": SECONDARY_CONTROL_FAMILY,
-            "candidate_scope_mode": SECONDARY_CONTROL_SCOPE_MODE,
-            "role": (
-                "prospective-novelty contrast; reported with accepted-row counts, never "
-                "substituted into the primary comparison"
-            ),
-            "unit_status_counts": control_statuses,
-            "per_unit_rows": control_rows,
-        },
+        "secondary_control_arm": (
+            {
+                "family": control_family,
+                "candidate_scope_mode": design.secondary_control_scope_mode,
+                "role": (
+                    "prospective-novelty contrast; reported with accepted-row counts, never "
+                    "substituted into the primary comparison"
+                ),
+                "unit_status_counts": control_statuses,
+                "per_unit_rows": control_rows,
+            }
+            if control_family is not None
+            else None
+        ),
         "oracle": _oracle_summary(accounting["oracle"]),
         "verdict": verdict,
     }
@@ -656,41 +836,62 @@ def _cross_check_counts(
     arms: Mapping[str, Mapping[int, Mapping[str, Any]]],
     primary_counts: Mapping[int, Mapping[str, int]],
     control_counts: Mapping[int, Mapping[str, int]],
+    design: ExperimentDesign = CONFIRMATORY_DESIGN,
 ) -> None:
     """Fail if the protocol artifacts and the pool accounting disagree."""
-    for seed in PLANNED_SEEDS:
-        primary = arms[PRIMARY_FAMILY][seed]
+    primary_family = design.primary_family
+    control_family = design.secondary_control_family
+    for seed in design.planned_seeds:
+        primary = arms[primary_family][seed]
+        accepted = primary_counts.get(seed, {}).get("accepted_candidate_count")
         if primary["status"] == "complete":
-            accepted = primary_counts.get(seed, {}).get("accepted_candidate_count")
             if accepted is not None and accepted <= 0:
                 raise ObservedOnlyConfirmatoryAnalysisError(
-                    f"Pool accounting reports zero accepted rows for {PRIMARY_FAMILY} seed "
+                    f"Pool accounting reports zero accepted rows for {primary_family} seed "
                     f"{seed}, but the protocol evaluated it as an augmented unit."
                 )
-        control = arms[SECONDARY_CONTROL_FAMILY][seed]
+        if primary["status"] == "degenerate" and accepted is not None:
+            if accepted != 0:
+                raise ObservedOnlyConfirmatoryAnalysisError(
+                    f"{primary_family} seed {seed} is recorded as degenerate but pool "
+                    f"accounting accepted {accepted} rows."
+                )
+            recorded = primary["degenerate_generated_candidate_count"]
+            generated = primary_counts[seed]["generated_candidate_count"]
+            if recorded != generated:
+                raise ObservedOnlyConfirmatoryAnalysisError(
+                    f"{primary_family} seed {seed}: degenerate record generated {recorded} "
+                    f"candidates, pool accounting generated {generated}."
+                )
+        if control_family is None:
+            continue
+        control = arms[control_family][seed]
         counts = control_counts.get(seed)
         if control["status"] == "degenerate" and counts is not None:
             if counts["accepted_candidate_count"] != 0:
                 raise ObservedOnlyConfirmatoryAnalysisError(
-                    f"{SECONDARY_CONTROL_FAMILY} seed {seed} is recorded as degenerate but "
+                    f"{control_family} seed {seed} is recorded as degenerate but "
                     f"pool accounting accepted {counts['accepted_candidate_count']} rows."
                 )
             recorded = control["degenerate_generated_candidate_count"]
             if recorded != counts["generated_candidate_count"]:
                 raise ObservedOnlyConfirmatoryAnalysisError(
-                    f"{SECONDARY_CONTROL_FAMILY} seed {seed}: degenerate record generated "
+                    f"{control_family} seed {seed}: degenerate record generated "
                     f"{recorded} candidates, pool accounting generated "
                     f"{counts['generated_candidate_count']}."
                 )
         if control["status"] == "complete" and counts is not None:
             if counts["accepted_candidate_count"] <= 0:
                 raise ObservedOnlyConfirmatoryAnalysisError(
-                    f"{SECONDARY_CONTROL_FAMILY} seed {seed} was evaluated as augmented but "
+                    f"{control_family} seed {seed} was evaluated as augmented but "
                     "pool accounting accepted zero rows."
                 )
 
 
-def _binding_summary(arms: Mapping[str, Mapping[int, Mapping[str, Any]]]) -> dict[str, Any]:
+def _binding_summary(
+    arms: Mapping[str, Mapping[int, Mapping[str, Any]]],
+    design: ExperimentDesign = CONFIRMATORY_DESIGN,
+) -> dict[str, Any]:
     units = [unit for by_seed in arms.values() for unit in by_seed.values()]
     present = [unit for unit in units if unit["status"] != "missing"]
 
@@ -726,16 +927,19 @@ def _binding_summary(arms: Mapping[str, Mapping[int, Mapping[str, Any]]]) -> dic
                     if unit.get("config_hash") is not None
                 }
             )
-            for family in ARM_FAMILIES
+            for family in design.arm_families
         },
         "commit_hashes": distinct("commit_hash"),
     }
 
 
-def _equal_search_budget(arms: Mapping[str, Mapping[int, Mapping[str, Any]]]) -> bool | None:
+def _equal_search_budget(
+    arms: Mapping[str, Mapping[int, Mapping[str, Any]]],
+    design: ExperimentDesign = CONFIRMATORY_DESIGN,
+) -> bool | None:
     budgets = {
         unit.get("candidate_policy_count")
-        for family in (PRIMARY_FAMILY, COMPARATOR_FAMILY)
+        for family in (design.primary_family, design.comparator_family)
         for unit in arms[family].values()
         if unit.get("candidate_policy_count") is not None
     }
@@ -790,8 +994,14 @@ def _oracle_summary(oracle: Mapping[str, Mapping[int, Mapping[str, float | None]
 
 
 def render_observed_only_report(payload: Mapping[str, Any]) -> str:
-    """Render the human-readable confirmatory report, section 9 in order."""
-    prereg = payload["preregistration"]
+    """Render the human-readable report, preregistration section 9 in order.
+
+    An exploratory payload (``declaration`` block, no interpretation table) is
+    rendered with the same sections but headed as exploratory and without a
+    verdict.
+    """
+    exploratory = "preregistration" not in payload
+    prereg = payload["declaration"] if exploratory else payload["preregistration"]
     run = payload["run"]
     accounting = payload["accounting"]
     primary = payload["primary"]
@@ -805,20 +1015,39 @@ def render_observed_only_report(payload: Mapping[str, Any]) -> str:
         return "n/a" if value is None else format(value, spec)
 
     lines: list[str] = []
-    lines.append("# Confirmatory result: observed-only condition transfer")
-    lines.append("")
-    lines.append(
-        f"Preregistered in `{prereg['document']}` at commit `{prereg['commit'][:7]}`, "
-        "before any confirmatory outer-test outcome for this experiment existed. Every "
-        "threshold below is quoted from that document, not chosen after seeing these numbers."
-    )
-    lines.append("")
-    lines.append("## Verdict")
-    lines.append("")
-    lines.append(f"**{str(verdict['verdict']).upper()}** — {verdict['reason']}")
-    lines.append("")
-    lines.append(f"Computed mechanically by rule `{verdict['rule']}` from the numbers below.")
-    lines.append("")
+    if exploratory:
+        lines.append(
+            "# Exploratory result (post hoc, no verdict): observed-only condition transfer "
+            f"at training fraction {prereg['train_fraction']}"
+        )
+        lines.append("")
+        lines.append(
+            f"Declared in `{prereg['document']}` at commit `{prereg['commit'][:7]}` before any "
+            "of its outer tests was read. **This is not a preregistered confirmatory "
+            "experiment.** No interpretation table is applied and no verdict is produced; "
+            "the interval below is descriptive and may not be promoted to a claim."
+        )
+        lines.append("")
+        lines.append("## No verdict")
+        lines.append("")
+        lines.append(verdict["reason"])
+        lines.append("")
+    else:
+        lines.append("# Confirmatory result: observed-only condition transfer")
+        lines.append("")
+        lines.append(
+            f"Preregistered in `{prereg['document']}` at commit `{prereg['commit'][:7]}`, "
+            "before any confirmatory outer-test outcome for this experiment existed. Every "
+            "threshold below is quoted from that document, not chosen after seeing these "
+            "numbers."
+        )
+        lines.append("")
+        lines.append("## Verdict")
+        lines.append("")
+        lines.append(f"**{str(verdict['verdict']).upper()}** — {verdict['reason']}")
+        lines.append("")
+        lines.append(f"Computed mechanically by rule `{verdict['rule']}` from the numbers below.")
+        lines.append("")
     lines.append("## The question")
     lines.append("")
     lines.append(
@@ -913,27 +1142,39 @@ def render_observed_only_report(payload: Mapping[str, Any]) -> str:
     )
     lines.append(f"- All planned seeds accounted for: {accounting['all_planned_seeds_accounted_for']}")
     lines.append("")
-    lines.append(
-        f"Secondary control arm `{control['family']}` (`{control['candidate_scope_mode']}`): "
-        f"{control['role']}."
-    )
-    lines.append("")
-    lines.append("| Seed | Status | Control RMSE | Comparator RMSE | Generated | Accepted | Rejected: already measured |")
-    lines.append("| --- | --- | --- | --- | ---: | ---: | ---: |")
-    for row in control["per_unit_rows"]:
+    if control is None:
         lines.append(
-            f"| {row['seed']} | {row['status']} | {fmt(row['rmse'])} | {fmt(row['comparator_rmse'])} | "
-            f"{fmt(row['generated_candidates'], 'd')} | {fmt(row['accepted_synthetic_rows'], 'd')} | "
-            f"{fmt(row['rejected_already_measured'], 'd')} |"
+            "No secondary control arm is part of this design; the globally-unmeasured "
+            "accepted-row counts in section 5 come from the pool accounting alone."
         )
-    lines.append("")
-    counts = control["unit_status_counts"]
-    lines.append(
-        f"Control arm units: {counts['complete']} complete, {counts['degenerate']} degenerate, "
-        f"{counts['missing']} missing. Degeneracy here is the control's result: it measures how "
-        "completely the historical eligibility rule suppressed the treatment."
-    )
-    lines.append("")
+        lines.append("")
+    else:
+        lines.append(
+            f"Secondary control arm `{control['family']}` (`{control['candidate_scope_mode']}`): "
+            f"{control['role']}."
+        )
+        lines.append("")
+        lines.append(
+            "| Seed | Status | Control RMSE | Comparator RMSE | Generated | Accepted | "
+            "Rejected: already measured |"
+        )
+        lines.append("| --- | --- | --- | --- | ---: | ---: | ---: |")
+        for row in control["per_unit_rows"]:
+            lines.append(
+                f"| {row['seed']} | {row['status']} | {fmt(row['rmse'])} | "
+                f"{fmt(row['comparator_rmse'])} | {fmt(row['generated_candidates'], 'd')} | "
+                f"{fmt(row['accepted_synthetic_rows'], 'd')} | "
+                f"{fmt(row['rejected_already_measured'], 'd')} |"
+            )
+        lines.append("")
+        counts = control["unit_status_counts"]
+        lines.append(
+            f"Control arm units: {counts['complete']} complete, {counts['degenerate']} "
+            f"degenerate, {counts['missing']} missing. Degeneracy here is the control's "
+            "result: it measures how completely the historical eligibility rule suppressed "
+            "the treatment."
+        )
+        lines.append("")
     lines.append("## 7. Withheld-cell oracle (secondary, non-selecting)")
     lines.append("")
     oracle = payload["oracle"]
@@ -971,10 +1212,18 @@ def render_observed_only_report(payload: Mapping[str, Any]) -> str:
     lines.append("")
     lines.append("## Scope")
     lines.append("")
-    lines.append(
-        "Training fraction 0.05 only; canonical grouped random splits only; one dataset; "
-        "not OOD evidence. The Phase 15 confirmatory result at fraction 0.2 stands under its "
-        "own protocol and is neither superseded nor re-cut by this experiment."
-    )
+    if exploratory:
+        lines.append(
+            f"Training fraction {prereg['train_fraction']} only; canonical grouped random "
+            "splits only; one dataset; not OOD evidence; exploratory and post hoc. Neither "
+            "confirmatory result (Phase 15 at fraction 0.2, observed-only transfer at 0.05) is "
+            "re-opened, re-cut or re-interpreted by this analysis."
+        )
+    else:
+        lines.append(
+            "Training fraction 0.05 only; canonical grouped random splits only; one dataset; "
+            "not OOD evidence. The Phase 15 confirmatory result at fraction 0.2 stands under "
+            "its own protocol and is neither superseded nor re-cut by this experiment."
+        )
     lines.append("")
     return "\n".join(lines)

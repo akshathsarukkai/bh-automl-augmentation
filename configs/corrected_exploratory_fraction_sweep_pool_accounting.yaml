@@ -1,0 +1,88 @@
+# Pool accounting for the exploratory training-fraction sweep
+# (EXPLORATORY_FRACTION_SWEEP.md). Regenerates every sweep unit's candidate pool
+# -- seeds 6-14 at fractions 0.01 and 0.10 on the phase15 split directory, same
+# anonymous transfer configuration with random_state = seed -- under both
+# eligibility rules, validation only, so accepted-row counts and the withheld-
+# cell oracle are available next to the sweep's outer-test outcomes. Reads
+# labeled-train, hidden-outer-train and validation rows only; no outer test is
+# materialized and no evaluation-registry identity is claimed.
+
+scientific_run: true
+
+dataset:
+  path: data/processed/bh_canonical_roles_v1.csv
+
+splits:
+  directory: results/corrected_canonical_splits_phase15
+  # The confirmatory seeds and fraction. This runner reads only labeled-train,
+  # hidden-outer-train and validation; the outer tests these units consumed on
+  # 2026-09-03 are never materialized here and no registry identity is claimed.
+  seeds: [6, 7, 8, 9, 10, 11, 12, 13, 14]
+  train_fractions: [0.01, 0.10]
+
+candidate_scope:
+  modes:
+    - observed_only_low_data
+    - globally_unmeasured_prospective
+
+features:
+  kind: bh_role_separated
+  n_bits: 2048
+  radius: 2
+  fingerprint_backend: rdkit
+
+transfer:
+  anonymous:
+    donor_strategy: nearest_substrate
+    synthetic_multiplier: 1.0
+    n_neighbors: 10
+    label_strategy: teacher_ensemble
+    teacher_models: [extra_trees, random_forest]
+    max_teacher_std: null
+    min_similarity: 0.0
+    high_yield_threshold: 80.0
+    clip_y_min: 0.0
+    clip_y_max: 100.0
+    candidates_per_real: 2
+    donor_similarity_n_bits: 2048
+    donor_similarity_radius: 2
+    donor_similarity_backend: rdkit
+    role_change_requirement: all
+    fallback_policy: reject
+    max_candidates_per_source: 1
+    requested_roles: [ligand, base]
+  typed:
+    role_transfer_mode: ligand_base
+    donor_strategy: same_substrate_different_role
+    label_strategy: teacher_ensemble
+    synthetic_multiplier: 1.0
+    max_candidates_per_source: 1
+    teacher_models: [extra_trees, random_forest]
+    max_teacher_std: null
+    min_similarity: 0.0
+    clip_y_min: 0.0
+    clip_y_max: 100.0
+    max_resample_attempts: 10
+    donor_similarity_n_bits: 2048
+    donor_similarity_radius: 2
+    donor_similarity_backend: rdkit
+    role_change_requirement: all
+    fallback_policy: reject
+
+models:
+  - name: xgboost
+    params:
+      n_estimators: 300
+      max_depth: 4
+      learning_rate: 0.05
+      n_jobs: 1
+      tree_method: hist
+
+oracle:
+  high_yield_threshold: 80.0
+  top_k_fractions: [0.1, 0.2]
+
+metrics: [rmse, mae, r2, spearman]
+
+output:
+  directory: results/corrected_exploratory_fraction_sweep_pool_accounting_v1

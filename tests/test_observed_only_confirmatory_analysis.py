@@ -674,3 +674,130 @@ def test_negative_wide_and_underpowered_outcomes() -> None:
     assert too_degenerate["rule"] == "section_6_degenerate_pool_override"
     with pytest.raises(ObservedOnlyConfirmatoryAnalysisError):
         _verdict(mean_effect=None, ci_lower=None, ci_upper=None)
+
+
+# ------------------------------------------------ exploratory sweep design
+
+
+def test_exploratory_design_is_descriptive_and_verdict_free(tmp_path: Path) -> None:
+    from bh_augmentation.observed_only_confirmatory_analysis import (
+        CONFIRMATORY_DESIGN,
+        EXPLORATORY_BOOTSTRAP_SEED,
+        EXPLORATORY_COMPARATOR_FAMILY,
+        EXPLORATORY_PRIMARY_FAMILY,
+        exploratory_sweep_design,
+    )
+
+    design = exploratory_sweep_design(0.10, declaration_commit="9" * 40)
+    assert design.arm_families == (EXPLORATORY_PRIMARY_FAMILY, EXPLORATORY_COMPARATOR_FAMILY)
+    assert design.bootstrap_seed == EXPLORATORY_BOOTSTRAP_SEED != CONFIRMATORY_DESIGN.bootstrap_seed
+    assert design.apply_interpretation_table is False
+    with pytest.raises(ObservedOnlyConfirmatoryAnalysisError, match="not part of the declared"):
+        exploratory_sweep_design(0.2, declaration_commit="9" * 40)
+
+    # Build a two-arm tree at fraction 0.10 with the sweep families.
+    run_root = tmp_path / "corrected_sweep_f0p10"
+    confirmatory = run_root / "confirmatory"
+    observed_accepted: dict[int, int] = {}
+    global_accepted: dict[int, int] = {}
+    for seed in PLANNED_SEEDS:
+        comparator_rmse = 12.0 + 0.1 * (seed - 6)
+        _write_unit_at_fraction(
+            confirmatory, EXPLORATORY_COMPARATOR_FAMILY, seed, comparator_rmse, 0.10
+        )
+        _write_unit_at_fraction(
+            confirmatory, EXPLORATORY_PRIMARY_FAMILY, seed, comparator_rmse + 0.3, 0.10
+        )
+        observed_accepted[seed] = 250 + seed
+        global_accepted[seed] = 0
+    pool = _write_pool_at_fraction(
+        tmp_path / "corrected_pool", observed_accepted, global_accepted, 0.10
+    )
+
+    payload = analyze_observed_only_confirmation(run_root, pool, design=design)
+    assert "preregistration" not in payload
+    assert payload["declaration"]["label"] == "exploratory"
+    assert payload["declaration"]["interpretation_table_applied"] is False
+    assert payload["declaration"]["train_fraction"] == 0.10
+    assert payload["verdict"]["verdict"] == "not_applicable_exploratory"
+    assert payload["secondary_control_arm"] is None
+    assert payload["accounting"]["planned_arm_unit_pairs"] == 18
+    assert payload["accounting"]["all_arm_unit_pairs_accounted_for"] is True
+    assert payload["primary"]["bootstrap"]["seed"] == EXPLORATORY_BOOTSTRAP_SEED
+    assert payload["primary"]["mean_paired_rmse_reduction"] == pytest.approx(-0.3)
+    assert payload["per_unit_rows"][0]["evaluation_unit"].startswith("seed=6|train_fraction=0.1|")
+    report = render_observed_only_report(payload)
+    assert "Exploratory result" in report
+    assert "No verdict" in report
+    assert "VERDICT" not in report.upper().replace("NO VERDICT", "")
+    assert "No secondary control arm" in report
+
+
+def _write_unit_at_fraction(root: Path, family: str, seed: int, rmse: float, fraction: float) -> Path:
+    import bh_augmentation.observed_only_confirmatory_analysis as module
+
+    original = module.PRIMARY_TRAIN_FRACTION
+    # The fixture writers pin the confirmatory fraction; rewrite their output.
+    unit_dir = write_complete_unit(root, family, seed, rmse)
+    metrics_path = unit_dir / "final" / "final_test_metrics.csv"
+    frame = pd.read_csv(metrics_path)
+    frame["train_fraction"] = fraction
+    frame["evaluation_unit"] = evaluation_unit(seed, fraction)
+    frame.to_csv(metrics_path, index=False)
+    for name in ("final/evaluation_claim.json", "final/final_evaluation_manifest.json",
+                 "search/search_manifest.json"):
+        path = unit_dir / name
+        text = path.read_text().replace(evaluation_unit(seed, original), evaluation_unit(seed, fraction))
+        path.write_text(text)
+    return unit_dir
+
+
+def _write_pool_at_fraction(
+    root: Path, observed: dict[int, int], global_rule: dict[int, int], fraction: float
+) -> Path:
+    pool = write_pool_accounting(root, observed_accepted=observed, global_accepted=global_rule)
+    for name in ("candidate_pool_statistics.csv", "withheld_cell_oracle.csv"):
+        frame = pd.read_csv(pool / name)
+        frame["train_fraction"] = fraction
+        frame.to_csv(pool / name, index=False)
+    return pool
+
+
+def test_sweep_configs_match_their_generator_and_the_declaration() -> None:
+    import sys
+
+    from bh_augmentation.observed_only_confirmatory_analysis import (
+        EXPLORATORY_COMPARATOR_FAMILY,
+        EXPLORATORY_FRACTIONS,
+        EXPLORATORY_PRIMARY_FAMILY,
+    )
+
+    subprocess.run(
+        [sys.executable, "-B", "scripts/generate_exploratory_fraction_sweep_configs.py", "--check"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
+    sweep_dir = ROOT / "configs" / "exploratory_fraction_sweep"
+    paths = sorted(sweep_dir.glob("*.yaml"))
+    assert len(paths) == 2 * len(EXPLORATORY_FRACTIONS) * len(PLANNED_SEEDS)
+    for path in paths:
+        config = yaml.safe_load(path.read_text())
+        family = config["evaluation_registry"]["family"]
+        assert family in (EXPLORATORY_PRIMARY_FAMILY, EXPLORATORY_COMPARATOR_FAMILY)
+        (fraction,) = config["low_data"]["train_fractions"]
+        assert any(abs(fraction - value) < 1e-12 for value in EXPLORATORY_FRACTIONS)
+        (seed,) = config["seeds"]
+        assert seed in PLANNED_SEEDS
+        assert config["splits"]["directory"] == "results/corrected_canonical_splits_phase15"
+        assert config["candidate_scope"]["mode"] == PRIMARY_SCOPE_MODE
+        assert len(config["policy_search"]["model_policies"]) == 3
+        # Everything but fraction, family and outputs equals the confirmatory template.
+        source_family = family.removeprefix("exploratory_")
+        template = yaml.safe_load(
+            (CONFIG_DIR / f"{source_family}_seed_{seed}.yaml").read_text()
+        )
+        template["low_data"]["train_fractions"] = [fraction]
+        template["evaluation_registry"]["family"] = family
+        template["output"] = config["output"]
+        assert config == template

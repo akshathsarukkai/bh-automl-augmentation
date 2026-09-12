@@ -29,7 +29,19 @@
 #     | tee logs/observed_only_confirmatory_resume_$(date -u +%Y%m%d_%H%M%S).log
 #
 # Environment:
-#   RUN_LABEL   (required) suffix of the run root to resume
+#   RUN_LABEL   (required unless RESULT_ROOT is set) suffix of the run root
+#   RESULT_ROOT override the run root path entirely (used by the exploratory
+#               fraction sweep, whose roots are not candidate-scope reanalyses)
+#   CONFIG_DIR  directory holding one config per (family, seed)
+#               (default: configs/corrected_observed_only_transfer)
+#   CONFIG_INFIX text between the family and "_seed_<n>.yaml" in each config
+#               name (default: empty; the sweep uses e.g. "_f0p01")
+#   FAMILIES    space-separated registry families (default: the three
+#               confirmatory arms)
+#   SEEDS       space-separated seeds (default: 6..14)
+#   FRACTION    training fraction bound into the evaluation unit (default: 0.05)
+#   CREATE_RUN_ROOT=1  create a fresh run root (with the registry snapshot
+#               taken before any outer-test access) instead of requiring one
 #   PYTHON      interpreter (default: python)
 #   ALLOW_DIRTY=1  permit a dirty working tree (not recommended: resumed units
 #                  bind the current commit hash, which must describe the code)
@@ -40,13 +52,18 @@ PYTHON="${PYTHON:-python}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-: "${RUN_LABEL:?RUN_LABEL is required (for example 20260903T194209Z)}"
-RESULT_ROOT="results/corrected_candidate_scope_reanalysis_${RUN_LABEL}"
+if [[ -z "${RESULT_ROOT:-}" ]]; then
+    : "${RUN_LABEL:?RUN_LABEL is required (for example 20260903T194209Z) unless RESULT_ROOT is set}"
+    RESULT_ROOT="results/corrected_candidate_scope_reanalysis_${RUN_LABEL}"
+fi
+RUN_LABEL="${RUN_LABEL:-$(basename "$RESULT_ROOT")}"
 CONFIRM_ROOT="${RESULT_ROOT}/confirmatory"
 SUMMARY_DIR="${RESULT_ROOT}/summary"
-CONFIRM_CONFIG_DIR="configs/corrected_observed_only_transfer"
-CONFIRM_SEEDS=(6 7 8 9 10 11 12 13 14)
-CONFIRM_FAMILIES=(observed_only_condition_transfer matched_real_only_control globally_unmeasured_condition_transfer)
+CONFIRM_CONFIG_DIR="${CONFIG_DIR:-configs/corrected_observed_only_transfer}"
+CONFIG_INFIX="${CONFIG_INFIX:-}"
+FRACTION="${FRACTION:-0.05}"
+read -r -a CONFIRM_SEEDS <<< "${SEEDS:-6 7 8 9 10 11 12 13 14}"
+read -r -a CONFIRM_FAMILIES <<< "${FAMILIES:-observed_only_condition_transfer matched_real_only_control globally_unmeasured_condition_transfer}"
 
 log() { printf '%s | %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 step() { printf '\n================================================================\n%s\n================================================================\n' "$*"; }
@@ -58,6 +75,13 @@ step "Preflight"
 
 command -v "$PYTHON" >/dev/null 2>&1 || fail "Interpreter not found: $PYTHON"
 git rev-parse HEAD >/dev/null 2>&1 || fail "Scientific runs require a git commit."
+if [[ "${CREATE_RUN_ROOT:-0}" == "1" ]]; then
+    [[ -e "$RESULT_ROOT" ]] && fail "Refusing to reuse an existing run root: $RESULT_ROOT"
+    mkdir -p "$CONFIRM_ROOT" "$SUMMARY_DIR"
+    $PYTHON -B scripts/inspect_evaluation_registry.py list \
+        > "${SUMMARY_DIR}/evaluation_registry_before.txt" 2>&1 \
+        || fail "Could not inspect the evaluation registry."
+fi
 [[ -d "$RESULT_ROOT" ]] || fail "Run root does not exist: $RESULT_ROOT"
 [[ -d "$CONFIRM_ROOT" ]] || fail "Confirmatory directory does not exist: $CONFIRM_ROOT"
 [[ -d "$SUMMARY_DIR" ]] || fail "Summary directory does not exist: $SUMMARY_DIR"
@@ -76,6 +100,10 @@ log "dirty        : $DIRTY"
 log "interpreter  : $($PYTHON -c 'import sys; print(sys.executable)')"
 log "run label    : $RUN_LABEL"
 log "result root  : $RESULT_ROOT"
+log "config dir   : $CONFIRM_CONFIG_DIR (infix '${CONFIG_INFIX}')"
+log "families     : ${CONFIRM_FAMILIES[*]}"
+log "seeds        : ${CONFIRM_SEEDS[*]}"
+log "fraction     : $FRACTION"
 
 log "verifying the canonicalization vocabulary matches the dataset..."
 $PYTHON - <<'PYCHECK' || fail "Canonicalization vocabulary mismatch (see message above)."
@@ -127,13 +155,15 @@ log "${#PENDING[@]} unit(s) pending"
 step "Evaluation-registry precheck for pending units"
 
 if [[ ${#PENDING[@]} -gt 0 ]]; then
-    $PYTHON - "$CONFIRM_CONFIG_DIR" "${PENDING[@]}" <<'PYCHECK' || fail "A pending confirmatory identity is already consumed."
+    $PYTHON - "$CONFIRM_CONFIG_DIR" "$CONFIG_INFIX" "$FRACTION" "${PENDING[@]}" <<'PYCHECK' || fail "A pending confirmatory identity is already consumed."
 import json
 import pathlib
 import sys
 
 config_dir = pathlib.Path(sys.argv[1])
-pending = sys.argv[2:]
+infix = sys.argv[2]
+fraction = f"{float(sys.argv[3]):.12g}"
+pending = sys.argv[4:]
 registry_root = pathlib.Path("results/autonomous_execution/evaluation_registry")
 consumed = set()
 for record_path in registry_root.rglob("*.json"):
@@ -146,10 +176,10 @@ for record_path in registry_root.rglob("*.json"):
 overlap = []
 for item in pending:
     family, seed = item.split(":")
-    config_path = config_dir / f"{family}_seed_{seed}.yaml"
+    config_path = config_dir / f"{family}{infix}_seed_{seed}.yaml"
     if not config_path.is_file():
         raise SystemExit(f"Missing confirmatory config: {config_path}")
-    unit = f"seed={seed}|train_fraction=0.05|comparison=model_policy_search|family={family}"
+    unit = f"seed={seed}|train_fraction={fraction}|comparison=model_policy_search|family={family}"
     if unit in consumed:
         overlap.append(unit)
 if overlap:
@@ -168,7 +198,7 @@ step "Run pending confirmatory units"
 for item in "${PENDING[@]}"; do
     family="${item%%:*}"
     seed="${item##*:}"
-    config="${CONFIRM_CONFIG_DIR}/${family}_seed_${seed}.yaml"
+    config="${CONFIRM_CONFIG_DIR}/${family}${CONFIG_INFIX}_seed_${seed}.yaml"
     unit_dir="${CONFIRM_ROOT}/${family}/seed_${seed}"
     mkdir -p "$unit_dir"
     [[ -e "${unit_dir}/search" ]] && fail "Refusing to reuse ${unit_dir}/search"
@@ -219,7 +249,11 @@ log "registry snapshots written under ${SUMMARY_DIR}"
 
 step "Summary"
 
-$PYTHON -B scripts/summarize_candidate_scope_reanalysis.py --run-root "$RESULT_ROOT"
+if [[ -d "${RESULT_ROOT}/development_reanalysis" ]]; then
+    $PYTHON -B scripts/summarize_candidate_scope_reanalysis.py --run-root "$RESULT_ROOT"
+else
+    log "no development_reanalysis directory under this root; skipping the candidate-scope summary"
+fi
 
 printf 'All outputs are under %s\n' "$RESULT_ROOT"
 printf 'Nothing was pushed. No historical output was deleted or overwritten.\n'
